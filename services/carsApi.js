@@ -12,6 +12,12 @@ function stripHtml(html) {
   return html.replace(/<[^>]*>/g, '').trim();
 }
 
+// The API's gallery column can contain a trailing empty entry (stray
+// trailing comma in the stored value), which resolves to a null URL.
+function cleanGallery(gallery) {
+  return (gallery ?? []).filter(Boolean);
+}
+
 /**
  * The API's date-availability filter (start/end) parses with Carbon's
  * 'd/m/Y' format, matching the web search - so dates must be sent as
@@ -47,7 +53,7 @@ function normalizeCar(raw) {
     isAvailable: true,
     image: raw.image || null,
     bannerImage: raw.banner_image || null,
-    gallery: raw.gallery?.length ? raw.gallery : raw.image ? [raw.image] : [],
+    gallery: raw.gallery?.length ? cleanGallery(raw.gallery) : raw.image ? [raw.image] : [],
     description: raw.content ? stripHtml(raw.content) : '',
     reviewScore: raw.review_score ?? null,
   };
