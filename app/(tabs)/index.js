@@ -1,14 +1,31 @@
-import { StyleSheet, Text, View, TextInput, FlatList, TouchableOpacity, ScrollView } from 'react-native';
-import { useState } from 'react';
+import { StyleSheet, Text, View, TextInput, FlatList, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
-import { CARS, CATEGORIES } from '../../data/cars';
+import { CATEGORIES } from '../../data/cars';
+import { fetchCars } from '../../api/cars';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const [cars, setCars] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [searchText, setSearchText] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
 
-  const filteredCars = CARS.filter(car => {
+  useEffect(() => {
+    loadCars();
+  }, []);
+
+  const loadCars = () => {
+    setIsLoading(true);
+    setError(null);
+    fetchCars()
+      .then(setCars)
+      .catch(() => setError('Could not load cars. Please try again.'))
+      .finally(() => setIsLoading(false));
+  };
+
+  const filteredCars = cars.filter(car => {
     const matchesSearch =
       car.location.toLowerCase().includes(searchText.toLowerCase()) ||
       car.name.toLowerCase().includes(searchText.toLowerCase()) ||
@@ -98,19 +115,34 @@ export default function HomeScreen() {
         ))}
       </ScrollView>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>
-          {filteredCars.length} {filteredCars.length === 1 ? 'Car' : 'Cars'} Found
-        </Text>
-      </View>
+      {isLoading ? (
+        <View style={styles.centerState}>
+          <ActivityIndicator size="large" color="#3EB6BA" />
+        </View>
+      ) : error ? (
+        <View style={styles.centerState}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={loadCars}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              {filteredCars.length} {filteredCars.length === 1 ? 'Car' : 'Cars'} Found
+            </Text>
+          </View>
 
-      <FlatList
-        data={filteredCars}
-        keyExtractor={item => item.id}
-        renderItem={renderCar}
-        contentContainerStyle={styles.list}
-        showsVerticalScrollIndicator={false}
-      />
+          <FlatList
+            data={filteredCars}
+            keyExtractor={item => item.id}
+            renderItem={renderCar}
+            contentContainerStyle={styles.list}
+            showsVerticalScrollIndicator={false}
+          />
+        </>
+      )}
     </View>
   );
 }
@@ -190,6 +222,29 @@ const styles = StyleSheet.create({
   list: {
     paddingHorizontal: 16,
     paddingBottom: 20,
+  },
+  centerState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: '#3EB6BA',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  retryButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   carCard: {
     backgroundColor: '#ffffff',

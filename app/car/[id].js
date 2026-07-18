@@ -1,10 +1,27 @@
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useState, useEffect } from 'react';
 import { useLocalSearchParams } from 'expo-router';
-import { CARS } from '../../data/cars';
+import { fetchCarById } from '../../api/cars';
 
 export default function CarDetailScreen() {
   const { id } = useLocalSearchParams();
-  const car = CARS.find(c => c.id === id);
+  const [car, setCar] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    setIsLoading(true);
+    fetchCarById(id)
+      .then(setCar)
+      .finally(() => setIsLoading(false));
+  }, [id]);
+
+  if (isLoading) {
+    return (
+      <View style={styles.notFound}>
+        <ActivityIndicator size="large" color="#3EB6BA" />
+      </View>
+    );
+  }
 
   if (!car) {
     return (
