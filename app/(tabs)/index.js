@@ -78,7 +78,7 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Image
-          source={require('../../assets/logo-lockup-white.png')}
+          source={require('../../assets/logo-mark-reverse.png')}
           style={styles.logo}
           resizeMode="contain"
         />
@@ -167,8 +167,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   logo: {
-    width: 140,
-    height: 38,
+    width: 58,
+    height: 48,
     marginBottom: 14,
   },
   headline: {
