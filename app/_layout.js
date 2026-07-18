@@ -11,6 +11,7 @@ import {
 } from '@expo-google-fonts/source-sans-3';
 import * as SplashScreen from 'expo-splash-screen';
 import { COLORS, FONTS } from '../constants/theme';
+import { AuthProvider } from '../contexts/AuthContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -37,27 +38,29 @@ export default function RootLayout() {
 
   return (
     <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen
-          name="car/[id]"
-          options={{
-            headerShown: true,
-            title: 'Car Details',
-            headerTintColor: COLORS.navy,
-            headerTitleStyle: { fontFamily: FONTS.semiBold },
-          }}
-        />
-        <Stack.Screen
-          name="login"
-          options={{
-            headerShown: true,
-            title: '',
-            headerTransparent: true,
-            headerTintColor: COLORS.white,
-          }}
-        />
-      </Stack>
+      <AuthProvider>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen
+            name="car/[id]"
+            options={{
+              headerShown: true,
+              title: 'Car Details',
+              headerTintColor: COLORS.navy,
+              headerTitleStyle: { fontFamily: FONTS.semiBold },
+            }}
+          />
+          <Stack.Screen
+            name="login"
+            options={{
+              headerShown: true,
+              title: '',
+              headerTransparent: true,
+              headerTintColor: COLORS.white,
+            }}
+          />
+        </Stack>
+      </AuthProvider>
     </View>
   );
 }

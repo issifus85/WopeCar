@@ -10,17 +10,64 @@ import {
   Platform,
   ScrollView,
   Image,
+  ActivityIndicator,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { COLORS, FONTS } from '../constants/theme';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginScreen() {
+  const router = useRouter();
+  const { login, register } = useAuth();
   const [mode, setMode] = useState('signin');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(null);
 
   const isSignUp = mode === 'signup';
+
+  const switchMode = (nextMode) => {
+    setMode(nextMode);
+    setError(null);
+  };
+
+  const handleSubmit = async () => {
+    setError(null);
+
+    if (!email || !password) {
+      setError('Please fill in your email and password.');
+      return;
+    }
+    if (isSignUp && !name) {
+      setError('Please enter your name.');
+      return;
+    }
+    if (isSignUp && password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      if (isSignUp) {
+        await register({ name, email, password, passwordConfirmation: confirmPassword });
+      } else {
+        await login({ email, password });
+      }
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/profile');
+      }
+    } catch (e) {
+      setError(e.message || 'Something went wrong. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <ImageBackground
@@ -55,7 +102,7 @@ export default function LoginScreen() {
             <View style={styles.tabRow}>
               <TouchableOpacity
                 style={[styles.tab, !isSignUp && styles.tabActive]}
-                onPress={() => setMode('signin')}
+                onPress={() => switchMode('signin')}
               >
                 <Text style={[styles.tabText, !isSignUp && styles.tabTextActive]}>
                   Sign In
@@ -63,7 +110,7 @@ export default function LoginScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.tab, isSignUp && styles.tabActive]}
-                onPress={() => setMode('signup')}
+                onPress={() => switchMode('signup')}
               >
                 <Text style={[styles.tabText, isSignUp && styles.tabTextActive]}>
                   Sign Up
@@ -130,17 +177,27 @@ export default function LoginScreen() {
               </TouchableOpacity>
             )}
 
-            <TouchableOpacity style={styles.submitButton}>
-              <Text style={styles.submitButtonText}>
-                {isSignUp ? 'Create Account' : 'Sign In'}
-              </Text>
+            {!!error && <Text style={styles.errorText}>{error}</Text>}
+
+            <TouchableOpacity
+              style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+              onPress={handleSubmit}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={styles.submitButtonText}>
+                  {isSignUp ? 'Create Account' : 'Sign In'}
+                </Text>
+              )}
             </TouchableOpacity>
 
             <Text style={styles.switchModeText}>
               {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
               <Text
                 style={styles.switchModeLink}
-                onPress={() => setMode(isSignUp ? 'signin' : 'signup')}
+                onPress={() => switchMode(isSignUp ? 'signin' : 'signup')}
               >
                 {isSignUp ? 'Sign In' : 'Sign Up'}
               </Text>
@@ -257,12 +314,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.teal,
   },
+  errorText: {
+    fontFamily: FONTS.regular,
+    fontSize: 13,
+    color: '#C62828',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
   submitButton: {
     backgroundColor: COLORS.orange,
     borderRadius: 10,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 4,
+  },
+  submitButtonDisabled: {
+    opacity: 0.7,
   },
   submitButtonText: {
     fontFamily: FONTS.semiBold,
