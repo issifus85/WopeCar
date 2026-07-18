@@ -48,6 +48,15 @@ export default function RootLayout() {
             headerTitleStyle: { fontFamily: FONTS.semiBold },
           }}
         />
+        <Stack.Screen
+          name="login"
+          options={{
+            headerShown: true,
+            title: '',
+            headerTransparent: true,
+            headerTintColor: COLORS.white,
+          }}
+        />
       </Stack>
     </View>
   );
