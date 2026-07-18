@@ -165,10 +165,11 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 30,
     paddingHorizontal: 20,
+    alignItems: 'center',
   },
   logo: {
-    width: 58,
-    height: 48,
+    width: 190,
+    height: 52,
     marginBottom: 14,
   },
   headline: {
@@ -176,11 +177,13 @@ const styles = StyleSheet.create({
     fontSize: 30,
     color: COLORS.white,
     marginBottom: 6,
+    textAlign: 'center',
   },
   tagline: {
     fontFamily: FONTS.regular,
     fontSize: 14,
     color: COLORS.white,
+    textAlign: 'center',
   },
   taglineHighlight: {
     fontFamily: FONTS.semiBold,
