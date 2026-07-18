@@ -14,13 +14,14 @@ export default function HomeScreen() {
   const [selectedCategory, setSelectedCategory] = useState('All');
 
   useEffect(() => {
-    loadCars();
-  }, []);
+    loadCars(selectedCategory);
+  }, [selectedCategory]);
 
-  const loadCars = () => {
+  const loadCars = (category) => {
     setIsLoading(true);
     setError(null);
-    fetchCars()
+    const params = category && category !== 'All' ? { 'attrs[9][]': category } : {};
+    fetchCars(params)
       .then(({ cars }) => setCars(cars))
       .catch(() => setError('Could not load cars. Please try again.'))
       .finally(() => setIsLoading(false));
@@ -32,10 +33,7 @@ export default function HomeScreen() {
       car.name.toLowerCase().includes(searchText.toLowerCase()) ||
       (car.type ?? '').toLowerCase().includes(searchText.toLowerCase());
 
-    const matchesCategory =
-      selectedCategory === 'All' || car.type === selectedCategory;
-
-    return matchesSearch && matchesCategory;
+    return matchesSearch;
   });
 
   const renderCar = ({ item }) => (
@@ -108,18 +106,18 @@ export default function HomeScreen() {
       >
         {CATEGORIES.map(category => (
           <TouchableOpacity
-            key={category}
+            key={category.value}
             style={[
               styles.categoryButton,
-              selectedCategory === category && styles.categoryButtonActive
+              selectedCategory === category.value && styles.categoryButtonActive
             ]}
-            onPress={() => setSelectedCategory(category)}
+            onPress={() => setSelectedCategory(category.value)}
           >
             <Text style={[
               styles.categoryText,
-              selectedCategory === category && styles.categoryTextActive
+              selectedCategory === category.value && styles.categoryTextActive
             ]}>
-              {category}
+              {category.label}
             </Text>
           </TouchableOpacity>
         ))}
@@ -132,7 +130,7 @@ export default function HomeScreen() {
       ) : error ? (
         <View style={styles.centerState}>
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={loadCars}>
+          <TouchableOpacity style={styles.retryButton} onPress={() => loadCars(selectedCategory)}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>

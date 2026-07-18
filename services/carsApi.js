@@ -14,14 +14,8 @@ function stripHtml(html) {
 
 /**
  * Adapts the API's raw car shape (title, price/sale_price, passenger, gear,
- * door, location: {id,name}, ...) to what the app's UI expects (name,
+ * door, location: {id,name}, type, ...) to what the app's UI expects (name,
  * pricePerDay, seats, transmission, location, ...).
- *
- * Known gap: the API doesn't return a vehicle category/type on car records
- * today (that lives in a separate terms/attributes relation the list and
- * detail endpoints don't expose yet), so `type` stays undefined and the
- * Home screen's category pills won't have anything real to filter against
- * until the backend adds it.
  */
 function normalizeCar(raw) {
   const hasSalePrice = raw.sale_price && raw.sale_price > 0 && raw.price > raw.sale_price;
@@ -29,7 +23,7 @@ function normalizeCar(raw) {
   return {
     id: String(raw.id),
     name: raw.title,
-    type: undefined,
+    type: raw.type ?? undefined,
     location: raw.location?.name ?? '',
     pricePerDay: hasSalePrice ? raw.sale_price : raw.price,
     seats: raw.passenger,
@@ -50,7 +44,8 @@ function normalizeCar(raw) {
 /**
  * GET /api/cars
  *
- * Supported params: location_id, price_range ("min;max"), attrs, review_score,
+ * Supported params: location_id, price_range ("min;max"),
+ * "attrs[9][]" (car type - see CAR_TYPE_VALUES below), review_score,
  * service_name (title search), map_lat, map_lgn, map_place, is_featured,
  * special, driven_by, custom_ids, orderby, adults, children, limit, page.
  */
