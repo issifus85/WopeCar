@@ -51,6 +51,51 @@ export default function RootLayout() {
               headerTintColor: COLORS.white,
             }}
           />
+          <Stack.Screen
+            name="account"
+            options={{
+              headerShown: true,
+              title: 'Account',
+              headerTintColor: COLORS.navy,
+              headerTitleStyle: { fontFamily: FONTS.semiBold },
+            }}
+          />
+          <Stack.Screen
+            name="inbox"
+            options={{
+              headerShown: true,
+              title: 'Inbox',
+              headerTintColor: COLORS.navy,
+              headerTitleStyle: { fontFamily: FONTS.semiBold },
+            }}
+          />
+          <Stack.Screen
+            name="terms"
+            options={{
+              headerShown: true,
+              title: 'Terms of Service',
+              headerTintColor: COLORS.navy,
+              headerTitleStyle: { fontFamily: FONTS.semiBold },
+            }}
+          />
+          <Stack.Screen
+            name="privacy"
+            options={{
+              headerShown: true,
+              title: 'Privacy Policy',
+              headerTintColor: COLORS.navy,
+              headerTitleStyle: { fontFamily: FONTS.semiBold },
+            }}
+          />
+          <Stack.Screen
+            name="settings"
+            options={{
+              headerShown: true,
+              title: 'Settings',
+              headerTintColor: COLORS.navy,
+              headerTitleStyle: { fontFamily: FONTS.semiBold },
+            }}
+          />
         </Stack>
       </AuthProvider>
     </View>

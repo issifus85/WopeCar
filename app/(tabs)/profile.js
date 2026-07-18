@@ -1,47 +1,66 @@
-import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Image } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
 
+const MENU_ITEMS = [
+  { label: 'Inbox', icon: 'mail-outline', route: '/inbox' },
+  { label: 'Terms of Service', icon: 'document-text-outline', route: '/terms' },
+  { label: 'Privacy Policy', icon: 'shield-checkmark-outline', route: '/privacy' },
+  { label: 'Settings', icon: 'settings-outline', route: '/settings' },
+];
+
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, isLoading, logout } = useAuth();
-
-  if (isLoading) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color={COLORS.teal} />
-      </View>
-    );
-  }
-
-  if (user) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {user.name?.charAt(0)?.toUpperCase() ?? '?'}
-          </Text>
-        </View>
-        <Text style={styles.title}>{user.name}</Text>
-        <Text style={styles.subtitle}>{user.email}</Text>
-        <TouchableOpacity style={styles.signOutButton} onPress={logout}>
-          <Text style={styles.signOutButtonText}>Log Out</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  const { user } = useAuth();
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Profile</Text>
-      <Text style={styles.subtitle}>Sign in to manage your account.</Text>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Profile</Text>
+      </View>
+
       <TouchableOpacity
-        style={styles.signInButton}
-        onPress={() => router.push('/login')}
+        style={styles.accountRow}
+        onPress={() => router.push('/account')}
       >
-        <Text style={styles.signInButtonText}>Sign In</Text>
+        {user?.avatar ? (
+          <Image source={{ uri: user.avatar }} style={styles.avatarImage} />
+        ) : (
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>
+              {user?.name?.charAt(0)?.toUpperCase() ?? '?'}
+            </Text>
+          </View>
+        )}
+        <View style={styles.accountInfo}>
+          <Text style={styles.accountName}>{user?.name ?? 'Sign In'}</Text>
+          <Text style={styles.accountSubtitle}>
+            {user?.email ?? 'Manage your account'}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#999" />
       </TouchableOpacity>
+
+      <View style={styles.menu}>
+        {MENU_ITEMS.map((item, index) => (
+          <TouchableOpacity
+            key={item.route}
+            style={[
+              styles.menuRow,
+              index === MENU_ITEMS.length - 1 && styles.menuRowLast,
+            ]}
+            onPress={() => router.push(item.route)}
+          >
+            <View style={styles.menuIcon}>
+              <Ionicons name={item.icon} size={20} color={COLORS.teal} />
+            </View>
+            <Text style={styles.menuLabel}>{item.label}</Text>
+            <Ionicons name="chevron-forward" size={20} color="#999" />
+          </TouchableOpacity>
+        ))}
+      </View>
     </View>
   );
 }
@@ -50,57 +69,97 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  header: {
+    paddingTop: 60,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+  },
+  headerTitle: {
+    fontFamily: FONTS.bold,
+    fontSize: 24,
+    color: COLORS.navy,
+  },
+  accountRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
+    backgroundColor: '#ffffff',
+    marginHorizontal: 16,
+    borderRadius: 14,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
   avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: COLORS.teal,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+  },
+  avatarImage: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
   },
   avatarText: {
     fontFamily: FONTS.bold,
-    fontSize: 28,
+    fontSize: 20,
     color: '#ffffff',
   },
-  title: {
-    fontFamily: FONTS.bold,
-    fontSize: 22,
+  accountInfo: {
+    flex: 1,
+    marginLeft: 14,
+  },
+  accountName: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 16,
     color: COLORS.navy,
-    marginBottom: 8,
   },
-  subtitle: {
+  accountSubtitle: {
     fontFamily: FONTS.regular,
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 20,
+    fontSize: 13,
+    color: '#888',
+    marginTop: 2,
   },
-  signInButton: {
-    backgroundColor: COLORS.teal,
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 10,
+  menu: {
+    backgroundColor: '#ffffff',
+    marginHorizontal: 16,
+    marginTop: 20,
+    borderRadius: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+    overflow: 'hidden',
   },
-  signInButtonText: {
-    fontFamily: FONTS.semiBold,
-    color: '#ffffff',
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  menuRowLast: {
+    borderBottomWidth: 0,
+  },
+  menuIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#EEF9F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuLabel: {
+    flex: 1,
+    fontFamily: FONTS.medium,
     fontSize: 15,
-  },
-  signOutButton: {
-    borderWidth: 1,
-    borderColor: '#C62828',
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 10,
-  },
-  signOutButtonText: {
-    fontFamily: FONTS.semiBold,
-    color: '#C62828',
-    fontSize: 15,
+    color: COLORS.navy,
+    marginLeft: 14,
   },
 });

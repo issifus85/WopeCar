@@ -40,11 +40,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="inbox"
+        name="cart"
         options={{
-          title: 'Inbox',
+          title: 'Cart',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="mail" color={color} size={size} />
+            <Ionicons name="cart" color={color} size={size} />
           ),
         }}
       />

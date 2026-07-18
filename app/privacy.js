@@ -1,11 +1,11 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { COLORS, FONTS } from '../../constants/theme';
+import { COLORS, FONTS } from '../constants/theme';
 
-export default function InboxScreen() {
+export default function PrivacyScreen() {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Inbox</Text>
-      <Text style={styles.subtitle}>You have no messages yet.</Text>
+      <Text style={styles.title}>Privacy Policy</Text>
+      <Text style={styles.subtitle}>Our privacy policy will be available here soon.</Text>
     </View>
   );
 }
@@ -28,5 +28,6 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.regular,
     fontSize: 14,
     color: '#666',
+    textAlign: 'center',
   },
 });
