@@ -41,15 +41,7 @@ export default function RootLayout() {
       <AuthProvider>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
-          <Stack.Screen
-            name="car/[id]"
-            options={{
-              headerShown: true,
-              title: 'Car Details',
-              headerTintColor: COLORS.navy,
-              headerTitleStyle: { fontFamily: FONTS.semiBold },
-            }}
-          />
+          <Stack.Screen name="car/[id]" options={{ headerShown: false }} />
           <Stack.Screen
             name="login"
             options={{

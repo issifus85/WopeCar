@@ -1,14 +1,18 @@
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useState, useEffect } from 'react';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { fetchCarById } from '../../services/carsApi';
 import { COLORS, FONTS } from '../../constants/theme';
+import ImageGallery from '../../components/ImageGallery';
 
 export default function CarDetailScreen() {
   const { id } = useLocalSearchParams();
+  const router = useRouter();
   const [car, setCar] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isFavorite, setIsFavorite] = useState(false);
 
   useEffect(() => {
     setIsLoading(true);
@@ -43,98 +47,120 @@ export default function CarDetailScreen() {
     );
   }
 
-  const photo = car.bannerImage || car.image;
+  const rating = car.reviewScore?.score_total ?? 0;
+  const totalReviews = car.reviewScore?.total_review ?? 0;
+
+  const specs = [
+    { icon: 'people-outline', value: car.seats, label: 'Seats' },
+    { icon: 'cog-outline', value: car.transmission, label: 'Transmission' },
+    car.doors ? { icon: 'exit-outline', value: car.doors, label: 'Doors' } : null,
+    car.baggage ? { icon: 'briefcase-outline', value: car.baggage, label: 'Baggage' } : null,
+  ].filter(Boolean);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {photo ? (
-        <Image source={{ uri: photo }} style={styles.image} resizeMode="cover" />
-      ) : (
-        <View style={styles.imagePlaceholder}>
-          <Text style={styles.imagePlaceholderText}>🚗</Text>
-        </View>
-      )}
+    <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.galleryWrap}>
+          <ImageGallery images={car.gallery} height={320} borderRadius={0} />
 
-      <View style={styles.nameRow}>
-        <Text style={styles.name}>{car.name}</Text>
-        {car.type ? (
-          <View style={styles.typeBadge}>
-            <Text style={styles.typeText}>{car.type}</Text>
+          <TouchableOpacity style={[styles.overlayButton, styles.backButton]} onPress={() => router.back()} hitSlop={8}>
+            <Ionicons name="chevron-back" size={22} color={COLORS.navy} />
+          </TouchableOpacity>
+
+          <View style={styles.topRightButtons}>
+            <TouchableOpacity
+              style={styles.overlayButton}
+              onPress={() => setIsFavorite(f => !f)}
+              hitSlop={8}
+            >
+              <Ionicons
+                name={isFavorite ? 'heart' : 'heart-outline'}
+                size={20}
+                color={isFavorite ? COLORS.orange : COLORS.navy}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.overlayButton} hitSlop={8}>
+              <Ionicons name="share-social-outline" size={20} color={COLORS.navy} />
+            </TouchableOpacity>
           </View>
-        ) : null}
-      </View>
-
-      {!!car.location && <Text style={styles.location}>📍 {car.location}</Text>}
-
-      <View style={[
-        styles.availabilityBadge,
-        { backgroundColor: car.isAvailable ? '#E8F5E9' : '#FFEBEE' }
-      ]}>
-        <Text style={[
-          styles.availabilityText,
-          { color: car.isAvailable ? '#2E7D32' : '#C62828' }
-        ]}>
-          {car.isAvailable ? 'Available' : 'Unavailable'}
-        </Text>
-      </View>
-
-      {!!car.description && (
-        <Text style={styles.description}>{car.description}</Text>
-      )}
-
-      <View style={styles.specsRow}>
-        <View style={styles.specCard}>
-          <Text style={styles.specValue}>💺 {car.seats}</Text>
-          <Text style={styles.specLabel}>Seats</Text>
         </View>
-        <View style={styles.specCard}>
-          <Text style={styles.specValue}>⚙️ {car.transmission}</Text>
-          <Text style={styles.specLabel}>Transmission</Text>
-        </View>
-      </View>
 
-      {(car.doors || car.baggage) && (
-        <View style={styles.specsRow}>
-          {!!car.doors && (
-            <View style={styles.specCard}>
-              <Text style={styles.specValue}>🚪 {car.doors}</Text>
-              <Text style={styles.specLabel}>Doors</Text>
+        <View style={styles.sheet}>
+          <Text style={styles.name}>{car.name}</Text>
+          <View style={styles.metaRow}>
+            <Ionicons name="star" size={14} color="#F5A623" />
+            <Text style={styles.metaText}>{rating.toFixed(1)} ({totalReviews} ratings)</Text>
+            {!!car.location && (
+              <>
+                <Ionicons name="location-outline" size={14} color="#888" style={{ marginLeft: 10 }} />
+                <Text style={styles.metaText}>{car.location}</Text>
+              </>
+            )}
+          </View>
+
+          <View style={styles.badgeRow}>
+            {car.type ? (
+              <View style={styles.typeBadge}>
+                <Text style={styles.typeText}>{car.type}</Text>
+              </View>
+            ) : null}
+            <View style={[
+              styles.availabilityBadge,
+              { backgroundColor: car.isAvailable ? '#E8F5E9' : '#FFEBEE' }
+            ]}>
+              <Text style={[
+                styles.availabilityText,
+                { color: car.isAvailable ? '#2E7D32' : '#C62828' }
+              ]}>
+                {car.isAvailable ? 'Available' : 'Unavailable'}
+              </Text>
             </View>
-          )}
-          {!!car.baggage && (
-            <View style={styles.specCard}>
-              <Text style={styles.specValue}>🧳 {car.baggage}</Text>
-              <Text style={styles.specLabel}>Baggage</Text>
-            </View>
+          </View>
+
+          <View style={styles.specsCard}>
+            {specs.map((spec) => (
+              <View key={spec.label} style={styles.specColumn}>
+                <Ionicons name={spec.icon} size={20} color={COLORS.teal} />
+                <Text style={styles.specValue}>{spec.value}</Text>
+                <Text style={styles.specLabel}>{spec.label}</Text>
+              </View>
+            ))}
+          </View>
+
+          {!!car.description && (
+            <>
+              <Text style={styles.sectionHeading}>Description</Text>
+              <Text style={styles.description}>{car.description}</Text>
+            </>
           )}
         </View>
-      )}
+      </ScrollView>
 
-      <View style={styles.priceRow}>
+      <View style={styles.bottomBar}>
         <View>
+          <Text style={styles.priceLabel}>Price per day</Text>
           <Text style={styles.price}>${car.pricePerDay}</Text>
-          <Text style={styles.priceLabel}>per day</Text>
         </View>
         <TouchableOpacity
           style={[styles.bookButton, !car.isAvailable && styles.bookButtonDisabled]}
           disabled={!car.isAvailable}
         >
           <Text style={styles.bookButtonText}>
-            {car.isAvailable ? 'Book Now' : 'Unavailable'}
+            {car.isAvailable ? 'Select Dates' : 'Unavailable'}
           </Text>
         </TouchableOpacity>
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.white,
   },
-  content: {
-    padding: 20,
+  scrollContent: {
+    paddingBottom: 24,
   },
   notFound: {
     flex: 1,
@@ -148,39 +174,57 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
   },
-  image: {
-    width: '100%',
-    height: 180,
-    borderRadius: 16,
-    marginBottom: 20,
-    backgroundColor: '#EEF9F9',
+  galleryWrap: {
+    position: 'relative',
   },
-  imagePlaceholder: {
-    height: 180,
-    borderRadius: 16,
-    backgroundColor: '#EEF9F9',
+  overlayButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.9)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
   },
-  imagePlaceholderText: {
-    fontSize: 56,
+  backButton: {
+    position: 'absolute',
+    top: 50,
+    left: 16,
   },
-  nameRow: {
+  topRightButtons: {
+    position: 'absolute',
+    top: 50,
+    right: 16,
     flexDirection: 'row',
-    alignItems: 'center',
     gap: 10,
-    flexWrap: 'wrap',
+  },
+  sheet: {
+    padding: 20,
   },
   name: {
     fontFamily: FONTS.bold,
-    fontSize: 24,
+    fontSize: 22,
     color: COLORS.navy,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    gap: 4,
+  },
+  metaText: {
+    fontFamily: FONTS.regular,
+    fontSize: 13,
+    color: '#888',
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
   },
   typeBadge: {
     backgroundColor: '#EEF9F9',
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 6,
   },
   typeText: {
@@ -188,72 +232,74 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.teal,
   },
-  location: {
-    fontFamily: FONTS.regular,
-    fontSize: 14,
-    color: '#666',
-    marginTop: 8,
-  },
   availabilityBadge: {
-    alignSelf: 'flex-start',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 6,
-    marginTop: 12,
   },
   availabilityText: {
     fontFamily: FONTS.semiBold,
     fontSize: 12,
+  },
+  specsCard: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.background,
+    borderRadius: 14,
+    paddingVertical: 18,
+    marginTop: 20,
+  },
+  specColumn: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+  },
+  specValue: {
+    fontFamily: FONTS.bold,
+    fontSize: 14,
+    color: COLORS.navy,
+  },
+  specLabel: {
+    fontFamily: FONTS.regular,
+    fontSize: 11,
+    color: '#888',
+  },
+  sectionHeading: {
+    fontFamily: FONTS.bold,
+    fontSize: 16,
+    color: COLORS.navy,
+    marginTop: 24,
+    marginBottom: 8,
   },
   description: {
     fontFamily: FONTS.regular,
     fontSize: 14,
     color: '#444',
     lineHeight: 21,
-    marginTop: 16,
   },
-  specsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 24,
-  },
-  specCard: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  specValue: {
-    fontFamily: FONTS.bold,
-    fontSize: 16,
-    color: COLORS.navy,
-  },
-  specLabel: {
-    fontFamily: FONTS.regular,
-    fontSize: 12,
-    color: '#888',
-    marginTop: 4,
-  },
-  priceRow: {
+  bottomBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 32,
-  },
-  price: {
-    fontFamily: FONTS.bold,
-    fontSize: 28,
-    color: COLORS.teal,
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 28,
+    backgroundColor: COLORS.white,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 6,
   },
   priceLabel: {
     fontFamily: FONTS.regular,
-    fontSize: 13,
+    fontSize: 12,
     color: '#999',
+  },
+  price: {
+    fontFamily: FONTS.bold,
+    fontSize: 22,
+    color: COLORS.teal,
   },
   bookButton: {
     backgroundColor: COLORS.teal,
