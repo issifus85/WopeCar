@@ -1,8 +1,9 @@
-import { StyleSheet, Text, View, TextInput, FlatList, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, TextInput, FlatList, TouchableOpacity, ScrollView, ActivityIndicator, Image } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { CATEGORIES } from '../../data/cars';
 import { fetchCars } from '../../api/cars';
+import { COLORS, FONTS } from '../../constants/theme';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -76,8 +77,15 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.logo}>WopeCar 🚗</Text>
-        <Text style={styles.tagline}>Rent a car in a few clicks</Text>
+        <Image
+          source={require('../../assets/logo-lockup-white.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+        <Text style={styles.headline}>Freedom to Go Places</Text>
+        <Text style={styles.tagline}>
+          Rent a car <Text style={styles.taglineHighlight}>in a few clicks</Text>
+        </Text>
       </View>
 
       <View style={styles.searchContainer}>
@@ -117,7 +125,7 @@ export default function HomeScreen() {
 
       {isLoading ? (
         <View style={styles.centerState}>
-          <ActivityIndicator size="large" color="#3EB6BA" />
+          <ActivityIndicator size="large" color={COLORS.teal} />
         </View>
       ) : error ? (
         <View style={styles.centerState}>
@@ -150,29 +158,40 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: COLORS.background,
   },
   header: {
-    backgroundColor: '#3EB6BA',
+    backgroundColor: COLORS.teal,
     paddingTop: 60,
     paddingBottom: 30,
     paddingHorizontal: 20,
   },
   logo: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#ffffff',
+    width: 140,
+    height: 38,
+    marginBottom: 14,
+  },
+  headline: {
+    fontFamily: FONTS.display,
+    fontSize: 30,
+    color: COLORS.white,
+    marginBottom: 6,
   },
   tagline: {
+    fontFamily: FONTS.regular,
     fontSize: 14,
-    color: '#ffffff',
-    marginTop: 4,
+    color: COLORS.white,
+  },
+  taglineHighlight: {
+    fontFamily: FONTS.semiBold,
+    color: COLORS.orange,
   },
   searchContainer: {
     margin: 16,
     marginBottom: 8,
   },
   searchInput: {
+    fontFamily: FONTS.regular,
     backgroundColor: '#ffffff',
     borderRadius: 10,
     padding: 14,
@@ -197,17 +216,17 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   categoryButtonActive: {
-    backgroundColor: '#3EB6BA',
-    borderColor: '#3EB6BA',
+    backgroundColor: COLORS.teal,
+    borderColor: COLORS.teal,
   },
   categoryText: {
+    fontFamily: FONTS.medium,
     fontSize: 13,
     color: '#666',
-    fontWeight: '500',
   },
   categoryTextActive: {
+    fontFamily: FONTS.semiBold,
     color: '#ffffff',
-    fontWeight: '600',
   },
   section: {
     paddingHorizontal: 16,
@@ -215,9 +234,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   sectionTitle: {
+    fontFamily: FONTS.bold,
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
+    color: COLORS.navy,
   },
   list: {
     paddingHorizontal: 16,
@@ -230,21 +249,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   errorText: {
+    fontFamily: FONTS.regular,
     fontSize: 14,
     color: '#666',
     textAlign: 'center',
     marginBottom: 16,
   },
   retryButton: {
-    backgroundColor: '#3EB6BA',
+    backgroundColor: COLORS.teal,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 10,
   },
   retryButtonText: {
+    fontFamily: FONTS.semiBold,
     color: '#ffffff',
     fontSize: 14,
-    fontWeight: '600',
   },
   carCard: {
     backgroundColor: '#ffffff',
@@ -269,9 +289,9 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   carName: {
+    fontFamily: FONTS.bold,
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
+    color: COLORS.navy,
   },
   typeBadge: {
     backgroundColor: '#EEF9F9',
@@ -280,11 +300,12 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   typeText: {
+    fontFamily: FONTS.semiBold,
     fontSize: 10,
-    color: '#3EB6BA',
-    fontWeight: '600',
+    color: COLORS.teal,
   },
   carLocation: {
+    fontFamily: FONTS.regular,
     fontSize: 12,
     color: '#666',
     marginBottom: 8,
@@ -294,6 +315,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   carDetail: {
+    fontFamily: FONTS.regular,
     fontSize: 12,
     color: '#888',
   },
@@ -302,11 +324,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   carPrice: {
+    fontFamily: FONTS.bold,
     fontSize: 22,
-    fontWeight: 'bold',
-    color: '#3EB6BA',
+    color: COLORS.teal,
   },
   carPriceLabel: {
+    fontFamily: FONTS.regular,
     fontSize: 11,
     color: '#999',
     marginTop: -4,
@@ -317,7 +340,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   availabilityText: {
+    fontFamily: FONTS.semiBold,
     fontSize: 11,
-    fontWeight: '600',
   },
 });

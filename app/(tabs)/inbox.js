@@ -1,11 +1,11 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { COLORS, FONTS } from '../../constants/theme';
 
-export default function ProfileScreen() {
+export default function InboxScreen() {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Profile</Text>
-      <Text style={styles.subtitle}>Sign in to manage your account.</Text>
+      <Text style={styles.title}>Inbox</Text>
+      <Text style={styles.subtitle}>You have no messages yet.</Text>
     </View>
   );
 }

@@ -2,6 +2,7 @@ import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator
 import { useState, useEffect } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import { fetchCarById } from '../../api/cars';
+import { COLORS, FONTS } from '../../constants/theme';
 
 export default function CarDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -18,7 +19,7 @@ export default function CarDetailScreen() {
   if (isLoading) {
     return (
       <View style={styles.notFound}>
-        <ActivityIndicator size="large" color="#3EB6BA" />
+        <ActivityIndicator size="large" color={COLORS.teal} />
       </View>
     );
   }
@@ -90,7 +91,7 @@ export default function CarDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: COLORS.background,
   },
   content: {
     padding: 20,
@@ -101,6 +102,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   notFoundText: {
+    fontFamily: FONTS.regular,
     fontSize: 16,
     color: '#666',
   },
@@ -122,9 +124,9 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   name: {
+    fontFamily: FONTS.bold,
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
+    color: COLORS.navy,
   },
   typeBadge: {
     backgroundColor: '#EEF9F9',
@@ -133,11 +135,12 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   typeText: {
+    fontFamily: FONTS.semiBold,
     fontSize: 12,
-    color: '#3EB6BA',
-    fontWeight: '600',
+    color: COLORS.teal,
   },
   location: {
+    fontFamily: FONTS.regular,
     fontSize: 14,
     color: '#666',
     marginTop: 8,
@@ -150,8 +153,8 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   availabilityText: {
+    fontFamily: FONTS.semiBold,
     fontSize: 12,
-    fontWeight: '600',
   },
   specsRow: {
     flexDirection: 'row',
@@ -170,11 +173,12 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   specValue: {
+    fontFamily: FONTS.bold,
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
+    color: COLORS.navy,
   },
   specLabel: {
+    fontFamily: FONTS.regular,
     fontSize: 12,
     color: '#888',
     marginTop: 4,
@@ -186,16 +190,17 @@ const styles = StyleSheet.create({
     marginTop: 32,
   },
   price: {
+    fontFamily: FONTS.bold,
     fontSize: 28,
-    fontWeight: 'bold',
-    color: '#3EB6BA',
+    color: COLORS.teal,
   },
   priceLabel: {
+    fontFamily: FONTS.regular,
     fontSize: 13,
     color: '#999',
   },
   bookButton: {
-    backgroundColor: '#3EB6BA',
+    backgroundColor: COLORS.teal,
     paddingHorizontal: 28,
     paddingVertical: 14,
     borderRadius: 10,
@@ -204,8 +209,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#ccc',
   },
   bookButtonText: {
+    fontFamily: FONTS.semiBold,
     color: '#ffffff',
     fontSize: 15,
-    fontWeight: '600',
   },
 });
