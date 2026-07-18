@@ -13,6 +13,17 @@ function stripHtml(html) {
 }
 
 /**
+ * The API's date-availability filter (start/end) parses with Carbon's
+ * 'd/m/Y' format, matching the web search - so dates must be sent as
+ * DD/MM/YYYY, not ISO.
+ */
+export function formatDateParam(date) {
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  return `${day}/${month}/${date.getFullYear()}`;
+}
+
+/**
  * Adapts the API's raw car shape (title, price/sale_price, passenger, gear,
  * door, location: {id,name}, type, ...) to what the app's UI expects (name,
  * pricePerDay, seats, transmission, location, ...).
@@ -36,6 +47,7 @@ function normalizeCar(raw) {
     isAvailable: true,
     image: raw.image || null,
     bannerImage: raw.banner_image || null,
+    gallery: raw.gallery?.length ? raw.gallery : raw.image ? [raw.image] : [],
     description: raw.content ? stripHtml(raw.content) : '',
     reviewScore: raw.review_score ?? null,
   };
@@ -47,7 +59,8 @@ function normalizeCar(raw) {
  * Supported params: location_id, price_range ("min;max"),
  * "attrs[9][]" (car type - see CAR_TYPE_VALUES below), review_score,
  * service_name (title search), map_lat, map_lgn, map_place, is_featured,
- * special, driven_by, custom_ids, orderby, adults, children, limit, page.
+ * special, driven_by, custom_ids, orderby, adults, children, limit, page,
+ * start/end (availability window - use formatDateParam() to build these).
  */
 export async function fetchCars(params = {}) {
   const json = await request(`/cars${toQueryString(params)}`);

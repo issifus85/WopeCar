@@ -1,30 +1,59 @@
 import { StyleSheet, Text, View, TextInput, FlatList, TouchableOpacity, ScrollView, ActivityIndicator, Image } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { CATEGORIES } from '../../data/cars';
-import { fetchCars } from '../../services/carsApi';
+import { fetchCars, formatDateParam } from '../../services/carsApi';
 import { COLORS, FONTS } from '../../constants/theme';
+import DateRangeModal, { formatDateShort } from '../../components/DateRangeModal';
+import CarListCard from '../../components/CarListCard';
+import CarTileCard from '../../components/CarTileCard';
 
 export default function HomeScreen() {
   const router = useRouter();
   const [cars, setCars] = useState([]);
+  const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchText, setSearchText] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [viewMode, setViewMode] = useState('list');
+  const [isDateModalVisible, setIsDateModalVisible] = useState(false);
+  const [startDate, setStartDate] = useState(null);
+  const [endDate, setEndDate] = useState(null);
 
   useEffect(() => {
-    loadCars(selectedCategory);
-  }, [selectedCategory]);
+    loadCars(selectedCategory, startDate, endDate);
+  }, [selectedCategory, startDate, endDate]);
 
-  const loadCars = (category) => {
+  const loadCars = (category, start, end) => {
     setIsLoading(true);
     setError(null);
-    const params = category && category !== 'All' ? { 'attrs[9][]': category } : {};
+    const params = {};
+    if (category && category !== 'All') {
+      params['attrs[9][]'] = category;
+    }
+    if (start && end) {
+      params.start = formatDateParam(start);
+      params.end = formatDateParam(end);
+    }
     fetchCars(params)
-      .then(({ cars }) => setCars(cars))
+      .then(({ cars, meta }) => {
+        setCars(cars);
+        setTotal(meta?.total ?? cars.length);
+      })
       .catch(() => setError('Could not load cars. Please try again.'))
       .finally(() => setIsLoading(false));
+  };
+
+  const handleApplyDates = (start, end) => {
+    setStartDate(start);
+    setEndDate(end);
+  };
+
+  const handleClearDates = () => {
+    setStartDate(null);
+    setEndDate(null);
   };
 
   const filteredCars = cars.filter(car => {
@@ -36,43 +65,14 @@ export default function HomeScreen() {
     return matchesSearch;
   });
 
-  const renderCar = ({ item }) => (
-    <TouchableOpacity
-      style={styles.carCard}
-      onPress={() => router.push(`/car/${item.id}`)}
-    >
-      <View style={styles.carInfo}>
-        <View style={styles.carNameRow}>
-          <Text style={styles.carName}>{item.name}</Text>
-          {item.type ? (
-            <View style={styles.typeBadge}>
-              <Text style={styles.typeText}>{item.type}</Text>
-            </View>
-          ) : null}
-        </View>
-        <Text style={styles.carLocation}>📍 {item.location}</Text>
-        <View style={styles.carDetails}>
-          <Text style={styles.carDetail}>💺 {item.seats} seats</Text>
-          <Text style={styles.carDetail}>⚙️ {item.transmission}</Text>
-        </View>
-      </View>
-      <View style={styles.carRight}>
-        <Text style={styles.carPrice}>${item.pricePerDay}</Text>
-        <Text style={styles.carPriceLabel}>/day</Text>
-        <View style={[
-          styles.availabilityBadge,
-          { backgroundColor: item.isAvailable ? '#E8F5E9' : '#FFEBEE' }
-        ]}>
-          <Text style={[
-            styles.availabilityText,
-            { color: item.isAvailable ? '#2E7D32' : '#C62828' }
-          ]}>
-            {item.isAvailable ? 'Available' : 'Unavailable'}
-          </Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
+  const renderCar = ({ item }) => {
+    const onPress = () => router.push(`/car/${item.id}`);
+    return viewMode === 'list' ? (
+      <CarListCard car={item} onPress={onPress} />
+    ) : (
+      <CarTileCard car={item} onPress={onPress} />
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -82,10 +82,6 @@ export default function HomeScreen() {
           style={styles.logo}
           resizeMode="contain"
         />
-        <Text style={styles.headline}>Freedom to Go Places</Text>
-        <Text style={styles.tagline}>
-          Rent a car <Text style={styles.taglineHighlight}>in a few clicks</Text>
-        </Text>
       </View>
 
       <View style={styles.searchContainer}>
@@ -96,6 +92,25 @@ export default function HomeScreen() {
           value={searchText}
           onChangeText={setSearchText}
         />
+      </View>
+
+      <View style={styles.dateRow}>
+        <TouchableOpacity
+          style={styles.datePill}
+          onPress={() => setIsDateModalVisible(true)}
+        >
+          <Ionicons name="calendar-outline" size={18} color={COLORS.teal} />
+          <Text style={styles.datePillText}>
+            {startDate && endDate
+              ? `${formatDateShort(startDate)} - ${formatDateShort(endDate)}`
+              : 'Select dates to check availability'}
+          </Text>
+        </TouchableOpacity>
+        {startDate && endDate && (
+          <TouchableOpacity onPress={handleClearDates} style={styles.clearDateButton} hitSlop={10}>
+            <Ionicons name="close-circle" size={20} color="#999" />
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView
@@ -130,19 +145,52 @@ export default function HomeScreen() {
       ) : error ? (
         <View style={styles.centerState}>
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => loadCars(selectedCategory)}>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => loadCars(selectedCategory, startDate, endDate)}
+          >
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <>
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              {filteredCars.length} {filteredCars.length === 1 ? 'Car' : 'Cars'} Found
-            </Text>
+            <View>
+              <Text style={styles.sectionTitle}>
+                {total} {total === 1 ? 'Car' : 'Cars'} Found
+              </Text>
+              {startDate && endDate && (
+                <Text style={styles.sectionSubtitle}>
+                  Available {formatDateShort(startDate)} - {formatDateShort(endDate)}
+                </Text>
+              )}
+            </View>
+            <View style={styles.viewToggle}>
+              <TouchableOpacity
+                style={[styles.viewToggleButton, viewMode === 'list' && styles.viewToggleButtonActive]}
+                onPress={() => setViewMode('list')}
+              >
+                <Ionicons
+                  name="list"
+                  size={18}
+                  color={viewMode === 'list' ? '#ffffff' : COLORS.navy}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.viewToggleButton, viewMode === 'tile' && styles.viewToggleButtonActive]}
+                onPress={() => setViewMode('tile')}
+              >
+                <Ionicons
+                  name="grid"
+                  size={16}
+                  color={viewMode === 'tile' ? '#ffffff' : COLORS.navy}
+                />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <FlatList
+            key={viewMode}
             data={filteredCars}
             keyExtractor={item => item.id}
             renderItem={renderCar}
@@ -151,6 +199,14 @@ export default function HomeScreen() {
           />
         </>
       )}
+
+      <DateRangeModal
+        visible={isDateModalVisible}
+        onClose={() => setIsDateModalVisible(false)}
+        startDate={startDate}
+        endDate={endDate}
+        onApply={handleApplyDates}
+      />
     </View>
   );
 }
@@ -162,32 +218,14 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: COLORS.teal,
-    paddingTop: 60,
-    paddingBottom: 30,
+    paddingTop: 50,
+    paddingBottom: 20,
     paddingHorizontal: 20,
     alignItems: 'center',
   },
   logo: {
-    width: 64,
-    height: 73,
-    marginBottom: 14,
-  },
-  headline: {
-    fontFamily: FONTS.display,
-    fontSize: 30,
-    color: COLORS.white,
-    marginBottom: 6,
-    textAlign: 'center',
-  },
-  tagline: {
-    fontFamily: FONTS.regular,
-    fontSize: 14,
-    color: COLORS.white,
-    textAlign: 'center',
-  },
-  taglineHighlight: {
-    fontFamily: FONTS.semiBold,
-    color: COLORS.orange,
+    width: 56,
+    height: 64,
   },
   searchContainer: {
     margin: 16,
@@ -203,6 +241,33 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 6,
     elevation: 3,
+  },
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginBottom: 4,
+    gap: 8,
+  },
+  datePill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#e5e5e5',
+  },
+  datePillText: {
+    fontFamily: FONTS.medium,
+    fontSize: 13,
+    color: COLORS.navy,
+  },
+  clearDateButton: {
+    padding: 2,
   },
   categoriesContent: {
     paddingHorizontal: 16,
@@ -232,6 +297,9 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   section: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     marginBottom: 8,
     marginTop: 4,
@@ -240,6 +308,27 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.bold,
     fontSize: 18,
     color: COLORS.navy,
+  },
+  sectionSubtitle: {
+    fontFamily: FONTS.regular,
+    fontSize: 12,
+    color: COLORS.teal,
+    marginTop: 2,
+  },
+  viewToggle: {
+    flexDirection: 'row',
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    padding: 3,
+    gap: 2,
+  },
+  viewToggleButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 6,
+  },
+  viewToggleButtonActive: {
+    backgroundColor: COLORS.teal,
   },
   list: {
     paddingHorizontal: 16,
@@ -268,82 +357,5 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.semiBold,
     color: '#ffffff',
     fontSize: 14,
-  },
-  carCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  carInfo: {
-    flex: 1,
-  },
-  carNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
-    flexWrap: 'wrap',
-  },
-  carName: {
-    fontFamily: FONTS.bold,
-    fontSize: 16,
-    color: COLORS.navy,
-  },
-  typeBadge: {
-    backgroundColor: '#EEF9F9',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  typeText: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 10,
-    color: COLORS.teal,
-  },
-  carLocation: {
-    fontFamily: FONTS.regular,
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 8,
-  },
-  carDetails: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  carDetail: {
-    fontFamily: FONTS.regular,
-    fontSize: 12,
-    color: '#888',
-  },
-  carRight: {
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-  },
-  carPrice: {
-    fontFamily: FONTS.bold,
-    fontSize: 22,
-    color: COLORS.teal,
-  },
-  carPriceLabel: {
-    fontFamily: FONTS.regular,
-    fontSize: 11,
-    color: '#999',
-    marginTop: -4,
-  },
-  availabilityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  availabilityText: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 11,
   },
 });
