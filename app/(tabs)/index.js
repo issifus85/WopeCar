@@ -117,7 +117,7 @@ export default function HomeScreen() {
         horizontal
         showsHorizontalScrollIndicator={false}
         removeClippedSubviews={false}
-        style={{ height: 75}}
+        style={styles.categoriesRow}
         contentContainerStyle={styles.categoriesContent}
       >
         {CATEGORIES.map(category => (
@@ -269,6 +269,9 @@ const styles = StyleSheet.create({
   },
   clearDateButton: {
     padding: 2,
+  },
+  categoriesRow: {
+    height: 56,
   },
   categoriesContent: {
     paddingHorizontal: 16,
