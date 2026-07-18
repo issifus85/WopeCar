@@ -78,7 +78,7 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Image
-          source={require('../../assets/logo-mark-reverse.png')}
+          source={require('../../assets/logo-mark-navy.png')}
           style={styles.logo}
           resizeMode="contain"
         />
@@ -168,8 +168,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logo: {
-    width: 190,
-    height: 52,
+    width: 64,
+    height: 73,
     marginBottom: 14,
   },
   headline: {
