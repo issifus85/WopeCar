@@ -39,7 +39,7 @@ function normalizeCar(raw) {
 
   return {
     id: String(raw.id),
-    name: raw.title,
+    name: raw.title || 'Untitled Car',
     type: raw.type ?? undefined,
     location: raw.location?.name ?? '',
     pricePerDay: hasSalePrice ? raw.sale_price : raw.price,
