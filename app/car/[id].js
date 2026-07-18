@@ -1,18 +1,21 @@
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useLocalSearchParams } from 'expo-router';
-import { fetchCarById } from '../../api/cars';
+import { fetchCarById } from '../../services/carsApi';
 import { COLORS, FONTS } from '../../constants/theme';
 
 export default function CarDetailScreen() {
   const { id } = useLocalSearchParams();
   const [car, setCar] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     setIsLoading(true);
+    setError(null);
     fetchCarById(id)
       .then(setCar)
+      .catch(() => setError('Could not load this car. Please try again.'))
       .finally(() => setIsLoading(false));
   }, [id]);
 
@@ -20,6 +23,14 @@ export default function CarDetailScreen() {
     return (
       <View style={styles.notFound}>
         <ActivityIndicator size="large" color={COLORS.teal} />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.notFound}>
+        <Text style={styles.notFoundText}>{error}</Text>
       </View>
     );
   }
@@ -32,20 +43,28 @@ export default function CarDetailScreen() {
     );
   }
 
+  const photo = car.bannerImage || car.image;
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.imagePlaceholder}>
-        <Text style={styles.imagePlaceholderText}>🚗</Text>
-      </View>
+      {photo ? (
+        <Image source={{ uri: photo }} style={styles.image} resizeMode="cover" />
+      ) : (
+        <View style={styles.imagePlaceholder}>
+          <Text style={styles.imagePlaceholderText}>🚗</Text>
+        </View>
+      )}
 
       <View style={styles.nameRow}>
         <Text style={styles.name}>{car.name}</Text>
-        <View style={styles.typeBadge}>
-          <Text style={styles.typeText}>{car.type}</Text>
-        </View>
+        {car.type ? (
+          <View style={styles.typeBadge}>
+            <Text style={styles.typeText}>{car.type}</Text>
+          </View>
+        ) : null}
       </View>
 
-      <Text style={styles.location}>📍 {car.location}</Text>
+      {!!car.location && <Text style={styles.location}>📍 {car.location}</Text>}
 
       <View style={[
         styles.availabilityBadge,
@@ -59,6 +78,10 @@ export default function CarDetailScreen() {
         </Text>
       </View>
 
+      {!!car.description && (
+        <Text style={styles.description}>{car.description}</Text>
+      )}
+
       <View style={styles.specsRow}>
         <View style={styles.specCard}>
           <Text style={styles.specValue}>💺 {car.seats}</Text>
@@ -69,6 +92,23 @@ export default function CarDetailScreen() {
           <Text style={styles.specLabel}>Transmission</Text>
         </View>
       </View>
+
+      {(car.doors || car.baggage) && (
+        <View style={styles.specsRow}>
+          {!!car.doors && (
+            <View style={styles.specCard}>
+              <Text style={styles.specValue}>🚪 {car.doors}</Text>
+              <Text style={styles.specLabel}>Doors</Text>
+            </View>
+          )}
+          {!!car.baggage && (
+            <View style={styles.specCard}>
+              <Text style={styles.specValue}>🧳 {car.baggage}</Text>
+              <Text style={styles.specLabel}>Baggage</Text>
+            </View>
+          )}
+        </View>
+      )}
 
       <View style={styles.priceRow}>
         <View>
@@ -100,11 +140,20 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 20,
   },
   notFoundText: {
     fontFamily: FONTS.regular,
     fontSize: 16,
     color: '#666',
+    textAlign: 'center',
+  },
+  image: {
+    width: '100%',
+    height: 180,
+    borderRadius: 16,
+    marginBottom: 20,
+    backgroundColor: '#EEF9F9',
   },
   imagePlaceholder: {
     height: 180,
@@ -155,6 +204,13 @@ const styles = StyleSheet.create({
   availabilityText: {
     fontFamily: FONTS.semiBold,
     fontSize: 12,
+  },
+  description: {
+    fontFamily: FONTS.regular,
+    fontSize: 14,
+    color: '#444',
+    lineHeight: 21,
+    marginTop: 16,
   },
   specsRow: {
     flexDirection: 'row',

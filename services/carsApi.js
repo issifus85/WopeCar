@@ -8,35 +8,65 @@ function toQueryString(params) {
   return '?' + new URLSearchParams(entries).toString();
 }
 
+function stripHtml(html) {
+  return html.replace(/<[^>]*>/g, '').trim();
+}
+
+/**
+ * Adapts the API's raw car shape (title, price/sale_price, passenger, gear,
+ * door, location: {id,name}, ...) to what the app's UI expects (name,
+ * pricePerDay, seats, transmission, location, ...).
+ *
+ * Known gap: the API doesn't return a vehicle category/type on car records
+ * today (that lives in a separate terms/attributes relation the list and
+ * detail endpoints don't expose yet), so `type` stays undefined and the
+ * Home screen's category pills won't have anything real to filter against
+ * until the backend adds it.
+ */
+function normalizeCar(raw) {
+  const hasSalePrice = raw.sale_price && raw.sale_price > 0 && raw.price > raw.sale_price;
+
+  return {
+    id: String(raw.id),
+    name: raw.title,
+    type: undefined,
+    location: raw.location?.name ?? '',
+    pricePerDay: hasSalePrice ? raw.sale_price : raw.price,
+    seats: raw.passenger,
+    transmission: raw.gear,
+    doors: raw.door,
+    baggage: raw.baggage,
+    isFeatured: !!raw.is_featured,
+    // search() already filters to status=publish, so every result here is
+    // a live, bookable listing - this isn't checking specific dates yet.
+    isAvailable: true,
+    image: raw.image || null,
+    bannerImage: raw.banner_image || null,
+    description: raw.content ? stripHtml(raw.content) : '',
+    reviewScore: raw.review_score ?? null,
+  };
+}
+
 /**
  * GET /api/cars
  *
  * Supported params: location_id, price_range ("min;max"), attrs, review_score,
  * service_name (title search), map_lat, map_lgn, map_place, is_featured,
  * special, driven_by, custom_ids, orderby, adults, children, limit, page.
- *
- * Returns { cars, meta } where each car matches the API's raw shape:
- * { id, object_model, title, price, sale_price, discount_percent, image,
- *   content, location: { id, name }, is_featured, passenger, gear, baggage,
- *   door, review_score }
  */
 export async function fetchCars(params = {}) {
   const json = await request(`/cars${toQueryString(params)}`);
   return {
-    cars: json.data,
+    cars: json.data.map(normalizeCar),
     meta: json.meta,
   };
 }
 
 /**
  * GET /api/cars/{id}
- *
- * Returns the single-car shape (superset of the list shape) with address,
- * map_lat/map_lng/map_zoom, banner_image, gallery[], video, extra_price,
- * review_stats, review_lists, faqs, cancel_policy, cancellation, terms,
- * related[]. Throws ApiError (status 404) if not found.
+ * Throws ApiError (status 404) if not found.
  */
 export async function fetchCarById(id) {
   const json = await request(`/cars/${id}`);
-  return json.data;
+  return normalizeCar(json.data);
 }

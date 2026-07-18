@@ -2,7 +2,7 @@ import { StyleSheet, Text, View, TextInput, FlatList, TouchableOpacity, ScrollVi
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { CATEGORIES } from '../../data/cars';
-import { fetchCars } from '../../api/cars';
+import { fetchCars } from '../../services/carsApi';
 import { COLORS, FONTS } from '../../constants/theme';
 
 export default function HomeScreen() {
@@ -21,7 +21,7 @@ export default function HomeScreen() {
     setIsLoading(true);
     setError(null);
     fetchCars()
-      .then(setCars)
+      .then(({ cars }) => setCars(cars))
       .catch(() => setError('Could not load cars. Please try again.'))
       .finally(() => setIsLoading(false));
   };
@@ -30,7 +30,7 @@ export default function HomeScreen() {
     const matchesSearch =
       car.location.toLowerCase().includes(searchText.toLowerCase()) ||
       car.name.toLowerCase().includes(searchText.toLowerCase()) ||
-      car.type.toLowerCase().includes(searchText.toLowerCase());
+      (car.type ?? '').toLowerCase().includes(searchText.toLowerCase());
 
     const matchesCategory =
       selectedCategory === 'All' || car.type === selectedCategory;
@@ -46,9 +46,11 @@ export default function HomeScreen() {
       <View style={styles.carInfo}>
         <View style={styles.carNameRow}>
           <Text style={styles.carName}>{item.name}</Text>
-          <View style={styles.typeBadge}>
-            <Text style={styles.typeText}>{item.type}</Text>
-          </View>
+          {item.type ? (
+            <View style={styles.typeBadge}>
+              <Text style={styles.typeText}>{item.type}</Text>
+            </View>
+          ) : null}
         </View>
         <Text style={styles.carLocation}>📍 {item.location}</Text>
         <View style={styles.carDetails}>
