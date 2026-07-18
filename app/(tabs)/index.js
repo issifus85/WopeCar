@@ -116,6 +116,7 @@ export default function HomeScreen() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        removeClippedSubviews={false}
         style={{ height: 75}}
         contentContainerStyle={styles.categoriesContent}
       >
