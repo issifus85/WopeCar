@@ -11,7 +11,9 @@ import FeaturesSection from '../../components/FeaturesSection';
 import FaqSection from '../../components/FaqSection';
 import CarOwnerCard from '../../components/CarOwnerCard';
 import ReviewsSection from '../../components/ReviewsSection';
+import BookingChoiceModal from '../../components/BookingChoiceModal';
 import { useFavorites } from '../../contexts/FavoritesContext';
+import { useCart } from '../../contexts/CartContext';
 
 const DESCRIPTION_TRUNCATE_LENGTH = 220;
 
@@ -19,10 +21,12 @@ export default function CarDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const { isFavorite, toggleFavorite } = useFavorites();
+  const { addToCart } = useCart();
   const [car, setCar] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+  const [isBookingModalVisible, setIsBookingModalVisible] = useState(false);
 
   useEffect(() => {
     setIsLoading(true);
@@ -89,6 +93,17 @@ export default function CarDetailScreen() {
         }
       }
     }
+  };
+
+  const handleInquiry = () => {
+    setIsBookingModalVisible(false);
+    router.push('/inbox');
+  };
+
+  const handleContinue = () => {
+    addToCart(car.id);
+    setIsBookingModalVisible(false);
+    router.push('/cart');
   };
 
   return (
@@ -248,6 +263,7 @@ export default function CarDetailScreen() {
         </View>
         <TouchableOpacity
           style={[styles.bookButton, !car.isAvailable && styles.bookButtonDisabled]}
+          onPress={() => setIsBookingModalVisible(true)}
           disabled={!car.isAvailable}
         >
           <Text style={styles.bookButtonText}>
@@ -255,6 +271,13 @@ export default function CarDetailScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      <BookingChoiceModal
+        visible={isBookingModalVisible}
+        onClose={() => setIsBookingModalVisible(false)}
+        onInquiry={handleInquiry}
+        onContinue={handleContinue}
+      />
     </View>
   );
 }
