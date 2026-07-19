@@ -23,7 +23,7 @@ export default function ProfileScreen() {
 
       <TouchableOpacity
         style={styles.accountRow}
-        onPress={() => router.push('/account')}
+        onPress={() => router.push(user ? '/account' : '/login')}
       >
         {user?.avatar ? (
           <Image source={{ uri: user.avatar }} style={styles.avatarImage} />
