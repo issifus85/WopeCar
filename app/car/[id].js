@@ -1,7 +1,8 @@
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator, Share, Platform, Alert } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Linking from 'expo-linking';
 import { fetchCarById } from '../../services/carsApi';
 import { COLORS, FONTS } from '../../constants/theme';
 import ImageGallery from '../../components/ImageGallery';
@@ -66,6 +67,30 @@ export default function CarDetailScreen() {
     car.baggage ? { icon: 'briefcase-outline', value: car.baggage, label: 'Baggage' } : null,
   ].filter(Boolean);
 
+  const handleShare = async () => {
+    const link = Linking.createURL(`/car/${car.id}`);
+    const message = `Check out this ${car.name} on WopeCar - $${car.pricePerDay}/day in ${car.location}\n${link}`;
+
+    try {
+      // On native (iOS/Android) this opens the OS share sheet - Messages,
+      // Mail, WhatsApp, social apps, AirDrop, Copy, etc. On web it delegates
+      // to navigator.share() where supported (mobile Safari/Chrome).
+      await Share.share({ title: car.name, message, url: link });
+    } catch (err) {
+      // Share.share() rejects when there's no share sheet available (e.g.
+      // desktop browsers without the Web Share API) - copy the link instead
+      // of failing silently.
+      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
+        try {
+          await navigator.clipboard.writeText(link);
+          Alert.alert('Link Copied', 'The link to this car has been copied to your clipboard.');
+        } catch {
+          Alert.alert('Share This Car', link);
+        }
+      }
+    }
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -88,7 +113,7 @@ export default function CarDetailScreen() {
                 color={isFavorite(car.id) ? COLORS.orange : COLORS.navy}
               />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.overlayButton} hitSlop={8}>
+            <TouchableOpacity style={styles.overlayButton} onPress={handleShare} hitSlop={8}>
               <Ionicons name="share-social-outline" size={20} color={COLORS.navy} />
             </TouchableOpacity>
           </View>
