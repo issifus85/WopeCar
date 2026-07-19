@@ -21,6 +21,21 @@ export default function CarListCard({ car, onPress }) {
             </View>
           ) : null}
         </View>
+        {car.drivenBy ? (
+          <View style={styles.driveBadgeRow}>
+            <View style={[
+              styles.driveBadge,
+              car.drivenBy === 'Chauffeur' && styles.driveBadgeChauffeur,
+            ]}>
+              <Text style={[
+                styles.driveBadgeText,
+                car.drivenBy === 'Chauffeur' && styles.driveBadgeTextChauffeur,
+              ]}>
+                {car.drivenBy === 'Chauffeur' ? 'Chauffeur Only' : 'Self-Drive'}
+              </Text>
+            </View>
+          </View>
+        ) : null}
         <Text style={styles.location} numberOfLines={1}>📍 {car.location}</Text>
         <View style={styles.detailsRow}>
           <Text style={styles.detail}>💺 {car.seats} seats</Text>
@@ -98,6 +113,27 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.semiBold,
     fontSize: 9,
     color: COLORS.teal,
+  },
+  driveBadgeRow: {
+    flexDirection: 'row',
+    marginTop: 3,
+  },
+  driveBadge: {
+    backgroundColor: '#F5EBE7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  driveBadgeChauffeur: {
+    backgroundColor: '#FDECE3',
+  },
+  driveBadgeText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 9,
+    color: COLORS.mauve,
+  },
+  driveBadgeTextChauffeur: {
+    color: COLORS.orange,
   },
   location: {
     fontFamily: FONTS.regular,

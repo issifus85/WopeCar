@@ -65,6 +65,7 @@ function normalizeCar(raw) {
     gallery: raw.gallery?.length ? cleanGallery(raw.gallery) : raw.image ? [raw.image] : [],
     description: raw.content ? stripHtml(raw.content) : '',
     reviewScore: raw.review_score ?? null,
+    drivenBy: raw.driven_by ?? null,
   };
 }
 

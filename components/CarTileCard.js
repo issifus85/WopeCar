@@ -15,6 +15,19 @@ export default function CarTileCard({ car, onPress }) {
               <Text style={styles.typeText}>{car.type}</Text>
             </View>
           ) : null}
+          {car.drivenBy ? (
+            <View style={[
+              styles.driveBadge,
+              car.drivenBy === 'Chauffeur' && styles.driveBadgeChauffeur,
+            ]}>
+              <Text style={[
+                styles.driveBadgeText,
+                car.drivenBy === 'Chauffeur' && styles.driveBadgeTextChauffeur,
+              ]}>
+                {car.drivenBy === 'Chauffeur' ? 'Chauffeur Only' : 'Self-Drive'}
+              </Text>
+            </View>
+          ) : null}
         </View>
         <Text style={styles.location} numberOfLines={1}>📍 {car.location}</Text>
         <View style={styles.detailsRow}>
@@ -76,6 +89,23 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.semiBold,
     fontSize: 10,
     color: COLORS.teal,
+  },
+  driveBadge: {
+    backgroundColor: '#F5EBE7',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  driveBadgeChauffeur: {
+    backgroundColor: '#FDECE3',
+  },
+  driveBadgeText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 10,
+    color: COLORS.mauve,
+  },
+  driveBadgeTextChauffeur: {
+    color: COLORS.orange,
   },
   location: {
     fontFamily: FONTS.regular,
