@@ -176,7 +176,7 @@ export default function DateRangeModal({ visible, onClose, startDate, endDate, o
               <Text style={styles.applyButtonText}>
                 {tempStart && tempEnd
                   ? `${formatDateShort(tempStart)} - ${formatDateShort(tempEnd)}`
-                  : 'Apply Dates'}
+                  : 'Check Availability'}
               </Text>
             </TouchableOpacity>
           </View>
