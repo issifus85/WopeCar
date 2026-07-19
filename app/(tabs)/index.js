@@ -1,5 +1,5 @@
-import { StyleSheet, Text, View, TextInput, FlatList, TouchableOpacity, ScrollView, ActivityIndicator, Image } from 'react-native';
-import { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, TextInput, FlatList, TouchableOpacity, ScrollView, ActivityIndicator, Image, Animated } from 'react-native';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CATEGORIES } from '../../data/cars';
@@ -21,6 +21,18 @@ export default function HomeScreen() {
   const [isDateModalVisible, setIsDateModalVisible] = useState(false);
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const searchScale = useRef(new Animated.Value(1)).current;
+
+  const handleSearchFocus = () => {
+    setIsSearchFocused(true);
+    Animated.spring(searchScale, { toValue: 1.02, friction: 7, useNativeDriver: true }).start();
+  };
+
+  const handleSearchBlur = () => {
+    setIsSearchFocused(false);
+    Animated.spring(searchScale, { toValue: 1, friction: 7, useNativeDriver: true }).start();
+  };
 
   useEffect(() => {
     loadCars(selectedCategory, startDate, endDate);
@@ -84,15 +96,29 @@ export default function HomeScreen() {
         />
       </View>
 
-      <View style={styles.searchContainer}>
+      <Animated.View
+        style={[
+          styles.searchWrapper,
+          isSearchFocused && styles.searchWrapperFocused,
+          { transform: [{ scale: searchScale }] },
+        ]}
+      >
+        <Ionicons name="search" size={19} color={isSearchFocused ? COLORS.teal : '#999'} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search by location, model or type..."
           placeholderTextColor="#999"
           value={searchText}
           onChangeText={setSearchText}
+          onFocus={handleSearchFocus}
+          onBlur={handleSearchBlur}
         />
-      </View>
+        {searchText.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchText('')} hitSlop={8}>
+            <Ionicons name="close-circle" size={18} color="#ccc" />
+          </TouchableOpacity>
+        )}
+      </Animated.View>
 
       <View style={styles.dateRow}>
         <TouchableOpacity
@@ -220,33 +246,48 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: COLORS.teal,
     paddingTop: 50,
-    paddingBottom: 20,
+    paddingBottom: 44,
     paddingHorizontal: 20,
     alignItems: 'center',
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
   },
   logo: {
     width: 56,
     height: 64,
   },
-  searchContainer: {
-    margin: 16,
-    marginBottom: 8,
+  searchWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    marginHorizontal: 20,
+    marginTop: -30,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  searchWrapperFocused: {
+    borderColor: COLORS.teal,
   },
   searchInput: {
+    flex: 1,
     fontFamily: FONTS.regular,
-    backgroundColor: '#ffffff',
-    borderRadius: 10,
-    padding: 14,
     fontSize: 15,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
+    color: COLORS.navy,
   },
   dateRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: 16,
+    marginTop: 18,
     marginBottom: 4,
     gap: 8,
   },
