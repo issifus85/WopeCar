@@ -115,6 +115,34 @@ export default function CarDetailScreen() {
                 {car.isAvailable ? 'Available' : 'Unavailable'}
               </Text>
             </View>
+            {car.drivenBy ? (
+              <View style={[
+                styles.driveBadge,
+                car.drivenBy === 'Chauffeur' && styles.driveBadgeChauffeur,
+              ]}>
+                <Ionicons
+                  name={car.drivenBy === 'Chauffeur' ? 'person' : 'key-outline'}
+                  size={12}
+                  color={car.drivenBy === 'Chauffeur' ? COLORS.orange : COLORS.mauve}
+                />
+                <Text style={[
+                  styles.driveBadgeText,
+                  car.drivenBy === 'Chauffeur' && styles.driveBadgeTextChauffeur,
+                ]}>
+                  {car.drivenBy === 'Chauffeur' ? 'Chauffeur Only' : 'Self-Drive'}
+                </Text>
+              </View>
+            ) : null}
+            {car.securityDepositRequired ? (
+              <View style={styles.depositBadge}>
+                <Ionicons name="cash-outline" size={12} color="#666" />
+                <Text style={styles.depositBadgeText}>Security Deposit Required</Text>
+              </View>
+            ) : null}
+            <View style={styles.vettedBadge}>
+              <Ionicons name="shield-checkmark" size={12} color="#ffffff" />
+              <Text style={styles.vettedBadgeText}>Vetted by WopeCar</Text>
+            </View>
           </View>
 
           <View style={styles.specsCard}>
@@ -218,6 +246,7 @@ const styles = StyleSheet.create({
   },
   badgeRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     marginTop: 12,
   },
@@ -240,6 +269,54 @@ const styles = StyleSheet.create({
   availabilityText: {
     fontFamily: FONTS.semiBold,
     fontSize: 12,
+  },
+  driveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#F5EBE7',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  driveBadgeChauffeur: {
+    backgroundColor: '#FDECE3',
+  },
+  driveBadgeText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 12,
+    color: COLORS.mauve,
+  },
+  driveBadgeTextChauffeur: {
+    color: COLORS.orange,
+  },
+  depositBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#F0F0F0',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  depositBadgeText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 12,
+    color: '#666',
+  },
+  vettedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: COLORS.teal,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  vettedBadgeText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 12,
+    color: '#ffffff',
   },
   specsCard: {
     flexDirection: 'row',

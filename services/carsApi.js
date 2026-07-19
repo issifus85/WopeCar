@@ -66,6 +66,7 @@ function normalizeCar(raw) {
     description: raw.content ? stripHtml(raw.content) : '',
     reviewScore: raw.review_score ?? null,
     drivenBy: raw.driven_by ?? null,
+    securityDepositRequired: !!raw.deposit_required,
   };
 }
 
