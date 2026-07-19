@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../constants/theme';
+import SectionHeading from './SectionHeading';
 
 // The API doesn't return a per-feature icon for this dataset (image_id/icon
 // are null), so features are matched to a reasonable Ionicon by slug. Falls
@@ -36,7 +37,7 @@ export default function FeaturesSection({ features }) {
 
   return (
     <View>
-      <Text style={styles.sectionHeading}>Features</Text>
+      <SectionHeading>Features</SectionHeading>
       <View style={styles.grid}>
         {visibleFeatures.map((feature) => (
           <View key={feature.id} style={styles.featureItem}>
@@ -66,13 +67,6 @@ export default function FeaturesSection({ features }) {
 }
 
 const styles = StyleSheet.create({
-  sectionHeading: {
-    fontFamily: FONTS.bold,
-    fontSize: 16,
-    color: COLORS.navy,
-    marginTop: 24,
-    marginBottom: 12,
-  },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',

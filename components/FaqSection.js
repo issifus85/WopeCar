@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../constants/theme';
+import SectionHeading from './SectionHeading';
 
 const COLLAPSED_COUNT = 3;
 
@@ -28,7 +29,7 @@ export default function FaqSection({ faqs }) {
 
   return (
     <View>
-      <Text style={styles.sectionHeading}>FAQs</Text>
+      <SectionHeading>FAQs</SectionHeading>
       {visibleFaqs.map((faq, index) => {
         const isOpen = openIndexes.has(index);
         return (
@@ -62,13 +63,6 @@ export default function FaqSection({ faqs }) {
 }
 
 const styles = StyleSheet.create({
-  sectionHeading: {
-    fontFamily: FONTS.bold,
-    fontSize: 16,
-    color: COLORS.navy,
-    marginTop: 24,
-    marginBottom: 8,
-  },
   faqItem: {
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',

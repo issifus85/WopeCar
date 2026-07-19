@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../constants/theme';
+import SectionHeading from './SectionHeading';
 
 const STAR_KEYS = ['5', '4', '3', '2', '1'];
 
@@ -14,7 +15,7 @@ export default function ReviewsSection({ reviewScore, reviews }) {
 
   return (
     <View>
-      <Text style={styles.sectionHeading}>Reviews & Ratings</Text>
+      <SectionHeading>Reviews & Ratings</SectionHeading>
 
       <View style={styles.summaryRow}>
         <View style={styles.scoreBlock}>
@@ -75,13 +76,6 @@ export default function ReviewsSection({ reviewScore, reviews }) {
 }
 
 const styles = StyleSheet.create({
-  sectionHeading: {
-    fontFamily: FONTS.bold,
-    fontSize: 16,
-    color: COLORS.navy,
-    marginTop: 24,
-    marginBottom: 12,
-  },
   summaryRow: {
     flexDirection: 'row',
     alignItems: 'center',

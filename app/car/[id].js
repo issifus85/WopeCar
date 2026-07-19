@@ -5,8 +5,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { fetchCarById } from '../../services/carsApi';
 import { COLORS, FONTS } from '../../constants/theme';
 import ImageGallery from '../../components/ImageGallery';
+import SectionHeading from '../../components/SectionHeading';
 import FeaturesSection from '../../components/FeaturesSection';
 import FaqSection from '../../components/FaqSection';
+import CarOwnerCard from '../../components/CarOwnerCard';
 import ReviewsSection from '../../components/ReviewsSection';
 
 const DESCRIPTION_TRUNCATE_LENGTH = 220;
@@ -160,8 +162,8 @@ export default function CarDetailScreen() {
           </View>
 
           {!!car.description && (
-            <>
-              <Text style={styles.sectionHeading}>Description</Text>
+            <View style={styles.section}>
+              <SectionHeading>Description</SectionHeading>
               <Text style={styles.description}>
                 {isDescriptionExpanded || car.description.length <= DESCRIPTION_TRUNCATE_LENGTH
                   ? car.description
@@ -174,24 +176,42 @@ export default function CarDetailScreen() {
                   </Text>
                 </TouchableOpacity>
               )}
-            </>
+            </View>
           )}
 
           {!!car.cancellationPolicy && (
-            <>
-              <Text style={styles.sectionHeading}>Cancellation Policy</Text>
+            <View style={styles.section}>
+              <SectionHeading>Cancellation Policy</SectionHeading>
               <View style={styles.cancellationRow}>
                 <Ionicons name="calendar-outline" size={16} color={COLORS.teal} />
                 <Text style={styles.cancellationText}>{car.cancellationPolicy}</Text>
               </View>
-            </>
+            </View>
           )}
 
-          <FeaturesSection features={car.features} />
+          {!!car.features?.length && (
+            <View style={styles.section}>
+              <FeaturesSection features={car.features} />
+            </View>
+          )}
 
-          <FaqSection faqs={car.faqs} />
+          {!!car.faqs?.length && (
+            <View style={styles.section}>
+              <FaqSection faqs={car.faqs} />
+            </View>
+          )}
 
-          <ReviewsSection reviewScore={car.reviewScore} reviews={car.reviews} />
+          {!!car.owner && (
+            <View style={styles.section}>
+              <CarOwnerCard owner={car.owner} />
+            </View>
+          )}
+
+          {!!car.reviewScore && (
+            <View style={styles.section}>
+              <ReviewsSection reviewScore={car.reviewScore} reviews={car.reviews} />
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -371,12 +391,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#888',
   },
-  sectionHeading: {
-    fontFamily: FONTS.bold,
-    fontSize: 16,
-    color: COLORS.navy,
+  section: {
     marginTop: 24,
-    marginBottom: 8,
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
   },
   description: {
     fontFamily: FONTS.regular,

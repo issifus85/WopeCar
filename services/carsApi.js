@@ -71,6 +71,12 @@ function normalizeCar(raw) {
     cancellationPolicy: raw.cancellation ?? null,
     features: raw.terms?.[CAR_FEATURES_ATTR_ID]?.child ?? [],
     reviews: raw.review_lists?.data ?? [],
+    owner: raw.owner ? {
+      name: raw.owner.name,
+      avatar: raw.owner.avatar,
+      memberSince: raw.owner.member_since,
+      isVerified: !!raw.owner.is_verified,
+    } : null,
   };
 }
 
