@@ -17,7 +17,7 @@ export default function CarOwnerCard({ owner }) {
 
   return (
     <View>
-      <SectionHeading>Car Owner</SectionHeading>
+      <SectionHeading>Partner</SectionHeading>
       <View style={styles.card}>
         {owner.avatar ? (
           <Image source={{ uri: owner.avatar }} style={styles.avatarImage} />

@@ -10,16 +10,17 @@ import FeaturesSection from '../../components/FeaturesSection';
 import FaqSection from '../../components/FaqSection';
 import CarOwnerCard from '../../components/CarOwnerCard';
 import ReviewsSection from '../../components/ReviewsSection';
+import { useFavorites } from '../../contexts/FavoritesContext';
 
 const DESCRIPTION_TRUNCATE_LENGTH = 220;
 
 export default function CarDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const { isFavorite, toggleFavorite } = useFavorites();
   const [car, setCar] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [isFavorite, setIsFavorite] = useState(false);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
 
   useEffect(() => {
@@ -78,13 +79,13 @@ export default function CarDetailScreen() {
           <View style={styles.topRightButtons}>
             <TouchableOpacity
               style={styles.overlayButton}
-              onPress={() => setIsFavorite(f => !f)}
+              onPress={() => toggleFavorite(car.id)}
               hitSlop={8}
             >
               <Ionicons
-                name={isFavorite ? 'heart' : 'heart-outline'}
+                name={isFavorite(car.id) ? 'heart' : 'heart-outline'}
                 size={20}
-                color={isFavorite ? COLORS.orange : COLORS.navy}
+                color={isFavorite(car.id) ? COLORS.orange : COLORS.navy}
               />
             </TouchableOpacity>
             <TouchableOpacity style={styles.overlayButton} hitSlop={8}>
@@ -225,7 +226,7 @@ export default function CarDetailScreen() {
           disabled={!car.isAvailable}
         >
           <Text style={styles.bookButtonText}>
-            {car.isAvailable ? 'Select Dates' : 'Unavailable'}
+            {car.isAvailable ? 'Book Now' : 'Unavailable'}
           </Text>
         </TouchableOpacity>
       </View>
