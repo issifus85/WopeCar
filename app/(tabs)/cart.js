@@ -5,12 +5,16 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../../constants/theme';
 import { useCart } from '../../contexts/CartContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { useCheckout } from '../../contexts/CheckoutContext';
 import { fetchCarById } from '../../services/carsApi';
 import CarListCard from '../../components/CarListCard';
 
 export default function CartScreen() {
   const router = useRouter();
   const { cartIds, removeFromCart } = useCart();
+  const { user } = useAuth();
+  const { startCheckout } = useCheckout();
   const [cars, setCars] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -27,6 +31,15 @@ export default function CartScreen() {
         .finally(() => setIsLoading(false));
     }, [cartIds])
   );
+
+  const handleCheckout = (carId) => {
+    if (!user) {
+      router.push({ pathname: '/login', params: { redirect: '/checkout/dates', carId } });
+      return;
+    }
+    startCheckout(carId);
+    router.push({ pathname: '/checkout/dates', params: { carId } });
+  };
 
   if (isLoading) {
     return (
@@ -65,6 +78,13 @@ export default function CartScreen() {
             >
               <Ionicons name="close-circle" size={22} color="#999" />
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.checkoutButton}
+              onPress={() => handleCheckout(item.id)}
+            >
+              <Text style={styles.checkoutButtonText}>Checkout</Text>
+              <Ionicons name="arrow-forward" size={16} color="#ffffff" />
+            </TouchableOpacity>
           </View>
         )}
         contentContainerStyle={styles.list}
@@ -95,6 +115,7 @@ const styles = StyleSheet.create({
   },
   cartItem: {
     position: 'relative',
+    marginBottom: 16,
   },
   removeButton: {
     position: 'absolute',
@@ -102,6 +123,21 @@ const styles = StyleSheet.create({
     right: 8,
     backgroundColor: '#ffffff',
     borderRadius: 11,
+  },
+  checkoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: COLORS.teal,
+    borderRadius: 10,
+    paddingVertical: 12,
+    marginTop: -4,
+  },
+  checkoutButtonText: {
+    fontFamily: FONTS.semiBold,
+    color: '#ffffff',
+    fontSize: 14,
   },
   centerState: {
     flex: 1,

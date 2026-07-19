@@ -14,6 +14,8 @@ import { COLORS, FONTS } from '../constants/theme';
 import { AuthProvider } from '../contexts/AuthContext';
 import { FavoritesProvider } from '../contexts/FavoritesContext';
 import { CartProvider } from '../contexts/CartContext';
+import { CheckoutProvider } from '../contexts/CheckoutContext';
+import { BookingsProvider } from '../contexts/BookingsContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -43,6 +45,8 @@ export default function RootLayout() {
       <AuthProvider>
         <FavoritesProvider>
           <CartProvider>
+          <CheckoutProvider>
+          <BookingsProvider>
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="car/[id]" options={{ headerShown: false }} />
@@ -101,6 +105,8 @@ export default function RootLayout() {
                 }}
               />
             </Stack>
+          </BookingsProvider>
+          </CheckoutProvider>
           </CartProvider>
         </FavoritesProvider>
       </AuthProvider>

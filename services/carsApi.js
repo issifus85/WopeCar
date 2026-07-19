@@ -77,6 +77,13 @@ function normalizeCar(raw) {
       memberSince: raw.owner.member_since,
       isVerified: !!raw.owner.is_verified,
     } : null,
+    // "Regional Travel Add-ons" on the live site's booking widget - extra
+    // per-day/per-hour fees for driving the car into other regions.
+    regionalAddons: (raw.extra_price ?? []).map(addon => ({
+      name: addon.name,
+      price: Number(addon.price) || 0,
+      type: addon.type,
+    })),
   };
 }
 
@@ -109,4 +116,17 @@ export async function fetchCars(params = {}) {
 export async function fetchCarById(id) {
   const json = await request(`/cars/${id}`);
   return normalizeCar(json.data);
+}
+
+/**
+ * GET /api/cars/{id}/availability
+ * Returns this car's booked date ranges (today through +365 days) as
+ * [{ start: Date, end: Date }], for greying out a booking calendar.
+ */
+export async function fetchCarAvailability(id) {
+  const json = await request(`/cars/${id}/availability`);
+  return json.data.map(range => ({
+    start: new Date(`${range.start}T00:00:00`),
+    end: new Date(`${range.end}T00:00:00`),
+  }));
 }

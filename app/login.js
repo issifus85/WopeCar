@@ -12,12 +12,13 @@ import {
   Image,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { COLORS, FONTS } from '../constants/theme';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { redirect, ...redirectParams } = useLocalSearchParams();
   const { login, register } = useAuth();
   const [mode, setMode] = useState('signin');
   const [name, setName] = useState('');
@@ -57,7 +58,9 @@ export default function LoginScreen() {
       } else {
         await login({ email, password });
       }
-      if (router.canGoBack()) {
+      if (redirect) {
+        router.replace({ pathname: redirect, params: redirectParams });
+      } else if (router.canGoBack()) {
         router.back();
       } else {
         router.replace('/profile');
