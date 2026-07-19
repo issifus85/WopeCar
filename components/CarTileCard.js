@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../constants/theme';
+import { formatCurrency } from '../constants/pricing';
 import ImageGallery from './ImageGallery';
 
 export default function CarTileCard({ car, onPress }) {
@@ -39,7 +40,7 @@ export default function CarTileCard({ car, onPress }) {
           </View>
         ) : null}
         <View style={styles.bottomRow}>
-          <Text style={styles.price}>${car.pricePerDay}<Text style={styles.priceLabel}>/day</Text></Text>
+          <Text style={styles.price}>{formatCurrency(car.pricePerDay)}<Text style={styles.priceLabel}>/day</Text></Text>
           <View style={[
             styles.availabilityBadge,
             { backgroundColor: car.isAvailable ? '#E8F5E9' : '#FFEBEE' }

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { StyleSheet, Text, View, ActivityIndicator, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { COLORS, FONTS } from '../../constants/theme';
+import { formatCurrency, SELF_DRIVE_DELIVERY_FEE, calculateSecurityDeposit } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
@@ -36,11 +37,16 @@ export default function CheckoutSummaryScreen() {
     return (car.regionalAddons ?? []).filter(a => draft.addonNames.includes(a.name));
   }, [car, draft.addonNames]);
 
+  const isSelfDrive = car?.drivenBy === 'Self-drive';
+
   const rentalCost = (car?.pricePerDay ?? 0) * nights;
   const addonsCost = selectedAddons.reduce((sum, addon) => {
     return sum + (addon.type === 'per_day' ? addon.price * nights : addon.price);
   }, 0);
-  const total = rentalCost + addonsCost;
+  const subtotal = rentalCost + addonsCost;
+  const deliveryFee = isSelfDrive ? SELF_DRIVE_DELIVERY_FEE : 0;
+  const securityDeposit = isSelfDrive ? calculateSecurityDeposit(subtotal) : 0;
+  const total = subtotal + deliveryFee + securityDeposit;
 
   const handleContinue = () => {
     updateDraft({ totalCost: total });
@@ -80,8 +86,8 @@ export default function CheckoutSummaryScreen() {
         <Text style={styles.sectionTitle}>Cost Breakdown</Text>
         <View style={styles.costCard}>
           <View style={styles.costRow}>
-            <Text style={styles.costLabel}>${car.pricePerDay} x {nights} {nights === 1 ? 'night' : 'nights'}</Text>
-            <Text style={styles.costValue}>${rentalCost.toFixed(2)}</Text>
+            <Text style={styles.costLabel}>{formatCurrency(car.pricePerDay)} x {nights} {nights === 1 ? 'night' : 'nights'}</Text>
+            <Text style={styles.costValue}>{formatCurrency(rentalCost)}</Text>
           </View>
 
           {selectedAddons.map((addon) => (
@@ -90,16 +96,30 @@ export default function CheckoutSummaryScreen() {
                 {addon.name}{addon.type === 'per_day' ? ` x ${nights}` : ''}
               </Text>
               <Text style={styles.costValue}>
-                ${(addon.type === 'per_day' ? addon.price * nights : addon.price).toFixed(2)}
+                {formatCurrency(addon.type === 'per_day' ? addon.price * nights : addon.price)}
               </Text>
             </View>
           ))}
+
+          {isSelfDrive && (
+            <View style={styles.costRow}>
+              <Text style={styles.costLabel}>Delivery fee</Text>
+              <Text style={styles.costValue}>{formatCurrency(deliveryFee)}</Text>
+            </View>
+          )}
+
+          {isSelfDrive && (
+            <View style={styles.costRow}>
+              <Text style={styles.costLabel}>Security deposit (refundable)</Text>
+              <Text style={styles.costValue}>{formatCurrency(securityDeposit)}</Text>
+            </View>
+          )}
 
           <View style={styles.divider} />
 
           <View style={styles.costRow}>
             <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalValue}>${total.toFixed(2)}</Text>
+            <Text style={styles.totalValue}>{formatCurrency(total)}</Text>
           </View>
         </View>
       </ScrollView>

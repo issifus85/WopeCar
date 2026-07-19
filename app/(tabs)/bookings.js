@@ -2,6 +2,7 @@ import { StyleSheet, Text, View, FlatList, Image, ActivityIndicator, TouchableOp
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../../constants/theme';
+import { formatCurrency } from '../../constants/pricing';
 import { useBookings } from '../../contexts/BookingsContext';
 
 const STATUS_COLORS = {
@@ -38,7 +39,7 @@ function BookingCard({ booking, onPress }) {
           {formatDate(booking.startDate)} — {formatDate(booking.endDate)}
         </Text>
         <Text style={styles.location} numberOfLines={1}>📍 {booking.pickupLocation}</Text>
-        <Text style={styles.total}>${(booking.totalCost ?? 0).toFixed(2)}</Text>
+        <Text style={styles.total}>{formatCurrency(booking.totalCost)}</Text>
       </View>
     </TouchableOpacity>
   );

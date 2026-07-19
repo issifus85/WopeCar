@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, ActivityIndicator, ScrollView, Image } from 're
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../../constants/theme';
+import { formatCurrency } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import { useBookings } from '../../contexts/BookingsContext';
@@ -84,7 +85,7 @@ export default function CheckoutPaymentScreen() {
           <View style={styles.summaryInfo}>
             <Text style={styles.carName} numberOfLines={1}>{car.name}</Text>
             <Text style={styles.totalLabel}>Amount due</Text>
-            <Text style={styles.totalValue}>${(draft.totalCost ?? 0).toFixed(2)}</Text>
+            <Text style={styles.totalValue}>{formatCurrency(draft.totalCost)}</Text>
           </View>
         </View>
 
@@ -104,7 +105,7 @@ export default function CheckoutPaymentScreen() {
       </ScrollView>
 
       <CheckoutFooterButton
-        label={isProcessing ? 'Processing...' : `Pay $${(draft.totalCost ?? 0).toFixed(2)}`}
+        label={isProcessing ? 'Processing...' : `Pay ${formatCurrency(draft.totalCost)}`}
         onPress={handlePay}
         disabled={isProcessing}
       />

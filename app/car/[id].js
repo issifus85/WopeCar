@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import { fetchCarById } from '../../services/carsApi';
 import { COLORS, FONTS } from '../../constants/theme';
+import { formatCurrency } from '../../constants/pricing';
 import ImageGallery from '../../components/ImageGallery';
 import SectionHeading from '../../components/SectionHeading';
 import FeaturesSection from '../../components/FeaturesSection';
@@ -73,7 +74,7 @@ export default function CarDetailScreen() {
 
   const handleShare = async () => {
     const link = Linking.createURL(`/car/${car.id}`);
-    const message = `Check out this ${car.name} on WopeCar - $${car.pricePerDay}/day in ${car.location}\n${link}`;
+    const message = `Check out this ${car.name} on WopeCar - ${formatCurrency(car.pricePerDay)}/day in ${car.location}\n${link}`;
 
     try {
       // On native (iOS/Android) this opens the OS share sheet - Messages,
@@ -259,7 +260,7 @@ export default function CarDetailScreen() {
       <View style={styles.bottomBar}>
         <View>
           <Text style={styles.priceLabel}>Price per day</Text>
-          <Text style={styles.price}>${car.pricePerDay}</Text>
+          <Text style={styles.price}>{formatCurrency(car.pricePerDay)}</Text>
         </View>
         <TouchableOpacity
           style={[styles.bookButton, !car.isAvailable && styles.bookButtonDisabled]}

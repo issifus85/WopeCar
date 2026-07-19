@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, ScrollView
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../../constants/theme';
+import { formatCurrency } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
@@ -83,7 +84,7 @@ export default function CheckoutAddonsScreen() {
                     {addon.type === 'per_day' ? 'Per day' : addon.type === 'per_hour' ? 'Per hour' : addon.type}
                   </Text>
                 </View>
-                <Text style={styles.addonPrice}>+${addon.price}</Text>
+                <Text style={styles.addonPrice}>+{formatCurrency(addon.price)}</Text>
               </TouchableOpacity>
             );
           })
