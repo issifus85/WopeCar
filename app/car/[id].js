@@ -133,12 +133,10 @@ export default function CarDetailScreen() {
                 </Text>
               </View>
             ) : null}
-            {car.securityDepositRequired ? (
-              <View style={styles.depositBadge}>
-                <Ionicons name="cash-outline" size={12} color="#666" />
-                <Text style={styles.depositBadgeText}>Security Deposit Required</Text>
-              </View>
-            ) : null}
+            <View style={styles.depositBadge}>
+              <Ionicons name="cash-outline" size={12} color="#666" />
+              <Text style={styles.depositBadgeText}>Security Deposit Required</Text>
+            </View>
             <View style={styles.vettedBadge}>
               <Ionicons name="shield-checkmark" size={12} color="#ffffff" />
               <Text style={styles.vettedBadgeText}>Vetted by WopeCar</Text>
