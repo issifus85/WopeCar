@@ -1,11 +1,20 @@
 import { request } from './api';
 
+// Array values (e.g. 'driven_by[]': ['Chauffeur', 'Self-drive']) need repeated
+// keys - Laravel parses "driven_by[]=a&driven_by[]=b" into an array, but
+// URLSearchParams given an array value would just stringify it into one entry.
 function toQueryString(params) {
-  const entries = Object.entries(params).filter(
-    ([, value]) => value !== undefined && value !== null && value !== ''
-  );
-  if (!entries.length) return '';
-  return '?' + new URLSearchParams(entries).toString();
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return;
+    if (Array.isArray(value)) {
+      value.forEach(v => searchParams.append(key, v));
+    } else {
+      searchParams.append(key, value);
+    }
+  });
+  const query = searchParams.toString();
+  return query ? `?${query}` : '';
 }
 
 function stripHtml(html) {

@@ -6,6 +6,8 @@ import { CATEGORIES } from '../../data/cars';
 import { fetchCars, formatDateParam } from '../../services/carsApi';
 import { COLORS, FONTS } from '../../constants/theme';
 import DateRangeModal, { formatDateShort } from '../../components/DateRangeModal';
+import SortModal, { SORT_OPTIONS } from '../../components/SortModal';
+import FilterModal from '../../components/FilterModal';
 import CarListCard from '../../components/CarListCard';
 import CarTileCard from '../../components/CarTileCard';
 
@@ -23,6 +25,15 @@ export default function HomeScreen() {
   const [endDate, setEndDate] = useState(null);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const searchScale = useRef(new Animated.Value(1)).current;
+  const [sortBy, setSortBy] = useState('special');
+  const [isSortModalVisible, setIsSortModalVisible] = useState(false);
+  const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
+  const [drivenBy, setDrivenBy] = useState([]);
+  const [priceRange, setPriceRange] = useState(null);
+  const [vehicleClass, setVehicleClass] = useState([]);
+
+  const activeFilterCount = drivenBy.length + (priceRange ? 1 : 0) + vehicleClass.length;
+  const currentSortLabel = SORT_OPTIONS.find(o => o.value === sortBy)?.label ?? 'Sort';
 
   const handleSearchFocus = () => {
     setIsSearchFocused(true);
@@ -35,19 +46,31 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
-    loadCars(selectedCategory, startDate, endDate);
-  }, [selectedCategory, startDate, endDate]);
+    loadCars();
+  }, [selectedCategory, startDate, endDate, sortBy, drivenBy, priceRange, vehicleClass]);
 
-  const loadCars = (category, start, end) => {
+  const loadCars = () => {
     setIsLoading(true);
     setError(null);
     const params = {};
-    if (category && category !== 'All') {
-      params['attrs[9][]'] = category;
+    if (selectedCategory && selectedCategory !== 'All') {
+      params['attrs[9][]'] = selectedCategory;
     }
-    if (start && end) {
-      params.start = formatDateParam(start);
-      params.end = formatDateParam(end);
+    if (startDate && endDate) {
+      params.start = formatDateParam(startDate);
+      params.end = formatDateParam(endDate);
+    }
+    if (sortBy && sortBy !== 'special') {
+      params.orderby = sortBy;
+    }
+    if (drivenBy.length) {
+      params['driven_by[]'] = drivenBy;
+    }
+    if (priceRange) {
+      params.price_range = priceRange;
+    }
+    if (vehicleClass.length) {
+      params['attrs[25][]'] = vehicleClass;
     }
     fetchCars(params)
       .then(({ cars, meta }) => {
@@ -139,31 +162,45 @@ export default function HomeScreen() {
         )}
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        removeClippedSubviews={false}
-        style={styles.categoriesRow}
-        contentContainerStyle={styles.categoriesContent}
-      >
-        {CATEGORIES.map(category => (
-          <TouchableOpacity
-            key={category.value}
-            style={[
-              styles.categoryButton,
-              selectedCategory === category.value && styles.categoryButtonActive
-            ]}
-            onPress={() => setSelectedCategory(category.value)}
-          >
-            <Text style={[
-              styles.categoryText,
-              selectedCategory === category.value && styles.categoryTextActive
-            ]}>
-              {category.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      <View style={styles.categoriesWrap}>
+        <TouchableOpacity
+          style={styles.filtersButton}
+          onPress={() => setIsFilterModalVisible(true)}
+        >
+          <Ionicons name="options-outline" size={20} color={COLORS.navy} />
+          {activeFilterCount > 0 && (
+            <View style={styles.filtersBadge}>
+              <Text style={styles.filtersBadgeText}>{activeFilterCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          removeClippedSubviews={false}
+          style={styles.categoriesRow}
+          contentContainerStyle={styles.categoriesContent}
+        >
+          {CATEGORIES.map(category => (
+            <TouchableOpacity
+              key={category.value}
+              style={[
+                styles.categoryButton,
+                selectedCategory === category.value && styles.categoryButtonActive
+              ]}
+              onPress={() => setSelectedCategory(category.value)}
+            >
+              <Text style={[
+                styles.categoryText,
+                selectedCategory === category.value && styles.categoryTextActive
+              ]}>
+                {category.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
       {isLoading ? (
         <View style={styles.centerState}>
@@ -174,7 +211,7 @@ export default function HomeScreen() {
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity
             style={styles.retryButton}
-            onPress={() => loadCars(selectedCategory, startDate, endDate)}
+            onPress={() => loadCars()}
           >
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
@@ -192,27 +229,37 @@ export default function HomeScreen() {
                 </Text>
               )}
             </View>
-            <View style={styles.viewToggle}>
+            <View style={styles.controlsRow}>
               <TouchableOpacity
-                style={[styles.viewToggleButton, viewMode === 'list' && styles.viewToggleButtonActive]}
-                onPress={() => setViewMode('list')}
+                style={styles.sortButton}
+                onPress={() => setIsSortModalVisible(true)}
               >
-                <Ionicons
-                  name="list"
-                  size={18}
-                  color={viewMode === 'list' ? '#ffffff' : COLORS.navy}
-                />
+                <Ionicons name="swap-vertical-outline" size={15} color={COLORS.navy} />
+                <Text style={styles.sortButtonText} numberOfLines={1}>{currentSortLabel}</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.viewToggleButton, viewMode === 'tile' && styles.viewToggleButtonActive]}
-                onPress={() => setViewMode('tile')}
-              >
-                <Ionicons
-                  name="grid"
-                  size={16}
-                  color={viewMode === 'tile' ? '#ffffff' : COLORS.navy}
-                />
-              </TouchableOpacity>
+
+              <View style={styles.viewToggle}>
+                <TouchableOpacity
+                  style={[styles.viewToggleButton, viewMode === 'list' && styles.viewToggleButtonActive]}
+                  onPress={() => setViewMode('list')}
+                >
+                  <Ionicons
+                    name="list"
+                    size={18}
+                    color={viewMode === 'list' ? '#ffffff' : COLORS.navy}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.viewToggleButton, viewMode === 'tile' && styles.viewToggleButtonActive]}
+                  onPress={() => setViewMode('tile')}
+                >
+                  <Ionicons
+                    name="grid"
+                    size={16}
+                    color={viewMode === 'tile' ? '#ffffff' : COLORS.navy}
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
 
@@ -233,6 +280,29 @@ export default function HomeScreen() {
         startDate={startDate}
         endDate={endDate}
         onApply={handleApplyDates}
+      />
+
+      <SortModal
+        visible={isSortModalVisible}
+        onClose={() => setIsSortModalVisible(false)}
+        value={sortBy}
+        onSelect={(value) => {
+          setSortBy(value);
+          setIsSortModalVisible(false);
+        }}
+      />
+
+      <FilterModal
+        visible={isFilterModalVisible}
+        onClose={() => setIsFilterModalVisible(false)}
+        drivenBy={drivenBy}
+        priceRange={priceRange}
+        vehicleClass={vehicleClass}
+        onApply={({ drivenBy, priceRange, vehicleClass }) => {
+          setDrivenBy(drivenBy);
+          setPriceRange(priceRange);
+          setVehicleClass(vehicleClass);
+        }}
       />
     </View>
   );
@@ -311,8 +381,41 @@ const styles = StyleSheet.create({
   clearDateButton: {
     padding: 2,
   },
+  categoriesWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  filtersButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 16,
+  },
+  filtersBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: COLORS.orange,
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  filtersBadgeText: {
+    fontFamily: FONTS.bold,
+    fontSize: 9,
+    color: '#ffffff',
+  },
   categoriesRow: {
     height: 56,
+    flex: 1,
   },
   categoriesContent: {
     paddingHorizontal: 16,
@@ -359,6 +462,27 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.teal,
     marginTop: 2,
+  },
+  controlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sortButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    maxWidth: 110,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  sortButtonText: {
+    fontFamily: FONTS.medium,
+    fontSize: 12,
+    color: COLORS.navy,
+    flexShrink: 1,
   },
   viewToggle: {
     flexDirection: 'row',
