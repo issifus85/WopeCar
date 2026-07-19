@@ -66,8 +66,18 @@ function normalizeCar(raw) {
     description: raw.content ? stripHtml(raw.content) : '',
     reviewScore: raw.review_score ?? null,
     drivenBy: raw.driven_by ?? null,
+    // Only present on the single-car detail endpoint, not the list endpoint.
+    faqs: raw.faqs ?? [],
+    cancellationPolicy: raw.cancellation ?? null,
+    features: raw.terms?.[CAR_FEATURES_ATTR_ID]?.child ?? [],
+    reviews: raw.review_lists?.data ?? [],
   };
 }
+
+// "Car Features" attribute id (Airbag, Bluetooth, Backup Camera, etc.) -
+// confirmed the same way as the car type/vehicle class attrs, by inspecting
+// the live single-car page's terms payload (terms["10"].parent.title).
+const CAR_FEATURES_ATTR_ID = '10';
 
 /**
  * GET /api/cars

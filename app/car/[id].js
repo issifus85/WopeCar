@@ -5,6 +5,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { fetchCarById } from '../../services/carsApi';
 import { COLORS, FONTS } from '../../constants/theme';
 import ImageGallery from '../../components/ImageGallery';
+import FeaturesSection from '../../components/FeaturesSection';
+import FaqSection from '../../components/FaqSection';
+import ReviewsSection from '../../components/ReviewsSection';
+
+const DESCRIPTION_TRUNCATE_LENGTH = 220;
 
 export default function CarDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -13,6 +18,7 @@ export default function CarDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
 
   useEffect(() => {
     setIsLoading(true);
@@ -156,9 +162,36 @@ export default function CarDetailScreen() {
           {!!car.description && (
             <>
               <Text style={styles.sectionHeading}>Description</Text>
-              <Text style={styles.description}>{car.description}</Text>
+              <Text style={styles.description}>
+                {isDescriptionExpanded || car.description.length <= DESCRIPTION_TRUNCATE_LENGTH
+                  ? car.description
+                  : `${car.description.slice(0, DESCRIPTION_TRUNCATE_LENGTH).trimEnd()}…`}
+              </Text>
+              {car.description.length > DESCRIPTION_TRUNCATE_LENGTH && (
+                <TouchableOpacity onPress={() => setIsDescriptionExpanded(v => !v)}>
+                  <Text style={styles.readMoreText}>
+                    {isDescriptionExpanded ? 'Read Less' : 'Read More'}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </>
           )}
+
+          {!!car.cancellationPolicy && (
+            <>
+              <Text style={styles.sectionHeading}>Cancellation Policy</Text>
+              <View style={styles.cancellationRow}>
+                <Ionicons name="calendar-outline" size={16} color={COLORS.teal} />
+                <Text style={styles.cancellationText}>{car.cancellationPolicy}</Text>
+              </View>
+            </>
+          )}
+
+          <FeaturesSection features={car.features} />
+
+          <FaqSection faqs={car.faqs} />
+
+          <ReviewsSection reviewScore={car.reviewScore} reviews={car.reviews} />
         </View>
       </ScrollView>
 
@@ -350,6 +383,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#444',
     lineHeight: 21,
+  },
+  readMoreText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 13,
+    color: COLORS.teal,
+    marginTop: 6,
+  },
+  cancellationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  cancellationText: {
+    fontFamily: FONTS.medium,
+    fontSize: 14,
+    color: COLORS.navy,
   },
   bottomBar: {
     flexDirection: 'row',
