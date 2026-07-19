@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View, TouchableOpacity, Image } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../constants/theme';
 
 export default function CarListCard({ car, onPress }) {
@@ -21,12 +22,18 @@ export default function CarListCard({ car, onPress }) {
             </View>
           ) : null}
         </View>
+        <Text style={styles.location} numberOfLines={1}>📍 {car.location}</Text>
         {car.drivenBy ? (
           <View style={styles.driveBadgeRow}>
             <View style={[
               styles.driveBadge,
               car.drivenBy === 'Chauffeur' && styles.driveBadgeChauffeur,
             ]}>
+              <Ionicons
+                name={car.drivenBy === 'Chauffeur' ? 'person' : 'key-outline'}
+                size={10}
+                color={car.drivenBy === 'Chauffeur' ? COLORS.orange : COLORS.mauve}
+              />
               <Text style={[
                 styles.driveBadgeText,
                 car.drivenBy === 'Chauffeur' && styles.driveBadgeTextChauffeur,
@@ -36,11 +43,6 @@ export default function CarListCard({ car, onPress }) {
             </View>
           </View>
         ) : null}
-        <Text style={styles.location} numberOfLines={1}>📍 {car.location}</Text>
-        <View style={styles.detailsRow}>
-          <Text style={styles.detail}>💺 {car.seats} seats</Text>
-          <Text style={styles.detail}>⚙️ {car.transmission}</Text>
-        </View>
         <View style={styles.bottomRow}>
           <View>
             <Text style={styles.price}>${car.pricePerDay}<Text style={styles.priceLabel}>/day</Text></Text>
@@ -116,12 +118,15 @@ const styles = StyleSheet.create({
   },
   driveBadgeRow: {
     flexDirection: 'row',
-    marginTop: 3,
+    marginTop: 4,
   },
   driveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: '#F5EBE7',
     paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 4,
   },
   driveBadgeChauffeur: {
@@ -140,16 +145,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     marginTop: 2,
-  },
-  detailsRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 4,
-  },
-  detail: {
-    fontFamily: FONTS.regular,
-    fontSize: 11,
-    color: '#888',
   },
   bottomRow: {
     flexDirection: 'row',

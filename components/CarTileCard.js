@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../constants/theme';
 import ImageGallery from './ImageGallery';
 
@@ -15,11 +16,19 @@ export default function CarTileCard({ car, onPress }) {
               <Text style={styles.typeText}>{car.type}</Text>
             </View>
           ) : null}
-          {car.drivenBy ? (
+        </View>
+        <Text style={styles.location} numberOfLines={1}>📍 {car.location}</Text>
+        {car.drivenBy ? (
+          <View style={styles.driveBadgeRow}>
             <View style={[
               styles.driveBadge,
               car.drivenBy === 'Chauffeur' && styles.driveBadgeChauffeur,
             ]}>
+              <Ionicons
+                name={car.drivenBy === 'Chauffeur' ? 'person' : 'key-outline'}
+                size={11}
+                color={car.drivenBy === 'Chauffeur' ? COLORS.orange : COLORS.mauve}
+              />
               <Text style={[
                 styles.driveBadgeText,
                 car.drivenBy === 'Chauffeur' && styles.driveBadgeTextChauffeur,
@@ -27,13 +36,8 @@ export default function CarTileCard({ car, onPress }) {
                 {car.drivenBy === 'Chauffeur' ? 'Chauffeur Only' : 'Self-Drive'}
               </Text>
             </View>
-          ) : null}
-        </View>
-        <Text style={styles.location} numberOfLines={1}>📍 {car.location}</Text>
-        <View style={styles.detailsRow}>
-          <Text style={styles.detail}>💺 {car.seats} seats</Text>
-          <Text style={styles.detail}>⚙️ {car.transmission}</Text>
-        </View>
+          </View>
+        ) : null}
         <View style={styles.bottomRow}>
           <Text style={styles.price}>${car.pricePerDay}<Text style={styles.priceLabel}>/day</Text></Text>
           <View style={[
@@ -90,10 +94,17 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: COLORS.teal,
   },
+  driveBadgeRow: {
+    flexDirection: 'row',
+    marginTop: 6,
+  },
   driveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     backgroundColor: '#F5EBE7',
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 4,
   },
   driveBadgeChauffeur: {
@@ -112,16 +123,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#666',
     marginTop: 4,
-  },
-  detailsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 6,
-  },
-  detail: {
-    fontFamily: FONTS.regular,
-    fontSize: 12,
-    color: '#888',
   },
   bottomRow: {
     flexDirection: 'row',
