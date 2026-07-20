@@ -1,14 +1,17 @@
 import { StyleSheet, Text, View, FlatList, ActivityIndicator } from 'react-native';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { COLORS, FONTS } from '../../constants/theme';
+import { FONTS } from '../../constants/theme';
+import { useAppTheme } from '../../contexts/ThemeContext';
 import { useFavorites } from '../../contexts/FavoritesContext';
 import { fetchCarById } from '../../services/carsApi';
 import CarListCard from '../../components/CarListCard';
 
 export default function FavoritesScreen() {
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { favoriteIds } = useFavorites();
   const [cars, setCars] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -30,7 +33,7 @@ export default function FavoritesScreen() {
   if (isLoading) {
     return (
       <View style={styles.centerState}>
-        <ActivityIndicator size="large" color={COLORS.teal} />
+        <ActivityIndicator size="large" color={colors.teal} />
       </View>
     );
   }
@@ -64,40 +67,42 @@ export default function FavoritesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  header: {
-    paddingTop: 60,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  headerTitle: {
-    fontFamily: FONTS.bold,
-    fontSize: 20,
-    color: COLORS.navy,
-  },
-  list: {
-    paddingHorizontal: 16,
-    paddingBottom: 20,
-  },
-  centerState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  title: {
-    fontFamily: FONTS.bold,
-    fontSize: 22,
-    color: COLORS.navy,
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontFamily: FONTS.regular,
-    fontSize: 14,
-    color: '#666',
-  },
-});
+function createStyles(colors) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    header: {
+      paddingTop: 60,
+      paddingHorizontal: 16,
+      paddingBottom: 12,
+    },
+    headerTitle: {
+      fontFamily: FONTS.bold,
+      fontSize: 20,
+      color: colors.textPrimary,
+    },
+    list: {
+      paddingHorizontal: 16,
+      paddingBottom: 20,
+    },
+    centerState: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 20,
+    },
+    title: {
+      fontFamily: FONTS.bold,
+      fontSize: 22,
+      color: colors.textPrimary,
+      marginBottom: 8,
+    },
+    subtitle: {
+      fontFamily: FONTS.regular,
+      fontSize: 14,
+      color: colors.textMuted,
+    },
+  });
+}

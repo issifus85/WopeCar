@@ -1,10 +1,11 @@
 import { StyleSheet, Text, View, TextInput, FlatList, TouchableOpacity, ScrollView, ActivityIndicator, Image, Animated } from 'react-native';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CATEGORIES } from '../../data/cars';
 import { fetchCars, formatDateParam } from '../../services/carsApi';
-import { COLORS, FONTS } from '../../constants/theme';
+import { FONTS } from '../../constants/theme';
+import { useAppTheme } from '../../contexts/ThemeContext';
 import DateRangeModal, { formatDateShort } from '../../components/DateRangeModal';
 import SortModal, { SORT_OPTIONS } from '../../components/SortModal';
 import FilterModal from '../../components/FilterModal';
@@ -13,6 +14,8 @@ import CarTileCard from '../../components/CarTileCard';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [cars, setCars] = useState([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -126,11 +129,11 @@ export default function HomeScreen() {
           { transform: [{ scale: searchScale }] },
         ]}
       >
-        <Ionicons name="search" size={19} color={isSearchFocused ? COLORS.teal : '#999'} />
+        <Ionicons name="search" size={19} color={isSearchFocused ? colors.teal : colors.textSubtle} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search by location, model or type..."
-          placeholderTextColor="#999"
+          placeholderTextColor={colors.textSubtle}
           value={searchText}
           onChangeText={setSearchText}
           onFocus={handleSearchFocus}
@@ -138,7 +141,7 @@ export default function HomeScreen() {
         />
         {searchText.length > 0 && (
           <TouchableOpacity onPress={() => setSearchText('')} hitSlop={8}>
-            <Ionicons name="close-circle" size={18} color="#ccc" />
+            <Ionicons name="close-circle" size={18} color={colors.disabled} />
           </TouchableOpacity>
         )}
       </Animated.View>
@@ -148,7 +151,7 @@ export default function HomeScreen() {
           style={styles.datePill}
           onPress={() => setIsDateModalVisible(true)}
         >
-          <Ionicons name="calendar-outline" size={18} color={COLORS.teal} />
+          <Ionicons name="calendar-outline" size={18} color={colors.teal} />
           <Text style={styles.datePillText}>
             {startDate && endDate
               ? `${formatDateShort(startDate)} - ${formatDateShort(endDate)}`
@@ -157,7 +160,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
         {startDate && endDate && (
           <TouchableOpacity onPress={handleClearDates} style={styles.clearDateButton} hitSlop={10}>
-            <Ionicons name="close-circle" size={20} color="#999" />
+            <Ionicons name="close-circle" size={20} color={colors.textSubtle} />
           </TouchableOpacity>
         )}
       </View>
@@ -167,7 +170,7 @@ export default function HomeScreen() {
           style={styles.filtersButton}
           onPress={() => setIsFilterModalVisible(true)}
         >
-          <Ionicons name="options-outline" size={20} color={COLORS.navy} />
+          <Ionicons name="options-outline" size={20} color={colors.textPrimary} />
           {activeFilterCount > 0 && (
             <View style={styles.filtersBadge}>
               <Text style={styles.filtersBadgeText}>{activeFilterCount}</Text>
@@ -204,7 +207,7 @@ export default function HomeScreen() {
 
       {isLoading ? (
         <View style={styles.centerState}>
-          <ActivityIndicator size="large" color={COLORS.teal} />
+          <ActivityIndicator size="large" color={colors.teal} />
         </View>
       ) : error ? (
         <View style={styles.centerState}>
@@ -234,7 +237,7 @@ export default function HomeScreen() {
                 style={styles.sortButton}
                 onPress={() => setIsSortModalVisible(true)}
               >
-                <Ionicons name="swap-vertical-outline" size={15} color={COLORS.navy} />
+                <Ionicons name="swap-vertical-outline" size={15} color={colors.textPrimary} />
                 <Text style={styles.sortButtonText} numberOfLines={1}>{currentSortLabel}</Text>
               </TouchableOpacity>
 
@@ -246,7 +249,7 @@ export default function HomeScreen() {
                   <Ionicons
                     name="list"
                     size={18}
-                    color={viewMode === 'list' ? '#ffffff' : COLORS.navy}
+                    color={viewMode === 'list' ? colors.white : colors.textPrimary}
                   />
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -256,7 +259,7 @@ export default function HomeScreen() {
                   <Ionicons
                     name="grid"
                     size={16}
-                    color={viewMode === 'tile' ? '#ffffff' : COLORS.navy}
+                    color={viewMode === 'tile' ? colors.white : colors.textPrimary}
                   />
                 </TouchableOpacity>
               </View>
@@ -308,223 +311,225 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  header: {
-    backgroundColor: COLORS.teal,
-    paddingTop: 50,
-    paddingBottom: 44,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-  },
-  logo: {
-    width: 56,
-    height: 64,
-  },
-  searchWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    marginHorizontal: 20,
-    marginTop: -30,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-    shadowColor: '#000',
-    shadowOpacity: 0.14,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
-  },
-  searchWrapperFocused: {
-    borderColor: COLORS.teal,
-  },
-  searchInput: {
-    flex: 1,
-    fontFamily: FONTS.regular,
-    fontSize: 15,
-    color: COLORS.navy,
-  },
-  dateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 16,
-    marginTop: 18,
-    marginBottom: 4,
-    gap: 8,
-  },
-  datePill: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#ffffff',
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: '#e5e5e5',
-  },
-  datePillText: {
-    fontFamily: FONTS.medium,
-    fontSize: 13,
-    color: COLORS.navy,
-  },
-  clearDateButton: {
-    padding: 2,
-  },
-  categoriesWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  filtersButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 16,
-  },
-  filtersBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: COLORS.orange,
-    borderRadius: 8,
-    minWidth: 16,
-    height: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-  },
-  filtersBadgeText: {
-    fontFamily: FONTS.bold,
-    fontSize: 9,
-    color: '#ffffff',
-  },
-  categoriesRow: {
-    height: 56,
-    flex: 1,
-  },
-  categoriesContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  categoryButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    marginRight: 8,
-  },
-  categoryButtonActive: {
-    backgroundColor: COLORS.teal,
-    borderColor: COLORS.teal,
-  },
-  categoryText: {
-    fontFamily: FONTS.medium,
-    fontSize: 13,
-    color: '#666',
-  },
-  categoryTextActive: {
-    fontFamily: FONTS.semiBold,
-    color: '#ffffff',
-  },
-  section: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    marginBottom: 8,
-    marginTop: 4,
-  },
-  sectionTitle: {
-    fontFamily: FONTS.bold,
-    fontSize: 18,
-    color: COLORS.navy,
-  },
-  sectionSubtitle: {
-    fontFamily: FONTS.regular,
-    fontSize: 12,
-    color: COLORS.teal,
-    marginTop: 2,
-  },
-  controlsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  sortButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    maxWidth: 110,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-  },
-  sortButtonText: {
-    fontFamily: FONTS.medium,
-    fontSize: 12,
-    color: COLORS.navy,
-    flexShrink: 1,
-  },
-  viewToggle: {
-    flexDirection: 'row',
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
-    padding: 3,
-    gap: 2,
-  },
-  viewToggleButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 6,
-  },
-  viewToggleButtonActive: {
-    backgroundColor: COLORS.teal,
-  },
-  list: {
-    paddingHorizontal: 16,
-    paddingBottom: 20,
-  },
-  centerState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-  },
-  errorText: {
-    fontFamily: FONTS.regular,
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  retryButton: {
-    backgroundColor: COLORS.teal,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 10,
-  },
-  retryButtonText: {
-    fontFamily: FONTS.semiBold,
-    color: '#ffffff',
-    fontSize: 14,
-  },
-});
+function createStyles(colors) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    header: {
+      backgroundColor: colors.teal,
+      paddingTop: 50,
+      paddingBottom: 44,
+      paddingHorizontal: 20,
+      alignItems: 'center',
+      borderBottomLeftRadius: 28,
+      borderBottomRightRadius: 28,
+    },
+    logo: {
+      width: 56,
+      height: 64,
+    },
+    searchWrapper: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: colors.surface,
+      borderRadius: 16,
+      marginHorizontal: 20,
+      marginTop: -30,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      borderWidth: 1.5,
+      borderColor: 'transparent',
+      shadowColor: colors.shadow,
+      shadowOpacity: 0.14,
+      shadowRadius: 14,
+      shadowOffset: { width: 0, height: 6 },
+      elevation: 6,
+    },
+    searchWrapperFocused: {
+      borderColor: colors.teal,
+    },
+    searchInput: {
+      flex: 1,
+      fontFamily: FONTS.regular,
+      fontSize: 15,
+      color: colors.textPrimary,
+    },
+    dateRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginHorizontal: 16,
+      marginTop: 18,
+      marginBottom: 4,
+      gap: 8,
+    },
+    datePill: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: colors.surface,
+      borderRadius: 10,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    datePillText: {
+      fontFamily: FONTS.medium,
+      fontSize: 13,
+      color: colors.textPrimary,
+    },
+    clearDateButton: {
+      padding: 2,
+    },
+    categoriesWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    filtersButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 10,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: 16,
+    },
+    filtersBadge: {
+      position: 'absolute',
+      top: -4,
+      right: -4,
+      backgroundColor: colors.orange,
+      borderRadius: 8,
+      minWidth: 16,
+      height: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 3,
+    },
+    filtersBadgeText: {
+      fontFamily: FONTS.bold,
+      fontSize: 9,
+      color: colors.white,
+    },
+    categoriesRow: {
+      height: 56,
+      flex: 1,
+    },
+    categoriesContent: {
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      alignItems: 'center',
+    },
+    categoryButton: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 20,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      marginRight: 8,
+    },
+    categoryButtonActive: {
+      backgroundColor: colors.teal,
+      borderColor: colors.teal,
+    },
+    categoryText: {
+      fontFamily: FONTS.medium,
+      fontSize: 13,
+      color: colors.textMuted,
+    },
+    categoryTextActive: {
+      fontFamily: FONTS.semiBold,
+      color: colors.white,
+    },
+    section: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      marginBottom: 8,
+      marginTop: 4,
+    },
+    sectionTitle: {
+      fontFamily: FONTS.bold,
+      fontSize: 18,
+      color: colors.textPrimary,
+    },
+    sectionSubtitle: {
+      fontFamily: FONTS.regular,
+      fontSize: 12,
+      color: colors.teal,
+      marginTop: 2,
+    },
+    controlsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    sortButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      maxWidth: 110,
+      backgroundColor: colors.divider,
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 9,
+    },
+    sortButtonText: {
+      fontFamily: FONTS.medium,
+      fontSize: 12,
+      color: colors.textPrimary,
+      flexShrink: 1,
+    },
+    viewToggle: {
+      flexDirection: 'row',
+      backgroundColor: colors.divider,
+      borderRadius: 8,
+      padding: 3,
+      gap: 2,
+    },
+    viewToggleButton: {
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      borderRadius: 6,
+    },
+    viewToggleButtonActive: {
+      backgroundColor: colors.teal,
+    },
+    list: {
+      paddingHorizontal: 16,
+      paddingBottom: 20,
+    },
+    centerState: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 32,
+    },
+    errorText: {
+      fontFamily: FONTS.regular,
+      fontSize: 14,
+      color: colors.textMuted,
+      textAlign: 'center',
+      marginBottom: 16,
+    },
+    retryButton: {
+      backgroundColor: colors.teal,
+      paddingHorizontal: 24,
+      paddingVertical: 12,
+      borderRadius: 10,
+    },
+    retryButtonText: {
+      fontFamily: FONTS.semiBold,
+      color: colors.white,
+      fontSize: 14,
+    },
+  });
+}

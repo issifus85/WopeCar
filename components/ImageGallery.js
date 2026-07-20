@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { StyleSheet, View, Image, FlatList, Text, Dimensions } from 'react-native';
-import { COLORS } from '../constants/theme';
+import { useAppTheme } from '../contexts/ThemeContext';
 
 export default function ImageGallery({ images, height = 180, borderRadius = 16 }) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [width, setWidth] = useState(Dimensions.get('window').width);
 
@@ -55,38 +57,40 @@ export default function ImageGallery({ images, height = 180, borderRadius = 16 }
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    overflow: 'hidden',
-    backgroundColor: '#EEF9F9',
-  },
-  placeholder: {
-    backgroundColor: '#EEF9F9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  placeholderText: {
-    fontSize: 48,
-  },
-  dots: {
-    position: 'absolute',
-    bottom: 10,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 5,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.6)',
-  },
-  dotActive: {
-    backgroundColor: COLORS.white,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-});
+function createStyles(colors) {
+  return StyleSheet.create({
+    container: {
+      overflow: 'hidden',
+      backgroundColor: colors.highlight,
+    },
+    placeholder: {
+      backgroundColor: colors.highlight,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    placeholderText: {
+      fontSize: 48,
+    },
+    dots: {
+      position: 'absolute',
+      bottom: 10,
+      left: 0,
+      right: 0,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 5,
+    },
+    dot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: 'rgba(255,255,255,0.6)',
+    },
+    dotActive: {
+      backgroundColor: colors.white,
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+    },
+  });
+}

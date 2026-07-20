@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Modal, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS } from '../constants/theme';
+import { FONTS } from '../constants/theme';
+import { useAppTheme } from '../contexts/ThemeContext';
 
 export const SORT_OPTIONS = [
   { value: 'special', label: 'Special' },
@@ -11,6 +13,9 @@ export const SORT_OPTIONS = [
 ];
 
 export default function SortModal({ visible, onClose, value, onSelect }) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
@@ -18,7 +23,7 @@ export default function SortModal({ visible, onClose, value, onSelect }) {
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Sort By</Text>
             <TouchableOpacity onPress={onClose} hitSlop={10}>
-              <Ionicons name="close" size={24} color={COLORS.navy} />
+              <Ionicons name="close" size={24} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
 
@@ -34,7 +39,7 @@ export default function SortModal({ visible, onClose, value, onSelect }) {
                   {option.label}
                 </Text>
                 {isSelected && (
-                  <Ionicons name="checkmark" size={20} color={COLORS.teal} />
+                  <Ionicons name="checkmark" size={20} color={colors.teal} />
                 )}
               </TouchableOpacity>
             );
@@ -45,45 +50,47 @@ export default function SortModal({ visible, onClose, value, onSelect }) {
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    paddingBottom: 30,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  headerTitle: {
-    fontFamily: FONTS.bold,
-    fontSize: 18,
-    color: COLORS.navy,
-  },
-  optionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-  },
-  optionText: {
-    fontFamily: FONTS.regular,
-    fontSize: 15,
-    color: COLORS.navy,
-  },
-  optionTextSelected: {
-    fontFamily: FONTS.semiBold,
-    color: COLORS.teal,
-  },
-});
+function createStyles(colors) {
+  return StyleSheet.create({
+    backdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'flex-end',
+    },
+    sheet: {
+      backgroundColor: colors.surface,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      padding: 20,
+      paddingBottom: 30,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 12,
+    },
+    headerTitle: {
+      fontFamily: FONTS.bold,
+      fontSize: 18,
+      color: colors.textPrimary,
+    },
+    optionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 16,
+      borderTopWidth: 1,
+      borderTopColor: colors.divider,
+    },
+    optionText: {
+      fontFamily: FONTS.regular,
+      fontSize: 15,
+      color: colors.textPrimary,
+    },
+    optionTextSelected: {
+      fontFamily: FONTS.semiBold,
+      color: colors.teal,
+    },
+  });
+}

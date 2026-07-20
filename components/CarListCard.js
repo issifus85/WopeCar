@@ -1,9 +1,14 @@
+import { useMemo } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS } from '../constants/theme';
+import { FONTS } from '../constants/theme';
+import { useAppTheme } from '../contexts/ThemeContext';
 import { formatCurrency } from '../constants/pricing';
 
 export default function CarListCard({ car, onPress }) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   return (
     <TouchableOpacity style={styles.card} onPress={onPress}>
       {car.image ? (
@@ -33,7 +38,7 @@ export default function CarListCard({ car, onPress }) {
               <Ionicons
                 name={car.drivenBy === 'Chauffeur' ? 'person' : 'key-outline'}
                 size={10}
-                color={car.drivenBy === 'Chauffeur' ? COLORS.orange : COLORS.mauve}
+                color={car.drivenBy === 'Chauffeur' ? colors.orange : colors.mauve}
               />
               <Text style={[
                 styles.driveBadgeText,
@@ -50,11 +55,11 @@ export default function CarListCard({ car, onPress }) {
           </View>
           <View style={[
             styles.availabilityBadge,
-            { backgroundColor: car.isAvailable ? '#E8F5E9' : '#FFEBEE' }
+            { backgroundColor: car.isAvailable ? colors.successBg : colors.errorBg }
           ]}>
             <Text style={[
               styles.availabilityText,
-              { color: car.isAvailable ? '#2E7D32' : '#C62828' }
+              { color: car.isAvailable ? colors.success : colors.error }
             ]}>
               {car.isAvailable ? 'Available' : 'Unavailable'}
             </Text>
@@ -65,111 +70,115 @@ export default function CarListCard({ car, onPress }) {
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    marginBottom: 12,
-    flexDirection: 'row',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  image: {
-    width: 110,
-    height: 130,
-  },
-  imagePlaceholder: {
-    backgroundColor: '#EEF9F9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  imagePlaceholderText: {
-    fontSize: 32,
-  },
-  info: {
-    flex: 1,
-    padding: 12,
-    justifyContent: 'space-between',
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  name: {
-    fontFamily: FONTS.bold,
-    fontSize: 15,
-    color: COLORS.navy,
-    flexShrink: 1,
-  },
-  typeBadge: {
-    backgroundColor: '#EEF9F9',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  typeText: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 9,
-    color: COLORS.teal,
-  },
-  driveBadgeRow: {
-    flexDirection: 'row',
-    marginTop: 4,
-  },
-  driveBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#F5EBE7',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 4,
-  },
-  driveBadgeChauffeur: {
-    backgroundColor: '#FDECE3',
-  },
-  driveBadgeText: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 9,
-    color: COLORS.mauve,
-  },
-  driveBadgeTextChauffeur: {
-    color: COLORS.orange,
-  },
-  location: {
-    fontFamily: FONTS.regular,
-    fontSize: 12,
-    color: '#666',
-    marginTop: 2,
-  },
-  bottomRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 6,
-  },
-  price: {
-    fontFamily: FONTS.bold,
-    fontSize: 17,
-    color: COLORS.teal,
-  },
-  priceLabel: {
-    fontFamily: FONTS.regular,
-    fontSize: 11,
-    color: '#999',
-  },
-  availabilityBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  availabilityText: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 10,
-  },
-});
+function createStyles(colors) {
+  return StyleSheet.create({
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      marginBottom: 12,
+      flexDirection: 'row',
+      overflow: 'hidden',
+      shadowColor: colors.shadow,
+      shadowOpacity: 0.06,
+      shadowRadius: 8,
+      elevation: 3,
+    },
+    image: {
+      width: 110,
+      height: 130,
+    },
+    imagePlaceholder: {
+      backgroundColor: colors.highlight,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    imagePlaceholderText: {
+      fontSize: 32,
+    },
+    info: {
+      flex: 1,
+      padding: 12,
+      justifyContent: 'space-between',
+    },
+    nameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      flexWrap: 'wrap',
+    },
+    name: {
+      fontFamily: FONTS.bold,
+      fontSize: 15,
+      color: colors.textPrimary,
+      flexShrink: 1,
+    },
+    typeBadge: {
+      backgroundColor: colors.highlight,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 4,
+    },
+    typeText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 9,
+      color: colors.teal,
+    },
+    driveBadgeRow: {
+      flexDirection: 'row',
+      marginTop: 4,
+    },
+    // Decorative accent-tint badges - kept constant across themes like the
+    // brand colors they pair with, rather than added as new surface tokens.
+    driveBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: '#F5EBE7',
+      paddingHorizontal: 6,
+      paddingVertical: 3,
+      borderRadius: 4,
+    },
+    driveBadgeChauffeur: {
+      backgroundColor: '#FDECE3',
+    },
+    driveBadgeText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 9,
+      color: colors.mauve,
+    },
+    driveBadgeTextChauffeur: {
+      color: colors.orange,
+    },
+    location: {
+      fontFamily: FONTS.regular,
+      fontSize: 12,
+      color: colors.textMuted,
+      marginTop: 2,
+    },
+    bottomRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 6,
+    },
+    price: {
+      fontFamily: FONTS.bold,
+      fontSize: 17,
+      color: colors.teal,
+    },
+    priceLabel: {
+      fontFamily: FONTS.regular,
+      fontSize: 11,
+      color: colors.textSubtle,
+    },
+    availabilityBadge: {
+      paddingHorizontal: 7,
+      paddingVertical: 3,
+      borderRadius: 6,
+    },
+    availabilityText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 10,
+    },
+  });
+}

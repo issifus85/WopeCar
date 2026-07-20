@@ -1,10 +1,15 @@
+import { useMemo } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS } from '../constants/theme';
+import { FONTS } from '../constants/theme';
+import { useAppTheme } from '../contexts/ThemeContext';
 import { formatCurrency } from '../constants/pricing';
 import ImageGallery from './ImageGallery';
 
 export default function CarTileCard({ car, onPress }) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.9}>
       <ImageGallery images={car.gallery} height={190} borderRadius={0} />
@@ -28,7 +33,7 @@ export default function CarTileCard({ car, onPress }) {
               <Ionicons
                 name={car.drivenBy === 'Chauffeur' ? 'person' : 'key-outline'}
                 size={11}
-                color={car.drivenBy === 'Chauffeur' ? COLORS.orange : COLORS.mauve}
+                color={car.drivenBy === 'Chauffeur' ? colors.orange : colors.mauve}
               />
               <Text style={[
                 styles.driveBadgeText,
@@ -43,11 +48,11 @@ export default function CarTileCard({ car, onPress }) {
           <Text style={styles.price}>{formatCurrency(car.pricePerDay)}<Text style={styles.priceLabel}>/day</Text></Text>
           <View style={[
             styles.availabilityBadge,
-            { backgroundColor: car.isAvailable ? '#E8F5E9' : '#FFEBEE' }
+            { backgroundColor: car.isAvailable ? colors.successBg : colors.errorBg }
           ]}>
             <Text style={[
               styles.availabilityText,
-              { color: car.isAvailable ? '#2E7D32' : '#C62828' }
+              { color: car.isAvailable ? colors.success : colors.error }
             ]}>
               {car.isAvailable ? 'Available' : 'Unavailable'}
             </Text>
@@ -58,96 +63,98 @@ export default function CarTileCard({ car, onPress }) {
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    marginBottom: 16,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  info: {
-    padding: 14,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  name: {
-    fontFamily: FONTS.bold,
-    fontSize: 17,
-    color: COLORS.navy,
-    flexShrink: 1,
-  },
-  typeBadge: {
-    backgroundColor: '#EEF9F9',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  typeText: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 10,
-    color: COLORS.teal,
-  },
-  driveBadgeRow: {
-    flexDirection: 'row',
-    marginTop: 6,
-  },
-  driveBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#F5EBE7',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-  },
-  driveBadgeChauffeur: {
-    backgroundColor: '#FDECE3',
-  },
-  driveBadgeText: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 10,
-    color: COLORS.mauve,
-  },
-  driveBadgeTextChauffeur: {
-    color: COLORS.orange,
-  },
-  location: {
-    fontFamily: FONTS.regular,
-    fontSize: 13,
-    color: '#666',
-    marginTop: 4,
-  },
-  bottomRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 10,
-  },
-  price: {
-    fontFamily: FONTS.bold,
-    fontSize: 20,
-    color: COLORS.teal,
-  },
-  priceLabel: {
-    fontFamily: FONTS.regular,
-    fontSize: 12,
-    color: '#999',
-  },
-  availabilityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  availabilityText: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 11,
-  },
-});
+function createStyles(colors) {
+  return StyleSheet.create({
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: 16,
+      marginBottom: 16,
+      overflow: 'hidden',
+      shadowColor: colors.shadow,
+      shadowOpacity: 0.08,
+      shadowRadius: 10,
+      elevation: 4,
+    },
+    info: {
+      padding: 14,
+    },
+    nameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      flexWrap: 'wrap',
+    },
+    name: {
+      fontFamily: FONTS.bold,
+      fontSize: 17,
+      color: colors.textPrimary,
+      flexShrink: 1,
+    },
+    typeBadge: {
+      backgroundColor: colors.highlight,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 4,
+    },
+    typeText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 10,
+      color: colors.teal,
+    },
+    driveBadgeRow: {
+      flexDirection: 'row',
+      marginTop: 6,
+    },
+    driveBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      backgroundColor: '#F5EBE7',
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 4,
+    },
+    driveBadgeChauffeur: {
+      backgroundColor: '#FDECE3',
+    },
+    driveBadgeText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 10,
+      color: colors.mauve,
+    },
+    driveBadgeTextChauffeur: {
+      color: colors.orange,
+    },
+    location: {
+      fontFamily: FONTS.regular,
+      fontSize: 13,
+      color: colors.textMuted,
+      marginTop: 4,
+    },
+    bottomRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 10,
+    },
+    price: {
+      fontFamily: FONTS.bold,
+      fontSize: 20,
+      color: colors.teal,
+    },
+    priceLabel: {
+      fontFamily: FONTS.regular,
+      fontSize: 12,
+      color: colors.textSubtle,
+    },
+    availabilityBadge: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+    },
+    availabilityText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 11,
+    },
+  });
+}
