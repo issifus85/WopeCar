@@ -6,21 +6,24 @@ import {
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS } from '../constants/theme';
+import { FONTS } from '../constants/theme';
+import { useAppTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 
-const VERIFICATION_COLORS = {
-  verified: { bg: '#E8F5E9', text: '#2E7D32', label: 'Verified' },
-  pending: { bg: '#FFF3E0', text: '#E65100', label: 'Pending' },
-  expired: { bg: '#FFEBEE', text: '#C62828', label: 'Expired' },
-};
+function getVerificationColors(colors) {
+  return {
+    verified: { bg: colors.successBg, text: colors.success, label: 'Verified' },
+    pending: { bg: colors.warningBg, text: colors.warning, label: 'Pending' },
+    expired: { bg: colors.errorBg, text: colors.error, label: 'Expired' },
+  };
+}
 
 function formatMemberSince(iso) {
   if (!iso) return '';
   return new Date(iso).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
 
-function Section({ title, children }) {
+function Section({ title, children, styles }) {
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -29,7 +32,7 @@ function Section({ title, children }) {
   );
 }
 
-function Field({ label, value, onChangeText, placeholder, keyboardType, badge }) {
+function Field({ label, value, onChangeText, placeholder, keyboardType, badge, styles, colors }) {
   return (
     <View style={styles.field}>
       <View style={styles.fieldLabelRow}>
@@ -41,7 +44,7 @@ function Field({ label, value, onChangeText, placeholder, keyboardType, badge })
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#999"
+        placeholderTextColor={colors.textSubtle}
         keyboardType={keyboardType}
         autoCapitalize="none"
       />
@@ -49,8 +52,9 @@ function Field({ label, value, onChangeText, placeholder, keyboardType, badge })
   );
 }
 
-function VerifiedBadge({ verified }) {
-  const style = verified ? VERIFICATION_COLORS.verified : VERIFICATION_COLORS.pending;
+function VerifiedBadge({ verified, styles, colors }) {
+  const verificationColors = getVerificationColors(colors);
+  const style = verified ? verificationColors.verified : verificationColors.pending;
   return (
     <View style={[styles.badge, { backgroundColor: style.bg }]}>
       <Text style={[styles.badgeText, { color: style.text }]}>
@@ -69,6 +73,8 @@ const EMPTY_FORM = {
 
 export default function AccountScreen() {
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, isLoading, logout, updateProfile, uploadAvatar } = useAuth();
 
   const [form, setForm] = useState(EMPTY_FORM);
@@ -173,12 +179,13 @@ export default function AccountScreen() {
   if (isLoading || !user) {
     return (
       <View style={styles.centerState}>
-        <ActivityIndicator size="large" color={COLORS.teal} />
+        <ActivityIndicator size="large" color={colors.teal} />
       </View>
     );
   }
 
-  const verification = VERIFICATION_COLORS[user.licenseVerificationStatus] ?? VERIFICATION_COLORS.pending;
+  const verificationColors = getVerificationColors(colors);
+  const verification = verificationColors[user.licenseVerificationStatus] ?? verificationColors.pending;
 
   return (
     <View style={styles.container}>
@@ -194,9 +201,9 @@ export default function AccountScreen() {
             )}
             <View style={styles.avatarEditBadge}>
               {isUploadingAvatar ? (
-                <ActivityIndicator size="small" color="#ffffff" />
+                <ActivityIndicator size="small" color={colors.white} />
               ) : (
-                <Ionicons name="camera" size={14} color="#ffffff" />
+                <Ionicons name="camera" size={14} color={colors.white} />
               )}
             </View>
           </TouchableOpacity>
@@ -213,29 +220,31 @@ export default function AccountScreen() {
 
         {!!error && <Text style={styles.errorText}>{error}</Text>}
 
-        <Section title="Personal Info">
+        <Section title="Personal Info" styles={styles}>
           <View style={styles.row}>
             <View style={[styles.field, styles.halfField]}>
               <Text style={styles.fieldLabel}>First Name</Text>
-              <TextInput style={styles.input} value={form.firstName} onChangeText={updateField('firstName')} placeholderTextColor="#999" />
+              <TextInput style={styles.input} value={form.firstName} onChangeText={updateField('firstName')} placeholderTextColor={colors.textSubtle} />
             </View>
             <View style={[styles.field, styles.halfField]}>
               <Text style={styles.fieldLabel}>Last Name</Text>
-              <TextInput style={styles.input} value={form.lastName} onChangeText={updateField('lastName')} placeholderTextColor="#999" />
+              <TextInput style={styles.input} value={form.lastName} onChangeText={updateField('lastName')} placeholderTextColor={colors.textSubtle} />
             </View>
           </View>
-          <Field label="Display Name" value={form.nickname} onChangeText={updateField('nickname')} placeholder="Optional public name" />
-          <Field label="Date of Birth" value={form.birthday} onChangeText={updateField('birthday')} placeholder="YYYY-MM-DD" />
+          <Field label="Display Name" value={form.nickname} onChangeText={updateField('nickname')} placeholder="Optional public name" styles={styles} colors={colors} />
+          <Field label="Date of Birth" value={form.birthday} onChangeText={updateField('birthday')} placeholder="YYYY-MM-DD" styles={styles} colors={colors} />
         </Section>
 
-        <Section title="Contact">
+        <Section title="Contact" styles={styles}>
           <Field
             label="Email Address"
             value={form.email}
             onChangeText={updateField('email')}
             placeholder="you@example.com"
             keyboardType="email-address"
-            badge={<VerifiedBadge verified={user.emailVerified} />}
+            badge={<VerifiedBadge verified={user.emailVerified} styles={styles} colors={colors} />}
+            styles={styles}
+            colors={colors}
           />
           <Field
             label="Mobile Number"
@@ -243,27 +252,29 @@ export default function AccountScreen() {
             onChangeText={updateField('phone')}
             placeholder="Phone number"
             keyboardType="phone-pad"
-            badge={<VerifiedBadge verified={user.phoneVerified} />}
+            badge={<VerifiedBadge verified={user.phoneVerified} styles={styles} colors={colors} />}
+            styles={styles}
+            colors={colors}
           />
           <Text style={styles.hint}>Changing your email or number will require re-verification.</Text>
         </Section>
 
-        <Section title="Address">
-          <Field label="Address" value={form.address} onChangeText={updateField('address')} placeholder="Street address" />
+        <Section title="Address" styles={styles}>
+          <Field label="Address" value={form.address} onChangeText={updateField('address')} placeholder="Street address" styles={styles} colors={colors} />
           <View style={styles.row}>
             <View style={[styles.field, styles.halfField]}>
               <Text style={styles.fieldLabel}>City</Text>
-              <TextInput style={styles.input} value={form.city} onChangeText={updateField('city')} placeholderTextColor="#999" />
+              <TextInput style={styles.input} value={form.city} onChangeText={updateField('city')} placeholderTextColor={colors.textSubtle} />
             </View>
             <View style={[styles.field, styles.halfField]}>
               <Text style={styles.fieldLabel}>Country</Text>
-              <TextInput style={styles.input} value={form.country} onChangeText={updateField('country')} placeholderTextColor="#999" />
+              <TextInput style={styles.input} value={form.country} onChangeText={updateField('country')} placeholderTextColor={colors.textSubtle} />
             </View>
           </View>
-          <Field label="Preferred Pickup Location" value={form.preferredPickupLocation} onChangeText={updateField('preferredPickupLocation')} placeholder="Default pickup city or address" />
+          <Field label="Preferred Pickup Location" value={form.preferredPickupLocation} onChangeText={updateField('preferredPickupLocation')} placeholder="Default pickup city or address" styles={styles} colors={colors} />
         </Section>
 
-        <Section title="Driver's Licence">
+        <Section title="Driver's Licence" styles={styles}>
           <View style={styles.fieldLabelRow}>
             <Text style={styles.fieldLabel}>Verification Status</Text>
             <View style={[styles.badge, { backgroundColor: verification.bg }]}>
@@ -278,23 +289,25 @@ export default function AccountScreen() {
             value={form.driverLicenseNumber}
             onChangeText={updateField('driverLicenseNumber')}
             placeholder="Driver's licence number"
+            styles={styles}
+            colors={colors}
           />
-          <Field label="Expiry Date" value={form.driverLicenseExpiry} onChangeText={updateField('driverLicenseExpiry')} placeholder="YYYY-MM-DD" />
-          <Field label="Issuing Country / State" value={form.driverLicenseCountry} onChangeText={updateField('driverLicenseCountry')} placeholder="e.g. Ghana" />
+          <Field label="Expiry Date" value={form.driverLicenseExpiry} onChangeText={updateField('driverLicenseExpiry')} placeholder="YYYY-MM-DD" styles={styles} colors={colors} />
+          <Field label="Issuing Country / State" value={form.driverLicenseCountry} onChangeText={updateField('driverLicenseCountry')} placeholder="e.g. Ghana" styles={styles} colors={colors} />
           <Text style={styles.hint}>Your licence number is encrypted and stored securely.</Text>
         </Section>
 
-        <Section title="Emergency Contact">
-          <Field label="Contact Name" value={form.emergencyContactName} onChangeText={updateField('emergencyContactName')} placeholder="Optional" />
-          <Field label="Contact Phone" value={form.emergencyContactPhone} onChangeText={updateField('emergencyContactPhone')} placeholder="Optional" keyboardType="phone-pad" />
+        <Section title="Emergency Contact" styles={styles}>
+          <Field label="Contact Name" value={form.emergencyContactName} onChangeText={updateField('emergencyContactName')} placeholder="Optional" styles={styles} colors={colors} />
+          <Field label="Contact Phone" value={form.emergencyContactPhone} onChangeText={updateField('emergencyContactPhone')} placeholder="Optional" keyboardType="phone-pad" styles={styles} colors={colors} />
         </Section>
 
         {!!user.referralCode && (
-          <Section title="Referral Code">
+          <Section title="Referral Code" styles={styles}>
             <View style={styles.referralRow}>
               <Text style={styles.referralCode}>{user.referralCode}</Text>
               <TouchableOpacity style={styles.shareButton} onPress={handleShareReferral}>
-                <Ionicons name="share-social-outline" size={16} color={COLORS.teal} />
+                <Ionicons name="share-social-outline" size={16} color={colors.teal} />
                 <Text style={styles.shareButtonText}>Share</Text>
               </TouchableOpacity>
             </View>
@@ -307,7 +320,7 @@ export default function AccountScreen() {
           disabled={!hasChanges || isSaving}
         >
           {isSaving ? (
-            <ActivityIndicator color="#ffffff" />
+            <ActivityIndicator color={colors.white} />
           ) : (
             <Text style={styles.saveButtonText}>Save Changes</Text>
           )}
@@ -321,10 +334,11 @@ export default function AccountScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   scrollContent: {
     padding: 16,
@@ -332,17 +346,17 @@ const styles = StyleSheet.create({
   },
   centerState: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: 14,
     padding: 20,
     alignItems: 'center',
     marginBottom: 16,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 3,
@@ -354,7 +368,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: COLORS.teal,
+    backgroundColor: colors.teal,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -366,7 +380,7 @@ const styles = StyleSheet.create({
   avatarText: {
     fontFamily: FONTS.bold,
     fontSize: 30,
-    color: '#ffffff',
+    color: colors.white,
   },
   avatarEditBadge: {
     position: 'absolute',
@@ -375,21 +389,21 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: COLORS.navy,
+    backgroundColor: colors.navy,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#ffffff',
+    borderColor: colors.surface,
   },
   name: {
     fontFamily: FONTS.bold,
     fontSize: 19,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
   memberSince: {
     fontFamily: FONTS.regular,
     fontSize: 12,
-    color: '#888',
+    color: colors.textSubtle,
     marginTop: 2,
     marginBottom: 14,
   },
@@ -403,24 +417,24 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#eee',
+    backgroundColor: colors.divider,
     overflow: 'hidden',
   },
   completionFill: {
     height: '100%',
-    backgroundColor: COLORS.teal,
+    backgroundColor: colors.teal,
     borderRadius: 3,
   },
   completionLabel: {
     fontFamily: FONTS.medium,
     fontSize: 11,
-    color: '#888',
+    color: colors.textSubtle,
   },
   errorText: {
     fontFamily: FONTS.regular,
     fontSize: 13,
-    color: '#C62828',
-    backgroundColor: '#FFEBEE',
+    color: colors.error,
+    backgroundColor: colors.errorBg,
     borderRadius: 8,
     padding: 10,
     marginBottom: 12,
@@ -431,15 +445,15 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontFamily: FONTS.bold,
     fontSize: 14,
-    color: COLORS.navy,
+    color: colors.textPrimary,
     marginBottom: 8,
     marginLeft: 4,
   },
   sectionCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: 14,
     padding: 16,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOpacity: 0.05,
     shadowRadius: 6,
     elevation: 2,
@@ -463,22 +477,23 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontFamily: FONTS.semiBold,
     fontSize: 13,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
   input: {
     fontFamily: FONTS.regular,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.background,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 11,
     fontSize: 14,
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    borderColor: colors.border,
+    color: colors.textPrimary,
   },
   hint: {
     fontFamily: FONTS.regular,
     fontSize: 11,
-    color: '#999',
+    color: colors.textSubtle,
     marginTop: -6,
     marginBottom: 8,
   },
@@ -499,7 +514,7 @@ const styles = StyleSheet.create({
   referralCode: {
     fontFamily: FONTS.bold,
     fontSize: 18,
-    color: COLORS.navy,
+    color: colors.textPrimary,
     letterSpacing: 2,
   },
   shareButton: {
@@ -507,7 +522,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     borderWidth: 1,
-    borderColor: COLORS.teal,
+    borderColor: colors.teal,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -515,26 +530,26 @@ const styles = StyleSheet.create({
   shareButtonText: {
     fontFamily: FONTS.semiBold,
     fontSize: 13,
-    color: COLORS.teal,
+    color: colors.teal,
   },
   saveButton: {
-    backgroundColor: COLORS.teal,
+    backgroundColor: colors.teal,
     borderRadius: 12,
     paddingVertical: 15,
     alignItems: 'center',
     marginTop: 4,
   },
   saveButtonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: colors.disabled,
   },
   saveButtonText: {
     fontFamily: FONTS.semiBold,
-    color: '#ffffff',
+    color: colors.white,
     fontSize: 16,
   },
   signOutButton: {
     borderWidth: 1,
-    borderColor: '#C62828',
+    borderColor: colors.error,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
@@ -542,7 +557,8 @@ const styles = StyleSheet.create({
   },
   signOutButtonText: {
     fontFamily: FONTS.semiBold,
-    color: '#C62828',
+    color: colors.error,
     fontSize: 15,
   },
-});
+  });
+}

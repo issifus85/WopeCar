@@ -1,26 +1,30 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { StyleSheet, Text, View, FlatList, Image, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS } from '../../constants/theme';
+import { FONTS } from '../../constants/theme';
+import { useAppTheme } from '../../contexts/ThemeContext';
 import { formatCurrency } from '../../constants/pricing';
 import { useBookings } from '../../contexts/BookingsContext';
 
 const STATUS_TABS = ['Pending', 'Confirmed', 'Cancelled'];
 
-const STATUS_COLORS = {
-  Pending: { bg: '#FFF3E0', text: '#E65100' },
-  Confirmed: { bg: '#E8F5E9', text: '#2E7D32' },
-  Cancelled: { bg: '#FFEBEE', text: '#C62828' },
-};
+function getStatusColors(colors) {
+  return {
+    Pending: { bg: colors.warningBg, text: colors.warning },
+    Confirmed: { bg: colors.successBg, text: colors.success },
+    Cancelled: { bg: colors.errorBg, text: colors.error },
+  };
+}
 
 function formatDate(iso) {
   if (!iso) return '';
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function BookingCard({ booking, onPress }) {
-  const statusStyle = STATUS_COLORS[booking.status] ?? STATUS_COLORS.Pending;
+function BookingCard({ booking, onPress, styles, colors }) {
+  const statusColors = getStatusColors(colors);
+  const statusStyle = statusColors[booking.status] ?? statusColors.Pending;
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress}>
@@ -44,20 +48,22 @@ function BookingCard({ booking, onPress }) {
         <Text style={styles.location} numberOfLines={1}>📍 {booking.pickupLocation}</Text>
         <Text style={styles.total}>{formatCurrency(booking.totalCost)}</Text>
       </View>
-      <Ionicons name="chevron-forward" size={18} color="#ccc" style={styles.chevron} />
+      <Ionicons name="chevron-forward" size={18} color={colors.disabled} style={styles.chevron} />
     </TouchableOpacity>
   );
 }
 
 export default function BookingsScreen() {
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { bookings, isLoading } = useBookings();
   const [activeTab, setActiveTab] = useState('Pending');
 
   if (isLoading) {
     return (
       <View style={styles.centerState}>
-        <ActivityIndicator size="large" color={COLORS.teal} />
+        <ActivityIndicator size="large" color={colors.teal} />
       </View>
     );
   }
@@ -65,7 +71,7 @@ export default function BookingsScreen() {
   if (!bookings.length) {
     return (
       <View style={styles.centerState}>
-        <Ionicons name="calendar-outline" size={40} color="#ccc" />
+        <Ionicons name="calendar-outline" size={40} color={colors.disabled} />
         <Text style={styles.title}>Your Bookings</Text>
         <Text style={styles.subtitle}>You have no bookings yet.</Text>
       </View>
@@ -100,7 +106,7 @@ export default function BookingsScreen() {
 
       {filtered.length === 0 ? (
         <View style={styles.emptyTab}>
-          <Ionicons name="calendar-outline" size={32} color="#ccc" />
+          <Ionicons name="calendar-outline" size={32} color={colors.disabled} />
           <Text style={styles.emptyTabText}>No {activeTab.toLowerCase()} bookings.</Text>
         </View>
       ) : (
@@ -108,7 +114,7 @@ export default function BookingsScreen() {
           data={filtered}
           keyExtractor={item => item.id}
           renderItem={({ item }) => (
-            <BookingCard booking={item} onPress={() => router.push(`/booking/${item.id}`)} />
+            <BookingCard booking={item} onPress={() => router.push(`/booking/${item.id}`)} styles={styles} colors={colors} />
           )}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
@@ -118,153 +124,155 @@ export default function BookingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  header: {
-    paddingTop: 60,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  headerTitle: {
-    fontFamily: FONTS.bold,
-    fontSize: 20,
-    color: COLORS.navy,
-  },
-  tabRow: {
-    flexDirection: 'row',
-    backgroundColor: '#ffffff',
-    marginHorizontal: 16,
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 9,
-    alignItems: 'center',
-  },
-  tabActive: {
-    backgroundColor: COLORS.teal,
-  },
-  tabText: {
-    fontFamily: FONTS.medium,
-    fontSize: 12,
-    color: '#888',
-  },
-  tabTextActive: {
-    fontFamily: FONTS.semiBold,
-    color: '#ffffff',
-  },
-  emptyTab: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingBottom: 80,
-  },
-  emptyTabText: {
-    fontFamily: FONTS.regular,
-    fontSize: 14,
-    color: '#999',
-  },
-  list: {
-    paddingHorizontal: 16,
-    paddingBottom: 20,
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  image: {
-    width: 100,
-    height: 118,
-  },
-  imagePlaceholder: {
-    backgroundColor: '#EEF9F9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  imagePlaceholderText: {
-    fontSize: 28,
-  },
-  info: {
-    flex: 1,
-    padding: 12,
-    justifyContent: 'center',
-    gap: 4,
-  },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  carName: {
-    fontFamily: FONTS.bold,
-    fontSize: 15,
-    color: COLORS.navy,
-    flexShrink: 1,
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  statusText: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 10,
-  },
-  dateRange: {
-    fontFamily: FONTS.medium,
-    fontSize: 12,
-    color: '#666',
-  },
-  location: {
-    fontFamily: FONTS.regular,
-    fontSize: 12,
-    color: '#888',
-  },
-  total: {
-    fontFamily: FONTS.bold,
-    fontSize: 15,
-    color: COLORS.teal,
-    marginTop: 2,
-  },
-  chevron: {
-    marginRight: 10,
-  },
-  centerState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-    gap: 6,
-  },
-  title: {
-    fontFamily: FONTS.bold,
-    fontSize: 22,
-    color: COLORS.navy,
-    marginTop: 4,
-  },
-  subtitle: {
-    fontFamily: FONTS.regular,
-    fontSize: 14,
-    color: '#666',
-  },
-});
+function createStyles(colors) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    header: {
+      paddingTop: 60,
+      paddingHorizontal: 16,
+      paddingBottom: 12,
+    },
+    headerTitle: {
+      fontFamily: FONTS.bold,
+      fontSize: 20,
+      color: colors.textPrimary,
+    },
+    tabRow: {
+      flexDirection: 'row',
+      backgroundColor: colors.surface,
+      marginHorizontal: 16,
+      borderRadius: 12,
+      padding: 4,
+      marginBottom: 16,
+      shadowColor: colors.shadow,
+      shadowOpacity: 0.05,
+      shadowRadius: 6,
+      elevation: 2,
+    },
+    tab: {
+      flex: 1,
+      paddingVertical: 10,
+      borderRadius: 9,
+      alignItems: 'center',
+    },
+    tabActive: {
+      backgroundColor: colors.teal,
+    },
+    tabText: {
+      fontFamily: FONTS.medium,
+      fontSize: 12,
+      color: colors.textSubtle,
+    },
+    tabTextActive: {
+      fontFamily: FONTS.semiBold,
+      color: colors.white,
+    },
+    emptyTab: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingBottom: 80,
+    },
+    emptyTabText: {
+      fontFamily: FONTS.regular,
+      fontSize: 14,
+      color: colors.textSubtle,
+    },
+    list: {
+      paddingHorizontal: 16,
+      paddingBottom: 20,
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      marginBottom: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      overflow: 'hidden',
+      shadowColor: colors.shadow,
+      shadowOpacity: 0.06,
+      shadowRadius: 8,
+      elevation: 3,
+    },
+    image: {
+      width: 100,
+      height: 118,
+    },
+    imagePlaceholder: {
+      backgroundColor: colors.highlight,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    imagePlaceholderText: {
+      fontSize: 28,
+    },
+    info: {
+      flex: 1,
+      padding: 12,
+      justifyContent: 'center',
+      gap: 4,
+    },
+    topRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+    },
+    carName: {
+      fontFamily: FONTS.bold,
+      fontSize: 15,
+      color: colors.textPrimary,
+      flexShrink: 1,
+    },
+    statusBadge: {
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 6,
+    },
+    statusText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 10,
+    },
+    dateRange: {
+      fontFamily: FONTS.medium,
+      fontSize: 12,
+      color: colors.textMuted,
+    },
+    location: {
+      fontFamily: FONTS.regular,
+      fontSize: 12,
+      color: colors.textSubtle,
+    },
+    total: {
+      fontFamily: FONTS.bold,
+      fontSize: 15,
+      color: colors.teal,
+      marginTop: 2,
+    },
+    chevron: {
+      marginRight: 10,
+    },
+    centerState: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 20,
+      gap: 6,
+    },
+    title: {
+      fontFamily: FONTS.bold,
+      fontSize: 22,
+      color: colors.textPrimary,
+      marginTop: 4,
+    },
+    subtitle: {
+      fontFamily: FONTS.regular,
+      fontSize: 14,
+      color: colors.textMuted,
+    },
+  });
+}

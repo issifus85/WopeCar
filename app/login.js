@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -14,10 +14,13 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { COLORS, FONTS } from '../constants/theme';
+import { useAppTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { redirect, ...redirectParams } = useLocalSearchParams();
   const { login, register } = useAuth();
   const [mode, setMode] = useState('signin');
@@ -127,7 +130,7 @@ export default function LoginScreen() {
                 <TextInput
                   style={styles.input}
                   placeholder="Kwame Mensah"
-                  placeholderTextColor="#999"
+                  placeholderTextColor={colors.textSubtle}
                   value={name}
                   onChangeText={setName}
                   autoCapitalize="words"
@@ -140,7 +143,7 @@ export default function LoginScreen() {
               <TextInput
                 style={styles.input}
                 placeholder="you@example.com"
-                placeholderTextColor="#999"
+                placeholderTextColor={colors.textSubtle}
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
@@ -153,7 +156,7 @@ export default function LoginScreen() {
               <TextInput
                 style={styles.input}
                 placeholder="••••••••"
-                placeholderTextColor="#999"
+                placeholderTextColor={colors.textSubtle}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
@@ -166,7 +169,7 @@ export default function LoginScreen() {
                 <TextInput
                   style={styles.input}
                   placeholder="••••••••"
-                  placeholderTextColor="#999"
+                  placeholderTextColor={colors.textSubtle}
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
                   secureTextEntry
@@ -188,7 +191,7 @@ export default function LoginScreen() {
               disabled={isSubmitting}
             >
               {isSubmitting ? (
-                <ActivityIndicator color="#ffffff" />
+                <ActivityIndicator color={colors.white} />
               ) : (
                 <Text style={styles.submitButtonText}>
                   {isSignUp ? 'Create Account' : 'Sign In'}
@@ -212,7 +215,8 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) {
+  return StyleSheet.create({
   background: {
     flex: 1,
     width: '100%',
@@ -242,13 +246,13 @@ const styles = StyleSheet.create({
   headline: {
     fontFamily: FONTS.display,
     fontSize: 28,
-    color: COLORS.white,
+    color: colors.white,
     textAlign: 'center',
   },
   subheadline: {
     fontFamily: FONTS.regular,
     fontSize: 14,
-    color: COLORS.white,
+    color: colors.white,
     textAlign: 'center',
     marginTop: 6,
     marginBottom: 28,
@@ -257,17 +261,17 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 400,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 20,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 6,
   },
   tabRow: {
     flexDirection: 'row',
-    backgroundColor: '#f0f0f0',
+    backgroundColor: colors.divider,
     borderRadius: 10,
     padding: 4,
     marginBottom: 20,
@@ -279,15 +283,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   tabActive: {
-    backgroundColor: COLORS.teal,
+    backgroundColor: colors.teal,
   },
   tabText: {
     fontFamily: FONTS.semiBold,
     fontSize: 14,
-    color: '#666',
+    color: colors.textMuted,
   },
   tabTextActive: {
-    color: '#ffffff',
+    color: colors.white,
   },
   field: {
     marginBottom: 16,
@@ -295,18 +299,19 @@ const styles = StyleSheet.create({
   label: {
     fontFamily: FONTS.medium,
     fontSize: 13,
-    color: COLORS.navy,
+    color: colors.textPrimary,
     marginBottom: 6,
   },
   input: {
     fontFamily: FONTS.regular,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.background,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    borderColor: colors.border,
+    color: colors.textPrimary,
   },
   forgotLink: {
     alignSelf: 'flex-end',
@@ -315,12 +320,12 @@ const styles = StyleSheet.create({
   forgotText: {
     fontFamily: FONTS.medium,
     fontSize: 13,
-    color: COLORS.teal,
+    color: colors.teal,
   },
   errorText: {
     fontFamily: FONTS.regular,
     fontSize: 13,
-    color: '#C62828',
+    color: colors.error,
     marginBottom: 16,
     textAlign: 'center',
   },
@@ -336,18 +341,19 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     fontFamily: FONTS.semiBold,
-    color: '#ffffff',
+    color: colors.white,
     fontSize: 16,
   },
   switchModeText: {
     fontFamily: FONTS.regular,
     fontSize: 13,
-    color: '#666',
+    color: colors.textMuted,
     textAlign: 'center',
     marginTop: 18,
   },
   switchModeLink: {
     fontFamily: FONTS.semiBold,
-    color: COLORS.teal,
+    color: colors.teal,
   },
-});
+  });
+}

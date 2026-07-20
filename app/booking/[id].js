@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { StyleSheet, Text, View, Image, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS } from '../../constants/theme';
+import { FONTS } from '../../constants/theme';
+import { useAppTheme } from '../../contexts/ThemeContext';
 import { formatCurrency, SELF_DRIVE_DELIVERY_FEE, calculateSecurityDeposit, getMinBookingDays } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { payWithPaystack } from '../../services/paystackCheckout';
@@ -10,11 +11,13 @@ import { useBookings } from '../../contexts/BookingsContext';
 import DateRangeModal, { formatDateShort } from '../../components/DateRangeModal';
 import ConfirmModal from '../../components/ConfirmModal';
 
-const STATUS_COLORS = {
-  Pending: { bg: '#FFF3E0', text: '#E65100' },
-  Confirmed: { bg: '#E8F5E9', text: '#2E7D32' },
-  Cancelled: { bg: '#FFEBEE', text: '#C62828' },
-};
+function getStatusColors(colors) {
+  return {
+    Pending: { bg: colors.warningBg, text: colors.warning },
+    Confirmed: { bg: colors.successBg, text: colors.success },
+    Cancelled: { bg: colors.errorBg, text: colors.error },
+  };
+}
 
 const TIME_SLOTS = [
   '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
@@ -32,7 +35,7 @@ function daysBetween(start, end) {
   return Math.max(1, Math.round(diff / (1000 * 60 * 60 * 24)));
 }
 
-function TimeSlotPicker({ label, value, onChange }) {
+function TimeSlotPicker({ label, value, onChange, styles }) {
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -54,6 +57,8 @@ function TimeSlotPicker({ label, value, onChange }) {
 export default function BookingDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { bookings, updateBooking, cancelBooking } = useBookings();
 
   const booking = bookings.find(b => b.id === id);
@@ -172,7 +177,8 @@ export default function BookingDetailScreen() {
     );
   }
 
-  const statusStyle = STATUS_COLORS[booking.status] ?? STATUS_COLORS.Pending;
+  const statusColors = getStatusColors(colors);
+  const statusStyle = statusColors[booking.status] ?? statusColors.Pending;
   const canModify = booking.status !== 'Cancelled';
 
   return (
@@ -222,7 +228,7 @@ export default function BookingDetailScreen() {
           <View style={styles.field}>
             <Text style={styles.fieldLabel}>Dates</Text>
             <TouchableOpacity style={styles.dateButton} onPress={() => setIsDatePickerVisible(true)}>
-              <Ionicons name="calendar-outline" size={16} color={COLORS.teal} />
+              <Ionicons name="calendar-outline" size={16} color={colors.teal} />
               <Text style={styles.dateButtonText}>
                 {editStart && editEnd
                   ? `${formatDateShort(editStart)} — ${formatDateShort(editEnd)}`
@@ -236,8 +242,8 @@ export default function BookingDetailScreen() {
             )}
           </View>
 
-          <TimeSlotPicker label="Pickup Time" value={editPickupTime} onChange={setEditPickupTime} />
-          <TimeSlotPicker label="Return Time" value={editReturnTime} onChange={setEditReturnTime} />
+          <TimeSlotPicker label="Pickup Time" value={editPickupTime} onChange={setEditPickupTime} styles={styles} />
+          <TimeSlotPicker label="Return Time" value={editReturnTime} onChange={setEditReturnTime} styles={styles} />
 
           <View style={styles.field}>
             <Text style={styles.fieldLabel}>Pickup Location</Text>
@@ -246,13 +252,13 @@ export default function BookingDetailScreen() {
               value={editPickupLocation}
               onChangeText={handlePickupLocationChange}
               placeholder="e.g. Impact Hub, Accra"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.textSubtle}
             />
           </View>
 
           <TouchableOpacity style={styles.checkboxRow} onPress={toggleSameAsPickup}>
             <View style={[styles.checkbox, sameAsPickup && styles.checkboxChecked]}>
-              {sameAsPickup && <Ionicons name="checkmark" size={14} color="#ffffff" />}
+              {sameAsPickup && <Ionicons name="checkmark" size={14} color={colors.white} />}
             </View>
             <Text style={styles.checkboxLabel}>Return to the same location</Text>
           </TouchableOpacity>
@@ -265,7 +271,7 @@ export default function BookingDetailScreen() {
                 value={editReturnLocation}
                 onChangeText={setEditReturnLocation}
                 placeholder="e.g. Kotoka Airport, Accra"
-                placeholderTextColor="#999"
+                placeholderTextColor={colors.textSubtle}
               />
             </View>
           )}
@@ -331,14 +337,14 @@ export default function BookingDetailScreen() {
 
             {isProcessingPayment && (
               <View style={styles.processingBox}>
-                <ActivityIndicator size="small" color={COLORS.teal} />
+                <ActivityIndicator size="small" color={colors.teal} />
                 <Text style={styles.processingText}>Processing payment...</Text>
               </View>
             )}
 
             {!!paymentError && (
               <View style={styles.errorBox}>
-                <Ionicons name="alert-circle-outline" size={16} color="#C62828" />
+                <Ionicons name="alert-circle-outline" size={16} color={colors.error} />
                 <Text style={styles.errorText}>{paymentError}</Text>
               </View>
             )}
@@ -398,7 +404,7 @@ export default function BookingDetailScreen() {
                 disabled={isProcessingPayment}
               >
                 {isProcessingPayment ? (
-                  <ActivityIndicator color="#ffffff" size="small" />
+                  <ActivityIndicator color={colors.white} size="small" />
                 ) : (
                   <Text style={styles.primaryButtonText}>
                     {difference > 0 ? `Pay ${formatCurrency(difference)}` : 'Confirm Changes'}
@@ -446,10 +452,11 @@ export default function BookingDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   content: {
     padding: 16,
@@ -463,17 +470,17 @@ const styles = StyleSheet.create({
   notFoundText: {
     fontFamily: FONTS.regular,
     fontSize: 14,
-    color: '#666',
+    color: colors.textMuted,
   },
   headerCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: 14,
     padding: 14,
     marginBottom: 16,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 3,
@@ -484,7 +491,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   imagePlaceholder: {
-    backgroundColor: '#EEF9F9',
+    backgroundColor: colors.highlight,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -498,7 +505,7 @@ const styles = StyleSheet.create({
   carName: {
     fontFamily: FONTS.bold,
     fontSize: 17,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
   statusBadge: {
     alignSelf: 'flex-start',
@@ -511,11 +518,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   card: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: 14,
     padding: 16,
     marginBottom: 16,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 3,
@@ -523,7 +530,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontFamily: FONTS.bold,
     fontSize: 15,
-    color: COLORS.navy,
+    color: colors.textPrimary,
     marginBottom: 12,
   },
   row: {
@@ -535,35 +542,35 @@ const styles = StyleSheet.create({
   rowLabel: {
     fontFamily: FONTS.medium,
     fontSize: 13,
-    color: '#888',
+    color: colors.textSubtle,
     flexShrink: 1,
   },
   rowValue: {
     fontFamily: FONTS.semiBold,
     fontSize: 13,
-    color: COLORS.navy,
+    color: colors.textPrimary,
     flexShrink: 1,
     textAlign: 'right',
   },
   totalValue: {
     fontFamily: FONTS.bold,
     fontSize: 16,
-    color: COLORS.teal,
+    color: colors.teal,
   },
   totalLabel: {
     fontFamily: FONTS.bold,
     fontSize: 14,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
   divider: {
     height: 1,
-    backgroundColor: '#e5e5e5',
+    backgroundColor: colors.border,
     marginBottom: 12,
   },
   noPaymentNote: {
     fontFamily: FONTS.regular,
     fontSize: 12,
-    color: '#888',
+    color: colors.textSubtle,
     lineHeight: 17,
     marginTop: 4,
   },
@@ -571,7 +578,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#EEF9F9',
+    backgroundColor: colors.highlight,
     borderRadius: 10,
     padding: 14,
     marginTop: 12,
@@ -579,13 +586,13 @@ const styles = StyleSheet.create({
   processingText: {
     fontFamily: FONTS.medium,
     fontSize: 13,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#FFEBEE',
+    backgroundColor: colors.errorBg,
     borderRadius: 10,
     padding: 14,
     marginTop: 12,
@@ -594,7 +601,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: FONTS.medium,
     fontSize: 13,
-    color: '#C62828',
+    color: colors.error,
   },
   field: {
     marginBottom: 18,
@@ -602,29 +609,29 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontFamily: FONTS.semiBold,
     fontSize: 13,
-    color: COLORS.navy,
+    color: colors.textPrimary,
     marginBottom: 8,
   },
   dateButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    borderColor: colors.border,
   },
   dateButtonText: {
     fontFamily: FONTS.medium,
     fontSize: 14,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
   warningText: {
     fontFamily: FONTS.regular,
     fontSize: 12,
-    color: '#C62828',
+    color: colors.error,
     marginTop: 6,
   },
   slotGrid: {
@@ -636,32 +643,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 9,
     borderRadius: 8,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    borderColor: colors.border,
   },
   slotActive: {
-    backgroundColor: COLORS.teal,
-    borderColor: COLORS.teal,
+    backgroundColor: colors.teal,
+    borderColor: colors.teal,
   },
   slotText: {
     fontFamily: FONTS.medium,
     fontSize: 13,
-    color: '#666',
+    color: colors.textMuted,
   },
   slotTextActive: {
     fontFamily: FONTS.semiBold,
-    color: '#ffffff',
+    color: colors.white,
   },
   input: {
     fontFamily: FONTS.regular,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    borderColor: colors.border,
+    color: colors.textPrimary,
   },
   checkboxRow: {
     flexDirection: 'row',
@@ -674,36 +682,36 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 5,
     borderWidth: 1.5,
-    borderColor: '#ccc',
+    borderColor: colors.disabled,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkboxChecked: {
-    backgroundColor: COLORS.teal,
-    borderColor: COLORS.teal,
+    backgroundColor: colors.teal,
+    borderColor: colors.teal,
   },
   checkboxLabel: {
     fontFamily: FONTS.regular,
     fontSize: 13,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
   recomputedBox: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#EEF9F9',
+    backgroundColor: colors.highlight,
     borderRadius: 10,
     padding: 14,
   },
   recomputedLabel: {
     fontFamily: FONTS.medium,
     fontSize: 13,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
   recomputedValue: {
     fontFamily: FONTS.bold,
     fontSize: 16,
-    color: COLORS.teal,
+    color: colors.teal,
   },
   actions: {
     flexDirection: 'row',
@@ -712,17 +720,17 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     flex: 1,
-    backgroundColor: COLORS.teal,
+    backgroundColor: colors.teal,
     borderRadius: 12,
     paddingVertical: 15,
     alignItems: 'center',
   },
   primaryButtonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: colors.disabled,
   },
   primaryButtonText: {
     fontFamily: FONTS.semiBold,
-    color: '#ffffff',
+    color: colors.white,
     fontSize: 15,
   },
   secondaryButton: {
@@ -731,16 +739,17 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: '#e5e5e5',
+    borderColor: colors.border,
   },
   secondaryButtonText: {
     fontFamily: FONTS.semiBold,
-    color: '#666',
+    color: colors.textMuted,
     fontSize: 15,
   },
   secondaryButtonTextDanger: {
     fontFamily: FONTS.semiBold,
-    color: '#C62828',
+    color: colors.error,
     fontSize: 15,
   },
-});
+  });
+}
