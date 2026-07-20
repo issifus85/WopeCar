@@ -55,6 +55,7 @@ export default function RootLayout() {
                 options={{
                   headerShown: true,
                   title: 'Booking Details',
+                  headerBackTitle: 'Bookings',
                   headerTintColor: COLORS.navy,
                   headerTitleStyle: { fontFamily: FONTS.semiBold },
                 }}
