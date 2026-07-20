@@ -17,3 +17,13 @@ const SECURITY_DEPOSIT_PERCENT = 0.25;
 export function calculateSecurityDeposit(subtotal) {
   return subtotal < SECURITY_DEPOSIT_THRESHOLD ? SECURITY_DEPOSIT_FLAT : subtotal * SECURITY_DEPOSIT_PERCENT;
 }
+
+// Minimum rental length, per wopecar.com/faq: chauffeured trips can be
+// booked for a single day, but self-drive requires a 3-day minimum since
+// the vehicle is handed over unsupervised for the whole rental.
+export const MIN_BOOKING_DAYS_SELF_DRIVE = 3;
+export const MIN_BOOKING_DAYS_CHAUFFEUR = 1;
+
+export function getMinBookingDays(drivenBy) {
+  return drivenBy === 'Self-drive' ? MIN_BOOKING_DAYS_SELF_DRIVE : MIN_BOOKING_DAYS_CHAUFFEUR;
+}

@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, ScrollView
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../../constants/theme';
+import { getMinBookingDays } from '../../constants/pricing';
 import { fetchCarById, fetchCarAvailability } from '../../services/carsApi';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
@@ -136,6 +137,9 @@ export default function CheckoutDatesScreen() {
   }
 
   const cells = buildMonthGrid(viewMonth);
+  const minDays = getMinBookingDays(car.drivenBy);
+  const selectedDays = tempStart && tempEnd ? Math.round((tempEnd - tempStart) / (1000 * 60 * 60 * 24)) : 0;
+  const isBelowMinimum = tempStart && tempEnd && selectedDays < minDays;
 
   return (
     <View style={styles.container}>
@@ -215,10 +219,16 @@ export default function CheckoutDatesScreen() {
         </View>
 
         {tempStart && tempEnd && (
-          <View style={styles.summaryBox}>
-            <Ionicons name="calendar-outline" size={18} color={COLORS.teal} />
-            <Text style={styles.summaryText}>
-              {Math.round((tempEnd - tempStart) / (1000 * 60 * 60 * 24))} day rental selected
+          <View style={[styles.summaryBox, isBelowMinimum && styles.summaryBoxWarning]}>
+            <Ionicons
+              name={isBelowMinimum ? 'alert-circle-outline' : 'calendar-outline'}
+              size={18}
+              color={isBelowMinimum ? '#C62828' : COLORS.teal}
+            />
+            <Text style={[styles.summaryText, isBelowMinimum && styles.summaryTextWarning]}>
+              {isBelowMinimum
+                ? `${car.drivenBy} bookings need at least ${minDays} ${minDays === 1 ? 'day' : 'days'} - you've selected ${selectedDays}.`
+                : `${selectedDays} day rental selected`}
             </Text>
           </View>
         )}
@@ -227,7 +237,7 @@ export default function CheckoutDatesScreen() {
       <CheckoutFooterButton
         label="Continue"
         onPress={handleContinue}
-        disabled={!tempStart || !tempEnd}
+        disabled={!tempStart || !tempEnd || isBelowMinimum}
       />
     </View>
   );
@@ -362,9 +372,16 @@ const styles = StyleSheet.create({
     padding: 12,
     marginTop: 16,
   },
+  summaryBoxWarning: {
+    backgroundColor: '#FFEBEE',
+  },
   summaryText: {
     fontFamily: FONTS.medium,
     fontSize: 13,
     color: COLORS.navy,
+  },
+  summaryTextWarning: {
+    color: '#C62828',
+    flex: 1,
   },
 });

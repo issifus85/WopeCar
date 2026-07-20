@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, Image, ScrollView, TouchableOpacity, TextInput,
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../../constants/theme';
-import { formatCurrency, SELF_DRIVE_DELIVERY_FEE, calculateSecurityDeposit } from '../../constants/pricing';
+import { formatCurrency, SELF_DRIVE_DELIVERY_FEE, calculateSecurityDeposit, getMinBookingDays } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { payWithPaystack } from '../../services/paystackCheckout';
 import { useBookings } from '../../contexts/BookingsContext';
@@ -112,6 +112,9 @@ export default function BookingDetailScreen() {
 
   const difference = recomputedTotal - (booking?.totalCost ?? 0);
 
+  const minDays = car ? getMinBookingDays(car.drivenBy) : 1;
+  const isBelowMinimum = editStart && editEnd && days < minDays;
+
   const handlePickupLocationChange = (text) => {
     setEditPickupLocation(text);
     if (sameAsPickup) setEditReturnLocation(text);
@@ -124,7 +127,7 @@ export default function BookingDetailScreen() {
   };
 
   const isEditValid = editStart && editEnd && editPickupTime && editReturnTime
-    && editPickupLocation.trim() && editReturnLocation.trim();
+    && editPickupLocation.trim() && editReturnLocation.trim() && !isBelowMinimum;
 
   const buildUpdatedFields = (extra = {}) => ({
     startDate: editStart.toISOString(),
@@ -226,6 +229,11 @@ export default function BookingDetailScreen() {
                   : 'Select dates'}
               </Text>
             </TouchableOpacity>
+            {isBelowMinimum && (
+              <Text style={styles.warningText}>
+                {car.drivenBy} bookings need at least {minDays} {minDays === 1 ? 'day' : 'days'} - you've selected {days}.
+              </Text>
+            )}
           </View>
 
           <TimeSlotPicker label="Pickup Time" value={editPickupTime} onChange={setEditPickupTime} />
@@ -612,6 +620,12 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.medium,
     fontSize: 14,
     color: COLORS.navy,
+  },
+  warningText: {
+    fontFamily: FONTS.regular,
+    fontSize: 12,
+    color: '#C62828',
+    marginTop: 6,
   },
   slotGrid: {
     flexDirection: 'row',
