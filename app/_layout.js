@@ -51,6 +51,15 @@ export default function RootLayout() {
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="car/[id]" options={{ headerShown: false }} />
               <Stack.Screen
+                name="booking/[id]"
+                options={{
+                  headerShown: true,
+                  title: 'Booking Details',
+                  headerTintColor: COLORS.navy,
+                  headerTitleStyle: { fontFamily: FONTS.semiBold },
+                }}
+              />
+              <Stack.Screen
                 name="login"
                 options={{
                   headerShown: true,

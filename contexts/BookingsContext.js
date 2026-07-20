@@ -25,8 +25,24 @@ export function BookingsProvider({ children }) {
     });
   }, []);
 
+  const updateBooking = useCallback((id, patch) => {
+    setBookings(prev => {
+      const next = prev.map(b => (b.id === id ? { ...b, ...patch } : b));
+      bookingsStorage.setBookings(next);
+      return next;
+    });
+  }, []);
+
+  const cancelBooking = useCallback((id) => {
+    setBookings(prev => {
+      const next = prev.map(b => (b.id === id ? { ...b, status: 'Cancelled' } : b));
+      bookingsStorage.setBookings(next);
+      return next;
+    });
+  }, []);
+
   return (
-    <BookingsContext.Provider value={{ bookings, isLoading, addBooking }}>
+    <BookingsContext.Provider value={{ bookings, isLoading, addBooking, updateBooking, cancelBooking }}>
       {children}
     </BookingsContext.Provider>
   );

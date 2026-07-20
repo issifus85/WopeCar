@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { StyleSheet, Text, View, FlatList, Image, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../../constants/theme';
 import { formatCurrency } from '../../constants/pricing';
 import { useBookings } from '../../contexts/BookingsContext';
+
+const STATUS_TABS = ['Pending', 'Confirmed', 'Cancelled'];
 
 const STATUS_COLORS = {
   Pending: { bg: '#FFF3E0', text: '#E65100' },
@@ -41,6 +44,7 @@ function BookingCard({ booking, onPress }) {
         <Text style={styles.location} numberOfLines={1}>📍 {booking.pickupLocation}</Text>
         <Text style={styles.total}>{formatCurrency(booking.totalCost)}</Text>
       </View>
+      <Ionicons name="chevron-forward" size={18} color="#ccc" style={styles.chevron} />
     </TouchableOpacity>
   );
 }
@@ -48,6 +52,7 @@ function BookingCard({ booking, onPress }) {
 export default function BookingsScreen() {
   const router = useRouter();
   const { bookings, isLoading } = useBookings();
+  const [activeTab, setActiveTab] = useState('Pending');
 
   if (isLoading) {
     return (
@@ -67,20 +72,48 @@ export default function BookingsScreen() {
     );
   }
 
+  const filtered = bookings.filter(b => b.status === activeTab);
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Your Bookings</Text>
       </View>
-      <FlatList
-        data={bookings}
-        keyExtractor={item => item.id}
-        renderItem={({ item }) => (
-          <BookingCard booking={item} onPress={() => router.push(`/car/${item.carId}`)} />
-        )}
-        contentContainerStyle={styles.list}
-        showsVerticalScrollIndicator={false}
-      />
+
+      <View style={styles.tabRow}>
+        {STATUS_TABS.map((tab) => {
+          const count = bookings.filter(b => b.status === tab).length;
+          const isActive = tab === activeTab;
+          return (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.tab, isActive && styles.tabActive]}
+              onPress={() => setActiveTab(tab)}
+            >
+              <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
+                {tab}{count > 0 ? ` (${count})` : ''}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {filtered.length === 0 ? (
+        <View style={styles.emptyTab}>
+          <Ionicons name="calendar-outline" size={32} color="#ccc" />
+          <Text style={styles.emptyTabText}>No {activeTab.toLowerCase()} bookings.</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={item => item.id}
+          renderItem={({ item }) => (
+            <BookingCard booking={item} onPress={() => router.push(`/booking/${item.id}`)} />
+          )}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
     </View>
   );
 }
@@ -100,6 +133,48 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: COLORS.navy,
   },
+  tabRow: {
+    flexDirection: 'row',
+    backgroundColor: '#ffffff',
+    marginHorizontal: 16,
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 9,
+    alignItems: 'center',
+  },
+  tabActive: {
+    backgroundColor: COLORS.teal,
+  },
+  tabText: {
+    fontFamily: FONTS.medium,
+    fontSize: 12,
+    color: '#888',
+  },
+  tabTextActive: {
+    fontFamily: FONTS.semiBold,
+    color: '#ffffff',
+  },
+  emptyTab: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingBottom: 80,
+  },
+  emptyTabText: {
+    fontFamily: FONTS.regular,
+    fontSize: 14,
+    color: '#999',
+  },
   list: {
     paddingHorizontal: 16,
     paddingBottom: 20,
@@ -109,6 +184,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 12,
     flexDirection: 'row',
+    alignItems: 'center',
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOpacity: 0.06,
@@ -169,6 +245,9 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: COLORS.teal,
     marginTop: 2,
+  },
+  chevron: {
+    marginRight: 10,
   },
   centerState: {
     flex: 1,
