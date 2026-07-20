@@ -64,6 +64,7 @@ export default function RootLayout() {
                 options={{
                   headerShown: true,
                   title: 'Account',
+                  headerBackTitle: 'Account',
                   headerTintColor: COLORS.navy,
                   headerTitleStyle: { fontFamily: FONTS.semiBold },
                 }}
