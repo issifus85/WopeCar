@@ -1,11 +1,13 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { View, ActivityIndicator, Platform, StyleSheet } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useRouter } from 'expo-router';
-import { COLORS } from '../constants/theme';
+import { useAppTheme } from '../contexts/ThemeContext';
 
 export default function PaymentCallbackScreen() {
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   useEffect(() => {
     if (Platform.OS === 'web') {
@@ -19,15 +21,18 @@ export default function PaymentCallbackScreen() {
 
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color={COLORS.teal} />
+      <ActivityIndicator size="large" color={colors.teal} />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+function createStyles(colors) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.background,
+    },
+  });
+}

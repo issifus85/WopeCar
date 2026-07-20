@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS } from '../constants/theme';
+import { FONTS } from '../constants/theme';
+import { useAppTheme } from '../contexts/ThemeContext';
 
 const SECTIONS = [
   {
@@ -134,13 +135,13 @@ The substantive laws of the Republic of Ghana apply to these Terms without regar
   },
 ];
 
-function AccordionSection({ heading, body }) {
+function AccordionSection({ heading, body, styles, colors }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <View style={styles.section}>
       <TouchableOpacity style={styles.sectionHeader} onPress={() => setExpanded(!expanded)} activeOpacity={0.7}>
         <Text style={styles.heading}>{heading}</Text>
-        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={20} color={COLORS.teal} />
+        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={20} color={colors.teal} />
       </TouchableOpacity>
       {expanded && <Text style={styles.body}>{body}</Text>}
     </View>
@@ -148,6 +149,9 @@ function AccordionSection({ heading, body }) {
 }
 
 export default function TermsScreen() {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <Text style={styles.title}>Terms of Service</Text>
@@ -156,16 +160,17 @@ export default function TermsScreen() {
       </Text>
 
       {SECTIONS.map((section) => (
-        <AccordionSection key={section.heading} heading={section.heading} body={section.body} />
+        <AccordionSection key={section.heading} heading={section.heading} body={section.body} styles={styles} colors={colors} />
       ))}
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
   },
   content: {
     padding: 20,
@@ -174,19 +179,19 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: FONTS.bold,
     fontSize: 24,
-    color: COLORS.navy,
+    color: colors.textPrimary,
     marginBottom: 8,
   },
   intro: {
     fontFamily: FONTS.regular,
     fontSize: 13,
-    color: '#888',
+    color: colors.textSubtle,
     marginBottom: 20,
     lineHeight: 19,
   },
   section: {
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: colors.divider,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -199,13 +204,14 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: FONTS.bold,
     fontSize: 16,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
   body: {
     fontFamily: FONTS.regular,
     fontSize: 14,
-    color: '#444',
+    color: colors.textBody,
     lineHeight: 21,
     paddingBottom: 16,
   },
-});
+  });
+}

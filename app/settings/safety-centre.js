@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import { StyleSheet, Text, View, ScrollView, Linking, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS } from '../../constants/theme';
+import { FONTS } from '../../constants/theme';
+import { useAppTheme } from '../../contexts/ThemeContext';
 
 const SECTIONS = [
   {
@@ -29,6 +31,9 @@ const SUPPORT_EMAIL = 'support@wopecar.com';
 const SUPPORT_PHONE = '+233551478540';
 
 export default function SafetyCentreScreen() {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <Text style={styles.title}>Safety Centre</Text>
@@ -37,7 +42,7 @@ export default function SafetyCentreScreen() {
       {SECTIONS.map((section) => (
         <View key={section.heading} style={styles.card}>
           <View style={styles.cardIcon}>
-            <Ionicons name={section.icon} size={20} color={COLORS.teal} />
+            <Ionicons name={section.icon} size={20} color={colors.teal} />
           </View>
           <View style={styles.cardBody}>
             <Text style={styles.cardHeading}>{section.heading}</Text>
@@ -47,7 +52,7 @@ export default function SafetyCentreScreen() {
       ))}
 
       <TouchableOpacity style={styles.emergencyButton} onPress={() => Linking.openURL(`tel:${SUPPORT_PHONE}`)}>
-        <Ionicons name="call-outline" size={18} color="#ffffff" />
+        <Ionicons name="call-outline" size={18} color={colors.white} />
         <Text style={styles.emergencyButtonText}>Call WopeCar Support</Text>
       </TouchableOpacity>
 
@@ -55,17 +60,18 @@ export default function SafetyCentreScreen() {
         style={styles.secondaryButton}
         onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Safety concern')}`)}
       >
-        <Ionicons name="mail-outline" size={18} color={COLORS.navy} />
+        <Ionicons name="mail-outline" size={18} color={colors.textPrimary} />
         <Text style={styles.secondaryButtonText}>Email WopeCar Support</Text>
       </TouchableOpacity>
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
   },
   content: {
     padding: 20,
@@ -74,20 +80,20 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: FONTS.bold,
     fontSize: 24,
-    color: COLORS.navy,
+    color: colors.textPrimary,
     marginBottom: 8,
   },
   intro: {
     fontFamily: FONTS.regular,
     fontSize: 13,
-    color: '#888',
+    color: colors.textSubtle,
     marginBottom: 20,
     lineHeight: 19,
   },
   card: {
     flexDirection: 'row',
     gap: 14,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
     borderRadius: 14,
     padding: 16,
     marginBottom: 14,
@@ -96,7 +102,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#EEF9F9',
+    backgroundColor: colors.highlight,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -106,13 +112,13 @@ const styles = StyleSheet.create({
   cardHeading: {
     fontFamily: FONTS.semiBold,
     fontSize: 14,
-    color: COLORS.navy,
+    color: colors.textPrimary,
     marginBottom: 4,
   },
   cardText: {
     fontFamily: FONTS.regular,
     fontSize: 13,
-    color: '#666',
+    color: colors.textMuted,
     lineHeight: 19,
   },
   emergencyButton: {
@@ -120,14 +126,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: COLORS.navy,
+    backgroundColor: colors.navy,
     borderRadius: 12,
     paddingVertical: 15,
     marginTop: 8,
   },
   emergencyButtonText: {
     fontFamily: FONTS.semiBold,
-    color: '#ffffff',
+    color: colors.white,
     fontSize: 15,
   },
   secondaryButton: {
@@ -136,14 +142,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     borderWidth: 1.5,
-    borderColor: '#e5e5e5',
+    borderColor: colors.border,
     borderRadius: 12,
     paddingVertical: 15,
     marginTop: 10,
   },
   secondaryButtonText: {
     fontFamily: FONTS.semiBold,
-    color: COLORS.navy,
+    color: colors.textPrimary,
     fontSize: 15,
   },
-});
+  });
+}

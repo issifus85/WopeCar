@@ -1,13 +1,17 @@
+import { useMemo } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS } from '../../constants/theme';
+import { FONTS } from '../../constants/theme';
+import { useAppTheme } from '../../contexts/ThemeContext';
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 
 export default function AboutScreen() {
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -26,21 +30,22 @@ export default function AboutScreen() {
       <View style={styles.linkList}>
         <TouchableOpacity style={styles.linkRow} onPress={() => router.push('/terms')}>
           <Text style={styles.linkLabel}>Terms & Conditions</Text>
-          <Ionicons name="chevron-forward" size={18} color="#999" />
+          <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.linkRow} onPress={() => router.push('/privacy')}>
+        <TouchableOpacity style={[styles.linkRow, styles.linkRowLast]} onPress={() => router.push('/privacy')}>
           <Text style={styles.linkLabel}>Privacy Policy</Text>
-          <Ionicons name="chevron-forward" size={18} color="#999" />
+          <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
         </TouchableOpacity>
       </View>
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
   },
   content: {
     padding: 20,
@@ -58,19 +63,19 @@ const styles = StyleSheet.create({
   appName: {
     fontFamily: FONTS.bold,
     fontSize: 22,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
   version: {
     fontFamily: FONTS.regular,
     fontSize: 13,
-    color: '#888',
+    color: colors.textSubtle,
     marginTop: 2,
     marginBottom: 20,
   },
   body: {
     fontFamily: FONTS.regular,
     fontSize: 14,
-    color: '#444',
+    color: colors.textBody,
     lineHeight: 21,
     textAlign: 'center',
     marginBottom: 10,
@@ -78,12 +83,12 @@ const styles = StyleSheet.create({
   subsidiary: {
     fontFamily: FONTS.regular,
     fontSize: 12,
-    color: '#999',
+    color: colors.textSubtle,
     marginBottom: 28,
   },
   linkList: {
     width: '100%',
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
     borderRadius: 14,
     paddingHorizontal: 16,
   },
@@ -93,11 +98,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e5e5',
+    borderBottomColor: colors.border,
+  },
+  linkRowLast: {
+    borderBottomWidth: 0,
   },
   linkLabel: {
     fontFamily: FONTS.medium,
     fontSize: 14,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
-});
+  });
+}

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS } from '../../constants/theme';
+import { FONTS } from '../../constants/theme';
+import { useAppTheme } from '../../contexts/ThemeContext';
 
 // Pulled from the live FAQ page at wopecar.com/faq - keep in sync with that
 // page if it changes, since these are the company's official answers.
@@ -84,13 +85,13 @@ const FAQS = [
   },
 ];
 
-function FaqItem({ question, answer }) {
+function FaqItem({ question, answer, styles, colors }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <TouchableOpacity style={styles.faqItem} onPress={() => setExpanded(!expanded)} activeOpacity={0.7}>
       <View style={styles.faqHeader}>
         <Text style={styles.faqQuestion}>{question}</Text>
-        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={COLORS.teal} />
+        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.teal} />
       </View>
       {expanded && <Text style={styles.faqAnswer}>{answer}</Text>}
     </TouchableOpacity>
@@ -98,6 +99,9 @@ function FaqItem({ question, answer }) {
 }
 
 export default function HelpCentreScreen() {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <Text style={styles.title}>Help Centre</Text>
@@ -105,7 +109,7 @@ export default function HelpCentreScreen() {
 
       <View style={styles.faqList}>
         {FAQS.map((faq) => (
-          <FaqItem key={faq.question} question={faq.question} answer={faq.answer} />
+          <FaqItem key={faq.question} question={faq.question} answer={faq.answer} styles={styles} colors={colors} />
         ))}
       </View>
 
@@ -116,10 +120,11 @@ export default function HelpCentreScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
   },
   content: {
     padding: 20,
@@ -128,25 +133,25 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: FONTS.bold,
     fontSize: 24,
-    color: COLORS.navy,
+    color: colors.textPrimary,
     marginBottom: 8,
   },
   intro: {
     fontFamily: FONTS.regular,
     fontSize: 13,
-    color: '#888',
+    color: colors.textSubtle,
     marginBottom: 20,
     lineHeight: 19,
   },
   faqList: {
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
     borderRadius: 14,
     paddingHorizontal: 16,
   },
   faqItem: {
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e5e5',
+    borderBottomColor: colors.border,
   },
   faqHeader: {
     flexDirection: 'row',
@@ -158,21 +163,22 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: FONTS.semiBold,
     fontSize: 14,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
   faqAnswer: {
     fontFamily: FONTS.regular,
     fontSize: 13,
-    color: '#666',
+    color: colors.textMuted,
     lineHeight: 19,
     marginTop: 10,
   },
   footer: {
     fontFamily: FONTS.regular,
     fontSize: 12,
-    color: '#999',
+    color: colors.textSubtle,
     textAlign: 'center',
     marginTop: 20,
     lineHeight: 18,
   },
-});
+  });
+}

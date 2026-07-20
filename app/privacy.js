@@ -1,5 +1,7 @@
+import { useMemo } from 'react';
 import { StyleSheet, Text, View, ScrollView } from 'react-native';
-import { COLORS, FONTS } from '../constants/theme';
+import { FONTS } from '../constants/theme';
+import { useAppTheme } from '../contexts/ThemeContext';
 
 const SECTIONS = [
   {
@@ -88,6 +90,9 @@ Website: wopecar.com`,
 ];
 
 export default function PrivacyScreen() {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <Text style={styles.title}>Privacy Policy</Text>
@@ -106,10 +111,11 @@ export default function PrivacyScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
   },
   content: {
     padding: 20,
@@ -118,19 +124,19 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: FONTS.bold,
     fontSize: 24,
-    color: COLORS.navy,
+    color: colors.textPrimary,
     marginBottom: 4,
   },
   effectiveDate: {
     fontFamily: FONTS.medium,
     fontSize: 12,
-    color: '#999',
+    color: colors.textSubtle,
     marginBottom: 14,
   },
   intro: {
     fontFamily: FONTS.regular,
     fontSize: 13,
-    color: '#888',
+    color: colors.textSubtle,
     marginBottom: 20,
     lineHeight: 19,
   },
@@ -140,13 +146,14 @@ const styles = StyleSheet.create({
   heading: {
     fontFamily: FONTS.bold,
     fontSize: 16,
-    color: COLORS.navy,
+    color: colors.textPrimary,
     marginBottom: 8,
   },
   body: {
     fontFamily: FONTS.regular,
     fontSize: 14,
-    color: '#444',
+    color: colors.textBody,
     lineHeight: 21,
   },
-});
+  });
+}
