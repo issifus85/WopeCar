@@ -16,6 +16,7 @@ import { FavoritesProvider } from '../contexts/FavoritesContext';
 import { CartProvider } from '../contexts/CartContext';
 import { CheckoutProvider } from '../contexts/CheckoutContext';
 import { BookingsProvider } from '../contexts/BookingsContext';
+import { SettingsProvider } from '../contexts/SettingsContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -47,6 +48,7 @@ export default function RootLayout() {
           <CartProvider>
           <CheckoutProvider>
           <BookingsProvider>
+          <SettingsProvider>
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="car/[id]" options={{ headerShown: false }} />
@@ -116,15 +118,47 @@ export default function RootLayout() {
                 }}
               />
               <Stack.Screen
-                name="settings"
+                name="settings/index"
                 options={{
                   headerShown: true,
                   title: 'Settings',
+                  headerBackTitle: 'Settings',
+                  headerTintColor: COLORS.navy,
+                  headerTitleStyle: { fontFamily: FONTS.semiBold },
+                }}
+              />
+              <Stack.Screen
+                name="settings/about"
+                options={{
+                  headerShown: true,
+                  title: 'About WopeCar',
+                  headerBackTitle: 'Settings',
+                  headerTintColor: COLORS.navy,
+                  headerTitleStyle: { fontFamily: FONTS.semiBold },
+                }}
+              />
+              <Stack.Screen
+                name="settings/help-centre"
+                options={{
+                  headerShown: true,
+                  title: 'Help Centre',
+                  headerBackTitle: 'Settings',
+                  headerTintColor: COLORS.navy,
+                  headerTitleStyle: { fontFamily: FONTS.semiBold },
+                }}
+              />
+              <Stack.Screen
+                name="settings/safety-centre"
+                options={{
+                  headerShown: true,
+                  title: 'Safety Centre',
+                  headerBackTitle: 'Settings',
                   headerTintColor: COLORS.navy,
                   headerTitleStyle: { fontFamily: FONTS.semiBold },
                 }}
               />
             </Stack>
+          </SettingsProvider>
           </BookingsProvider>
           </CheckoutProvider>
           </CartProvider>

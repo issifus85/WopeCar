@@ -14,6 +14,9 @@ export default function ConfirmModal({
   onConfirm,
   onCancel,
 }) {
+  // Pass cancelLabel={null} for a single-button info dialog (e.g. "Coming soon").
+  const singleAction = cancelLabel === null;
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <Pressable style={styles.backdrop} onPress={onCancel}>
@@ -21,9 +24,11 @@ export default function ConfirmModal({
           <Text style={styles.title}>{title}</Text>
           {!!message && <Text style={styles.message}>{message}</Text>}
           <View style={styles.actions}>
-            <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
-              <Text style={styles.cancelButtonText}>{cancelLabel}</Text>
-            </TouchableOpacity>
+            {!singleAction && (
+              <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
+                <Text style={styles.cancelButtonText}>{cancelLabel}</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={[styles.confirmButton, destructive && styles.confirmButtonDestructive]}
               onPress={onConfirm}

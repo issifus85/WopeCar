@@ -1,0 +1,124 @@
+import { StyleSheet, Text, View, ScrollView, Linking, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { COLORS, FONTS } from '../../constants/theme';
+
+const SECTIONS = [
+  {
+    icon: 'shield-checkmark-outline',
+    heading: 'Before your trip',
+    body: 'Check the car photos and condition notes on the listing, confirm your pickup location and time, and make sure your driver\'s licence is up to date under Account.',
+  },
+  {
+    icon: 'car-outline',
+    heading: 'During your trip',
+    body: 'Inspect the vehicle at pickup and report any existing damage immediately. Follow all road safety laws and keep your emergency contact details current under Account.',
+  },
+  {
+    icon: 'alert-circle-outline',
+    heading: 'In an emergency',
+    body: 'For accidents, breakdowns, or safety concerns during a trip, email WopeCar support immediately using the button below, or contact your local emergency services first if anyone is in danger.',
+  },
+  {
+    icon: 'flag-outline',
+    heading: 'Report a safety concern',
+    body: 'If something about a car, driver, or trip felt unsafe, use Report a Problem in Settings so our team can look into it.',
+  },
+];
+
+const SUPPORT_EMAIL = 'support@wopecar.com';
+
+export default function SafetyCentreScreen() {
+  return (
+    <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <Text style={styles.title}>Safety Centre</Text>
+      <Text style={styles.intro}>Resources to help you stay safe before, during, and after a WopeCar trip.</Text>
+
+      {SECTIONS.map((section) => (
+        <View key={section.heading} style={styles.card}>
+          <View style={styles.cardIcon}>
+            <Ionicons name={section.icon} size={20} color={COLORS.teal} />
+          </View>
+          <View style={styles.cardBody}>
+            <Text style={styles.cardHeading}>{section.heading}</Text>
+            <Text style={styles.cardText}>{section.body}</Text>
+          </View>
+        </View>
+      ))}
+
+      <TouchableOpacity style={styles.emergencyButton} onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Safety concern')}`)}>
+        <Ionicons name="mail-outline" size={18} color="#ffffff" />
+        <Text style={styles.emergencyButtonText}>Email WopeCar Support</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  content: {
+    padding: 20,
+    paddingBottom: 48,
+  },
+  title: {
+    fontFamily: FONTS.bold,
+    fontSize: 24,
+    color: COLORS.navy,
+    marginBottom: 8,
+  },
+  intro: {
+    fontFamily: FONTS.regular,
+    fontSize: 13,
+    color: '#888',
+    marginBottom: 20,
+    lineHeight: 19,
+  },
+  card: {
+    flexDirection: 'row',
+    gap: 14,
+    backgroundColor: COLORS.background,
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 14,
+  },
+  cardIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#EEF9F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardBody: {
+    flex: 1,
+  },
+  cardHeading: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 14,
+    color: COLORS.navy,
+    marginBottom: 4,
+  },
+  cardText: {
+    fontFamily: FONTS.regular,
+    fontSize: 13,
+    color: '#666',
+    lineHeight: 19,
+  },
+  emergencyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: COLORS.navy,
+    borderRadius: 12,
+    paddingVertical: 15,
+    marginTop: 8,
+  },
+  emergencyButtonText: {
+    fontFamily: FONTS.semiBold,
+    color: '#ffffff',
+    fontSize: 15,
+  },
+});
