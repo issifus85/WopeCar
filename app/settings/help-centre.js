@@ -3,34 +3,84 @@ import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../../constants/theme';
 
+// Pulled from the live FAQ page at wopecar.com/faq - keep in sync with that
+// page if it changes, since these are the company's official answers.
 const FAQS = [
   {
-    question: 'How do I book a car?',
-    answer: 'Search for a car on the Home tab, pick your dates and pickup/return times, choose any regional add-ons, fill in your booking details, and pay securely through Paystack to confirm.',
+    question: 'Can I rent a car with cash?',
+    answer: 'No, Wopecar prefers online payment via Visa card, Mobile Money (MOMO), or direct bank transfer.',
   },
   {
-    question: "What's the difference between Self-Drive and Chauffeur cars?",
-    answer: 'Self-Drive cars are handed over to you for the rental period and include a delivery fee plus a refundable security deposit. Chauffeur cars come with a driver for the trip.',
+    question: 'What do you need to rent a car at Wopecar?',
+    answer: "A valid driver's license, any other national ID location in Ghana, minimum age requirements, acceptable modes of payment, and a proof of residence.",
   },
   {
-    question: 'Is the security deposit refundable?',
-    answer: "Yes. The security deposit shown at checkout is refundable and is separate from your rental cost - it's held to cover any damage during the trip.",
+    question: 'How can I obtain a receipt or proof of payment?',
+    answer: 'An email of your invoice and receipt will be sent directly to your email.',
   },
   {
-    question: 'Can I change my booking dates after paying?',
-    answer: "Yes. Open the booking from the Bookings tab and tap Modify Booking. You'll see the new total and only pay the difference if the new dates cost more.",
+    question: 'What forms of payment are available to rent a car?',
+    answer: '1. Paystack online payment (Visa, Mastercard, Mobile Money) 2. Direct mobile money 3. Direct bank transfer.',
   },
   {
-    question: 'Can I book on a Sunday?',
-    answer: "Sundays aren't a working day for pickups or returns, so they're not selectable in the date picker.",
+    question: 'How do I cancel my booking?',
+    answer: 'You can cancel online with your confirmation number, by emailing support@wopecar.com, or by calling customer care.',
   },
   {
-    question: 'How do I cancel a booking?',
-    answer: 'Open the booking from the Bookings tab and tap Cancel Booking. Refund timing for already-paid bookings is handled by our support team.',
+    question: 'Do I pay a fee for returning a rented car late?',
+    answer: "Late returning of your ride will attract a full day's charge unless a time extension is requested by the rider.",
   },
   {
-    question: 'What documents do I need to book?',
-    answer: "A valid driver's licence is required for Self-Drive bookings. You can manage your documents from the Account screen.",
+    question: 'What are the business days & hours of work?',
+    answer: 'Business days are Monday - Saturday. Working hours are 8:30am - 5pm each working day. We do not operate on Sundays.',
+  },
+  {
+    question: 'Can I have my car delivered to me?',
+    answer: 'Yes, all rides are delivered directly to your location at a flat fee of GHS 200 within Accra.',
+  },
+  {
+    question: 'How do I contact Wopecar to make enquiries?',
+    answer: 'You can reach us through online support, social media, phone, or email.',
+  },
+  {
+    question: 'What do I do if I have an accident?',
+    answer: "Contact customer support immediately. All cars are comprehensively insured as a requirement, but damages such as small dents, scratches, or flat tires caused by the rider will need to be covered by the rider.",
+  },
+  {
+    question: 'What are the cleaning and safety policies on Wopecar?',
+    answer: 'All cars are delivered clean and disinfected by Wopecar. Riders returning cars are required to return their booked cars completely clean.',
+  },
+  {
+    question: 'What do I do about fuel?',
+    answer: 'Cars are delivered fully fueled to riders. Cars must be returned in the same condition, i.e. fully fueled. Riders must report and obtain evidence of the fuel level before and after the booked trip.',
+  },
+  {
+    question: 'Is there an age requirement?',
+    answer: 'Wopecar renters must be 22 years and above.',
+  },
+  {
+    question: 'Can I make a one-day booking?',
+    answer: "Yes, if you're booking a chauffeured service. No if you want a self-drive service - the minimum number of days for self-drive is 3 days.",
+  },
+  {
+    question: 'Does the same rate apply to all destinations?',
+    answer: 'No, rates differ from region to region.',
+  },
+  {
+    question: 'Are there other costs aside from the rental amount?',
+    answer: 'Yes. Self-drive bookings include a security deposit and delivery fee. Chauffeured services include a driver allowance and accommodation where applicable.',
+  },
+  {
+    question: 'What is a security deposit?',
+    answer: 'This fee is refundable when the vehicle is returned in the same condition as it was given (washed, fueled, and without any physical damage). It is 25% of the rental amount or a flat fee of GHS 500, depending on the type of car and the rental period.',
+  },
+  {
+    question: 'Where can I charge my EV?',
+    answer: 'You can charge at the following locations: Home, Tseaddo, AnC Mall, Nungua, and East Legon.',
+  },
+  {
+    question: 'How much notice is required to make a reservation?',
+    answer: 'A 24-hour notice is required to make a reservation.',
   },
 ];
 

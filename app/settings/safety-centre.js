@@ -16,7 +16,7 @@ const SECTIONS = [
   {
     icon: 'alert-circle-outline',
     heading: 'In an emergency',
-    body: 'For accidents, breakdowns, or safety concerns during a trip, email WopeCar support immediately using the button below, or contact your local emergency services first if anyone is in danger.',
+    body: 'For accidents, breakdowns, or safety concerns during a trip, call WopeCar support immediately using the button below, or contact your local emergency services first if anyone is in danger.',
   },
   {
     icon: 'flag-outline',
@@ -26,6 +26,7 @@ const SECTIONS = [
 ];
 
 const SUPPORT_EMAIL = 'support@wopecar.com';
+const SUPPORT_PHONE = '+233551478540';
 
 export default function SafetyCentreScreen() {
   return (
@@ -45,9 +46,17 @@ export default function SafetyCentreScreen() {
         </View>
       ))}
 
-      <TouchableOpacity style={styles.emergencyButton} onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Safety concern')}`)}>
-        <Ionicons name="mail-outline" size={18} color="#ffffff" />
-        <Text style={styles.emergencyButtonText}>Email WopeCar Support</Text>
+      <TouchableOpacity style={styles.emergencyButton} onPress={() => Linking.openURL(`tel:${SUPPORT_PHONE}`)}>
+        <Ionicons name="call-outline" size={18} color="#ffffff" />
+        <Text style={styles.emergencyButtonText}>Call WopeCar Support</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.secondaryButton}
+        onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Safety concern')}`)}
+      >
+        <Ionicons name="mail-outline" size={18} color={COLORS.navy} />
+        <Text style={styles.secondaryButtonText}>Email WopeCar Support</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -119,6 +128,22 @@ const styles = StyleSheet.create({
   emergencyButtonText: {
     fontFamily: FONTS.semiBold,
     color: '#ffffff',
+    fontSize: 15,
+  },
+  secondaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1.5,
+    borderColor: '#e5e5e5',
+    borderRadius: 12,
+    paddingVertical: 15,
+    marginTop: 10,
+  },
+  secondaryButtonText: {
+    fontFamily: FONTS.semiBold,
+    color: COLORS.navy,
     fontSize: 15,
   },
 });
