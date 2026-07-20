@@ -1,4 +1,6 @@
-import { StyleSheet, Text, View, ScrollView } from 'react-native';
+import { useState } from 'react';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../constants/theme';
 
 const SECTIONS = [
@@ -22,7 +24,7 @@ If you continue to access or use the Services after we have posted a modificatio
     heading: 'Eligibility, Registration, Verification & Definitions',
     body: `Eligibility
 
-This Service is intended solely for licensed drivers who are at least 21 years old. The Service is not available to any Users previously removed from the Service due to violation of any of our terms, unless a written notice of reinstatement has been given. All Users must pass our Eligibility Requirements and must provide all necessary and complete documentation for determining eligibility throughout your use of the Service.
+This Service is intended solely for licensed drivers who are at least 22 years old. The Service is not available to any Users previously removed from the Service due to violation of any of our terms, unless a written notice of reinstatement has been given. All Users must pass our Eligibility Requirements and must provide all necessary and complete documentation for determining eligibility throughout your use of the Service.
 
 Definitions
 
@@ -132,19 +134,29 @@ The substantive laws of the Republic of Ghana apply to these Terms without regar
   },
 ];
 
+function AccordionSection({ heading, body }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <View style={styles.section}>
+      <TouchableOpacity style={styles.sectionHeader} onPress={() => setExpanded(!expanded)} activeOpacity={0.7}>
+        <Text style={styles.heading}>{heading}</Text>
+        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={20} color={COLORS.teal} />
+      </TouchableOpacity>
+      {expanded && <Text style={styles.body}>{body}</Text>}
+    </View>
+  );
+}
+
 export default function TermsScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <Text style={styles.title}>Terms of Service</Text>
       <Text style={styles.intro}>
-        The following are WopeCar's Terms of Service, as published on wopecar.com. By using the app, you agree to these terms.
+        The following are WopeCar's Terms of Service, as published on wopecar.com. By using the app, you agree to these terms. Tap a heading to expand it.
       </Text>
 
       {SECTIONS.map((section) => (
-        <View key={section.heading} style={styles.section}>
-          <Text style={styles.heading}>{section.heading}</Text>
-          <Text style={styles.body}>{section.body}</Text>
-        </View>
+        <AccordionSection key={section.heading} heading={section.heading} body={section.body} />
       ))}
     </ScrollView>
   );
@@ -173,18 +185,27 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   section: {
-    marginBottom: 22,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 16,
   },
   heading: {
+    flex: 1,
     fontFamily: FONTS.bold,
     fontSize: 16,
     color: COLORS.navy,
-    marginBottom: 8,
   },
   body: {
     fontFamily: FONTS.regular,
     fontSize: 14,
     color: '#444',
     lineHeight: 21,
+    paddingBottom: 16,
   },
 });
