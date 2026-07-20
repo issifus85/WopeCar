@@ -14,10 +14,17 @@ export class ApiError extends Error {
 }
 
 export async function request(path, { method = 'GET', body, auth = false } = {}) {
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+
   const headers = {
     Accept: 'application/json',
-    'Content-Type': 'application/json',
   };
+  // Let fetch set the multipart boundary itself for FormData bodies -
+  // an explicit Content-Type here would omit it and the server can't
+  // parse the parts.
+  if (!isFormData) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   if (auth) {
     const token = await getToken();
@@ -29,7 +36,7 @@ export async function request(path, { method = 'GET', body, auth = false } = {})
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method,
     headers,
-    body: body ? JSON.stringify(body) : undefined,
+    body: isFormData ? body : (body ? JSON.stringify(body) : undefined),
   });
 
   const json = await response.json().catch(() => null);
