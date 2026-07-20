@@ -1,12 +1,15 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS } from '../constants/theme';
+import { FONTS } from '../constants/theme';
+import { useAppTheme } from '../contexts/ThemeContext';
 import SectionHeading from './SectionHeading';
 
 const COLLAPSED_COUNT = 3;
 
 export default function FaqSection({ faqs }) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [showAll, setShowAll] = useState(false);
   const [openIndexes, setOpenIndexes] = useState(new Set());
 
@@ -39,7 +42,7 @@ export default function FaqSection({ faqs }) {
               <Ionicons
                 name={isOpen ? 'chevron-up' : 'chevron-down'}
                 size={16}
-                color="#888"
+                color={colors.textSubtle}
               />
             </TouchableOpacity>
             {isOpen && <Text style={styles.faqAnswerText}>{faq.content}</Text>}
@@ -54,7 +57,7 @@ export default function FaqSection({ faqs }) {
           <Ionicons
             name={showAll ? 'chevron-up' : 'chevron-down'}
             size={16}
-            color={COLORS.teal}
+            color={colors.teal}
           />
         </TouchableOpacity>
       )}
@@ -62,42 +65,44 @@ export default function FaqSection({ faqs }) {
   );
 }
 
-const styles = StyleSheet.create({
-  faqItem: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    paddingVertical: 12,
-  },
-  faqQuestion: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  faqQuestionText: {
-    flex: 1,
-    fontFamily: FONTS.semiBold,
-    fontSize: 14,
-    color: COLORS.navy,
-  },
-  faqAnswerText: {
-    fontFamily: FONTS.regular,
-    fontSize: 13,
-    color: '#666',
-    lineHeight: 19,
-    marginTop: 8,
-  },
-  toggleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    marginTop: 12,
-    paddingVertical: 8,
-  },
-  toggleText: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 13,
-    color: COLORS.teal,
-  },
-});
+function createStyles(colors) {
+  return StyleSheet.create({
+    faqItem: {
+      borderBottomWidth: 1,
+      borderBottomColor: colors.divider,
+      paddingVertical: 12,
+    },
+    faqQuestion: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+    },
+    faqQuestionText: {
+      flex: 1,
+      fontFamily: FONTS.semiBold,
+      fontSize: 14,
+      color: colors.textPrimary,
+    },
+    faqAnswerText: {
+      fontFamily: FONTS.regular,
+      fontSize: 13,
+      color: colors.textMuted,
+      lineHeight: 19,
+      marginTop: 8,
+    },
+    toggleButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+      marginTop: 12,
+      paddingVertical: 8,
+    },
+    toggleText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 13,
+      color: colors.teal,
+    },
+  });
+}

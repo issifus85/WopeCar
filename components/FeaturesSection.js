@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS } from '../constants/theme';
+import { FONTS } from '../constants/theme';
+import { useAppTheme } from '../contexts/ThemeContext';
 import SectionHeading from './SectionHeading';
 
 // The API doesn't return a per-feature icon for this dataset (image_id/icon
@@ -28,6 +29,8 @@ const DEFAULT_FEATURE_ICON = 'checkmark-circle-outline';
 const COLLAPSED_COUNT = 6;
 
 export default function FeaturesSection({ features }) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [isExpanded, setIsExpanded] = useState(false);
 
   if (!features?.length) return null;
@@ -44,7 +47,7 @@ export default function FeaturesSection({ features }) {
             <Ionicons
               name={FEATURE_ICONS[feature.slug] ?? DEFAULT_FEATURE_ICON}
               size={18}
-              color={COLORS.teal}
+              color={colors.teal}
             />
             <Text style={styles.featureText}>{feature.title}</Text>
           </View>
@@ -58,7 +61,7 @@ export default function FeaturesSection({ features }) {
           <Ionicons
             name={isExpanded ? 'chevron-up' : 'chevron-down'}
             size={16}
-            color={COLORS.teal}
+            color={colors.teal}
           />
         </TouchableOpacity>
       )}
@@ -66,35 +69,37 @@ export default function FeaturesSection({ features }) {
   );
 }
 
-const styles = StyleSheet.create({
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    rowGap: 14,
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    width: '50%',
-  },
-  featureText: {
-    fontFamily: FONTS.regular,
-    fontSize: 13,
-    color: '#444',
-    flexShrink: 1,
-  },
-  toggleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    marginTop: 14,
-    paddingVertical: 8,
-  },
-  toggleText: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 13,
-    color: COLORS.teal,
-  },
-});
+function createStyles(colors) {
+  return StyleSheet.create({
+    grid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      rowGap: 14,
+    },
+    featureItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      width: '50%',
+    },
+    featureText: {
+      fontFamily: FONTS.regular,
+      fontSize: 13,
+      color: colors.textBody,
+      flexShrink: 1,
+    },
+    toggleButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+      marginTop: 14,
+      paddingVertical: 8,
+    },
+    toggleText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 13,
+      color: colors.teal,
+    },
+  });
+}

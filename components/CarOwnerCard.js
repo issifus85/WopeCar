@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import { StyleSheet, Text, View, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS } from '../constants/theme';
+import { FONTS } from '../constants/theme';
+import { useAppTheme } from '../contexts/ThemeContext';
 import SectionHeading from './SectionHeading';
 
 function formatMemberSince(dateString) {
@@ -11,6 +13,9 @@ function formatMemberSince(dateString) {
 }
 
 export default function CarOwnerCard({ owner }) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   if (!owner) return null;
 
   const memberSince = formatMemberSince(owner.memberSince);
@@ -23,14 +28,14 @@ export default function CarOwnerCard({ owner }) {
           <Image source={{ uri: owner.avatar }} style={styles.avatarImage} />
         ) : (
           <View style={styles.avatarPlaceholder}>
-            <Ionicons name="person" size={22} color={COLORS.teal} />
+            <Ionicons name="person" size={22} color={colors.teal} />
           </View>
         )}
         <View style={styles.info}>
           <View style={styles.nameRow}>
             <Text style={styles.name}>{owner.name}</Text>
             {owner.isVerified && (
-              <Ionicons name="checkmark-circle" size={16} color={COLORS.teal} />
+              <Ionicons name="checkmark-circle" size={16} color={colors.teal} />
             )}
           </View>
           {!!memberSince && (
@@ -42,45 +47,47 @@ export default function CarOwnerCard({ owner }) {
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: COLORS.background,
-    borderRadius: 14,
-    padding: 14,
-  },
-  avatarImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-  },
-  avatarPlaceholder: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#EEF9F9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  info: {
-    flex: 1,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  name: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 15,
-    color: COLORS.navy,
-  },
-  memberSince: {
-    fontFamily: FONTS.regular,
-    fontSize: 12,
-    color: '#888',
-    marginTop: 2,
-  },
-});
+function createStyles(colors) {
+  return StyleSheet.create({
+    card: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: colors.background,
+      borderRadius: 14,
+      padding: 14,
+    },
+    avatarImage: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+    },
+    avatarPlaceholder: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: colors.highlight,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    info: {
+      flex: 1,
+    },
+    nameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    name: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 15,
+      color: colors.textPrimary,
+    },
+    memberSince: {
+      fontFamily: FONTS.regular,
+      fontSize: 12,
+      color: colors.textSubtle,
+      marginTop: 2,
+    },
+  });
+}

@@ -1,10 +1,11 @@
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator, Share, Platform, Alert } from 'react-native';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import { fetchCarById } from '../../services/carsApi';
-import { COLORS, FONTS } from '../../constants/theme';
+import { FONTS } from '../../constants/theme';
+import { useAppTheme } from '../../contexts/ThemeContext';
 import { formatCurrency } from '../../constants/pricing';
 import ImageGallery from '../../components/ImageGallery';
 import SectionHeading from '../../components/SectionHeading';
@@ -21,6 +22,8 @@ const DESCRIPTION_TRUNCATE_LENGTH = 220;
 export default function CarDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { isFavorite, toggleFavorite } = useFavorites();
   const { addToCart } = useCart();
   const [car, setCar] = useState(null);
@@ -41,7 +44,7 @@ export default function CarDetailScreen() {
   if (isLoading) {
     return (
       <View style={styles.notFound}>
-        <ActivityIndicator size="large" color={COLORS.teal} />
+        <ActivityIndicator size="large" color={colors.teal} />
       </View>
     );
   }
@@ -114,7 +117,7 @@ export default function CarDetailScreen() {
           <ImageGallery images={car.gallery} height={320} borderRadius={0} />
 
           <TouchableOpacity style={[styles.overlayButton, styles.backButton]} onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={22} color={COLORS.navy} />
+            <Ionicons name="chevron-back" size={22} color={colors.navy} />
           </TouchableOpacity>
 
           <View style={styles.topRightButtons}>
@@ -126,11 +129,11 @@ export default function CarDetailScreen() {
               <Ionicons
                 name={isFavorite(car.id) ? 'heart' : 'heart-outline'}
                 size={20}
-                color={isFavorite(car.id) ? COLORS.orange : COLORS.navy}
+                color={isFavorite(car.id) ? colors.orange : colors.navy}
               />
             </TouchableOpacity>
             <TouchableOpacity style={styles.overlayButton} onPress={handleShare} hitSlop={8}>
-              <Ionicons name="share-social-outline" size={20} color={COLORS.navy} />
+              <Ionicons name="share-social-outline" size={20} color={colors.navy} />
             </TouchableOpacity>
           </View>
         </View>
@@ -142,7 +145,7 @@ export default function CarDetailScreen() {
             <Text style={styles.metaText}>{rating.toFixed(1)} ({totalReviews} ratings)</Text>
             {!!car.location && (
               <>
-                <Ionicons name="location-outline" size={14} color="#888" style={{ marginLeft: 10 }} />
+                <Ionicons name="location-outline" size={14} color={colors.textSubtle} style={{ marginLeft: 10 }} />
                 <Text style={styles.metaText}>{car.location}</Text>
               </>
             )}
@@ -156,11 +159,11 @@ export default function CarDetailScreen() {
             ) : null}
             <View style={[
               styles.availabilityBadge,
-              { backgroundColor: car.isAvailable ? '#E8F5E9' : '#FFEBEE' }
+              { backgroundColor: car.isAvailable ? colors.successBg : colors.errorBg }
             ]}>
               <Text style={[
                 styles.availabilityText,
-                { color: car.isAvailable ? '#2E7D32' : '#C62828' }
+                { color: car.isAvailable ? colors.success : colors.error }
               ]}>
                 {car.isAvailable ? 'Available' : 'Unavailable'}
               </Text>
@@ -173,7 +176,7 @@ export default function CarDetailScreen() {
                 <Ionicons
                   name={car.drivenBy === 'Chauffeur' ? 'person' : 'key-outline'}
                   size={12}
-                  color={car.drivenBy === 'Chauffeur' ? COLORS.orange : COLORS.mauve}
+                  color={car.drivenBy === 'Chauffeur' ? colors.orange : colors.mauve}
                 />
                 <Text style={[
                   styles.driveBadgeText,
@@ -184,11 +187,11 @@ export default function CarDetailScreen() {
               </View>
             ) : null}
             <View style={styles.depositBadge}>
-              <Ionicons name="cash-outline" size={12} color="#666" />
+              <Ionicons name="cash-outline" size={12} color={colors.textMuted} />
               <Text style={styles.depositBadgeText}>Security Deposit Required</Text>
             </View>
             <View style={styles.vettedBadge}>
-              <Ionicons name="shield-checkmark" size={12} color="#ffffff" />
+              <Ionicons name="shield-checkmark" size={12} color={colors.white} />
               <Text style={styles.vettedBadgeText}>Vetted by WopeCar</Text>
             </View>
           </View>
@@ -196,7 +199,7 @@ export default function CarDetailScreen() {
           <View style={styles.specsCard}>
             {specs.map((spec) => (
               <View key={spec.label} style={styles.specColumn}>
-                <Ionicons name={spec.icon} size={20} color={COLORS.teal} />
+                <Ionicons name={spec.icon} size={20} color={colors.teal} />
                 <Text style={styles.specValue}>{spec.value}</Text>
                 <Text style={styles.specLabel}>{spec.label}</Text>
               </View>
@@ -225,7 +228,7 @@ export default function CarDetailScreen() {
             <View style={styles.section}>
               <SectionHeading>Cancellation Policy</SectionHeading>
               <View style={styles.cancellationRow}>
-                <Ionicons name="calendar-outline" size={16} color={COLORS.teal} />
+                <Ionicons name="calendar-outline" size={16} color={colors.teal} />
                 <Text style={styles.cancellationText}>{car.cancellationPolicy}</Text>
               </View>
             </View>
@@ -283,10 +286,11 @@ export default function CarDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.white,
+    backgroundColor: colors.surface,
   },
   scrollContent: {
     paddingBottom: 24,
@@ -300,12 +304,14 @@ const styles = StyleSheet.create({
   notFoundText: {
     fontFamily: FONTS.regular,
     fontSize: 16,
-    color: '#666',
+    color: colors.textMuted,
     textAlign: 'center',
   },
   galleryWrap: {
     position: 'relative',
   },
+  // Floats over the photo gallery, not the app surface - stays a fixed
+  // light chip regardless of theme so it reads against any photo.
   overlayButton: {
     width: 38,
     height: 38,
@@ -332,7 +338,7 @@ const styles = StyleSheet.create({
   name: {
     fontFamily: FONTS.bold,
     fontSize: 22,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
   metaRow: {
     flexDirection: 'row',
@@ -343,7 +349,7 @@ const styles = StyleSheet.create({
   metaText: {
     fontFamily: FONTS.regular,
     fontSize: 13,
-    color: '#888',
+    color: colors.textSubtle,
   },
   badgeRow: {
     flexDirection: 'row',
@@ -352,7 +358,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   typeBadge: {
-    backgroundColor: '#EEF9F9',
+    backgroundColor: colors.highlight,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 6,
@@ -360,7 +366,7 @@ const styles = StyleSheet.create({
   typeText: {
     fontFamily: FONTS.semiBold,
     fontSize: 12,
-    color: COLORS.teal,
+    color: colors.teal,
   },
   availabilityBadge: {
     paddingHorizontal: 10,
@@ -386,16 +392,16 @@ const styles = StyleSheet.create({
   driveBadgeText: {
     fontFamily: FONTS.semiBold,
     fontSize: 12,
-    color: COLORS.mauve,
+    color: colors.mauve,
   },
   driveBadgeTextChauffeur: {
-    color: COLORS.orange,
+    color: colors.orange,
   },
   depositBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: '#F0F0F0',
+    backgroundColor: colors.divider,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 6,
@@ -403,13 +409,13 @@ const styles = StyleSheet.create({
   depositBadgeText: {
     fontFamily: FONTS.semiBold,
     fontSize: 12,
-    color: '#666',
+    color: colors.textMuted,
   },
   vettedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: COLORS.teal,
+    backgroundColor: colors.teal,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 6,
@@ -417,11 +423,11 @@ const styles = StyleSheet.create({
   vettedBadgeText: {
     fontFamily: FONTS.semiBold,
     fontSize: 12,
-    color: '#ffffff',
+    color: colors.white,
   },
   specsCard: {
     flexDirection: 'row',
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
     borderRadius: 14,
     paddingVertical: 18,
     marginTop: 20,
@@ -434,29 +440,29 @@ const styles = StyleSheet.create({
   specValue: {
     fontFamily: FONTS.bold,
     fontSize: 14,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
   specLabel: {
     fontFamily: FONTS.regular,
     fontSize: 11,
-    color: '#888',
+    color: colors.textSubtle,
   },
   section: {
     marginTop: 24,
     paddingTop: 24,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: colors.divider,
   },
   description: {
     fontFamily: FONTS.regular,
     fontSize: 14,
-    color: '#444',
+    color: colors.textBody,
     lineHeight: 21,
   },
   readMoreText: {
     fontFamily: FONTS.semiBold,
     fontSize: 13,
-    color: COLORS.teal,
+    color: colors.teal,
     marginTop: 6,
   },
   cancellationRow: {
@@ -467,7 +473,7 @@ const styles = StyleSheet.create({
   cancellationText: {
     fontFamily: FONTS.medium,
     fontSize: 14,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
   bottomBar: {
     flexDirection: 'row',
@@ -476,10 +482,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 14,
     paddingBottom: 28,
-    backgroundColor: COLORS.white,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
-    shadowColor: '#000',
+    borderTopColor: colors.divider,
+    shadowColor: colors.shadow,
     shadowOpacity: 0.06,
     shadowRadius: 10,
     elevation: 6,
@@ -487,25 +493,26 @@ const styles = StyleSheet.create({
   priceLabel: {
     fontFamily: FONTS.regular,
     fontSize: 12,
-    color: '#999',
+    color: colors.textSubtle,
   },
   price: {
     fontFamily: FONTS.bold,
     fontSize: 22,
-    color: COLORS.teal,
+    color: colors.teal,
   },
   bookButton: {
-    backgroundColor: COLORS.teal,
+    backgroundColor: colors.teal,
     paddingHorizontal: 28,
     paddingVertical: 14,
     borderRadius: 10,
   },
   bookButtonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: colors.disabled,
   },
   bookButtonText: {
     fontFamily: FONTS.semiBold,
-    color: '#ffffff',
+    color: colors.white,
     fontSize: 15,
   },
-});
+  });
+}
