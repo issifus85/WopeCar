@@ -166,7 +166,7 @@ export default function SettingsScreen() {
         </Section>
 
         <Section title="App Preferences">
-          <PickerRow label="Dark Mode" settingsKey="darkMode" options={['Light', 'Dark', 'System']} onOpen={openPicker} />
+          <PickerRow label="Dark Mode" settingsKey="darkMode" options={['Light', 'Dark', 'Auto']} onOpen={openPicker} />
           <PickerRow label="Theme Colour" settingsKey="themeColour" options={['Default', 'Teal', 'Navy', 'Orange']} onOpen={openPicker} />
           <PickerRow label="Map Provider" settingsKey="mapProvider" options={['Google Maps', 'Apple Maps']} onOpen={openPicker} />
           <NavRow label="Navigation Preference" subtitle="Open preferred navigation app" onPress={() => openComingSoon('Navigation Preference')} />

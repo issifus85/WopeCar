@@ -31,7 +31,7 @@ const DEFAULT_SETTINGS = {
   currency: 'GHS',
   language: 'English',
   // App Preference Setting
-  darkMode: 'System',
+  darkMode: 'Auto', // 'Light' | 'Dark' | 'Auto' (time-of-day based, see contexts/ThemeContext.js)
   themeColour: 'Default',
   mapProvider: Platform.OS === 'ios' ? 'Apple Maps' : 'Google Maps',
   autoPlayVideos: true,
@@ -45,7 +45,13 @@ export function SettingsProvider({ children }) {
 
   useEffect(() => {
     settingsStorage.getSettings()
-      .then(saved => setSettingsState(prev => ({ ...prev, ...saved })))
+      .then(saved => {
+        // 'System' (OS-appearance-based) was replaced by 'Auto' (time-of-day
+        // based) - coerce any value saved before that change so it doesn't
+        // land on an option the Dark Mode picker no longer offers.
+        if (saved.darkMode === 'System') saved.darkMode = 'Auto';
+        setSettingsState(prev => ({ ...prev, ...saved }));
+      })
       .finally(() => setIsLoading(false));
   }, []);
 

@@ -1,7 +1,9 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { View } from 'react-native';
 import { Stack } from 'expo-router';
 import { useFonts } from 'expo-font';
+import { ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
+import { StatusBar } from 'expo-status-bar';
 import {
   SourceSans3_300Light,
   SourceSans3_400Regular,
@@ -10,13 +12,14 @@ import {
   SourceSans3_700Bold,
 } from '@expo-google-fonts/source-sans-3';
 import * as SplashScreen from 'expo-splash-screen';
-import { COLORS, FONTS } from '../constants/theme';
+import { FONTS } from '../constants/theme';
 import { AuthProvider } from '../contexts/AuthContext';
 import { FavoritesProvider } from '../contexts/FavoritesContext';
 import { CartProvider } from '../contexts/CartContext';
 import { CheckoutProvider } from '../contexts/CheckoutContext';
 import { BookingsProvider } from '../contexts/BookingsContext';
 import { SettingsProvider } from '../contexts/SettingsContext';
+import { ThemeProvider, useAppTheme, toNavigationTheme } from '../contexts/ThemeContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -42,128 +45,99 @@ export default function RootLayout() {
   }
 
   return (
-    <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
-      <AuthProvider>
-        <FavoritesProvider>
-          <CartProvider>
-          <CheckoutProvider>
-          <BookingsProvider>
-          <SettingsProvider>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="car/[id]" options={{ headerShown: false }} />
-              <Stack.Screen
-                name="booking/[id]"
-                options={{
-                  headerShown: true,
-                  title: 'Booking Details',
-                  headerBackTitle: 'Bookings',
-                  headerTintColor: COLORS.navy,
-                  headerTitleStyle: { fontFamily: FONTS.semiBold },
-                }}
-              />
-              <Stack.Screen
-                name="login"
-                options={{
-                  headerShown: true,
-                  title: '',
-                  headerTransparent: true,
-                  headerTintColor: COLORS.white,
-                }}
-              />
-              <Stack.Screen
-                name="account"
-                options={{
-                  headerShown: true,
-                  title: 'Account',
-                  headerBackTitle: 'Account',
-                  headerTintColor: COLORS.navy,
-                  headerTitleStyle: { fontFamily: FONTS.semiBold },
-                }}
-              />
-              <Stack.Screen
-                name="inbox"
-                options={{
-                  headerShown: true,
-                  title: 'Inbox',
-                  headerTintColor: COLORS.navy,
-                  headerTitleStyle: { fontFamily: FONTS.semiBold },
-                }}
-              />
-              <Stack.Screen
-                name="documents"
-                options={{
-                  headerShown: true,
-                  title: 'Documents',
-                  headerTintColor: COLORS.navy,
-                  headerTitleStyle: { fontFamily: FONTS.semiBold },
-                }}
-              />
-              <Stack.Screen
-                name="terms"
-                options={{
-                  headerShown: true,
-                  title: 'Terms of Service',
-                  headerTintColor: COLORS.navy,
-                  headerTitleStyle: { fontFamily: FONTS.semiBold },
-                }}
-              />
-              <Stack.Screen
-                name="privacy"
-                options={{
-                  headerShown: true,
-                  title: 'Privacy Policy',
-                  headerTintColor: COLORS.navy,
-                  headerTitleStyle: { fontFamily: FONTS.semiBold },
-                }}
-              />
-              <Stack.Screen
-                name="settings/index"
-                options={{
-                  headerShown: true,
-                  title: 'Settings',
-                  headerBackTitle: 'Settings',
-                  headerTintColor: COLORS.navy,
-                  headerTitleStyle: { fontFamily: FONTS.semiBold },
-                }}
-              />
-              <Stack.Screen
-                name="settings/about"
-                options={{
-                  headerShown: true,
-                  title: 'About WopeCar',
-                  headerBackTitle: 'Settings',
-                  headerTintColor: COLORS.navy,
-                  headerTitleStyle: { fontFamily: FONTS.semiBold },
-                }}
-              />
-              <Stack.Screen
-                name="settings/help-centre"
-                options={{
-                  headerShown: true,
-                  title: 'Help Centre',
-                  headerBackTitle: 'Settings',
-                  headerTintColor: COLORS.navy,
-                  headerTitleStyle: { fontFamily: FONTS.semiBold },
-                }}
-              />
-              <Stack.Screen
-                name="settings/safety-centre"
-                options={{
-                  headerShown: true,
-                  title: 'Safety Centre',
-                  headerBackTitle: 'Settings',
-                  headerTintColor: COLORS.navy,
-                  headerTitleStyle: { fontFamily: FONTS.semiBold },
-                }}
-              />
-            </Stack>
-          </SettingsProvider>
-          </BookingsProvider>
-          </CheckoutProvider>
-          </CartProvider>
-        </FavoritesProvider>
-      </AuthProvider>
+    <AuthProvider>
+      <FavoritesProvider>
+        <CartProvider>
+        <CheckoutProvider>
+        <BookingsProvider>
+        <SettingsProvider>
+        <ThemeProvider>
+          <RootNavigator onLayoutRootView={onLayoutRootView} />
+        </ThemeProvider>
+        </SettingsProvider>
+        </BookingsProvider>
+        </CheckoutProvider>
+        </CartProvider>
+      </FavoritesProvider>
+    </AuthProvider>
+  );
+}
+
+function RootNavigator({ onLayoutRootView }) {
+  const { colors, isDark } = useAppTheme();
+  const navTheme = useMemo(() => toNavigationTheme(colors, isDark), [colors, isDark]);
+
+  const themedHeader = {
+    headerTintColor: colors.textPrimary,
+    headerStyle: { backgroundColor: colors.surface },
+    headerTitleStyle: { fontFamily: FONTS.semiBold },
+  };
+
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.background }} onLayout={onLayoutRootView}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+      <NavigationThemeProvider value={navTheme}>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="car/[id]" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="booking/[id]"
+            options={{
+              headerShown: true,
+              title: 'Booking Details',
+              headerBackTitle: 'Bookings',
+              ...themedHeader,
+            }}
+          />
+          <Stack.Screen
+            name="login"
+            options={{
+              headerShown: true,
+              title: '',
+              headerTransparent: true,
+              // Sits over a hero photo, not the app surface - stays white
+              // regardless of theme so it's always readable on the image.
+              headerTintColor: colors.white,
+            }}
+          />
+          <Stack.Screen
+            name="account"
+            options={{ headerShown: true, title: 'Account', headerBackTitle: 'Account', ...themedHeader }}
+          />
+          <Stack.Screen
+            name="inbox"
+            options={{ headerShown: true, title: 'Inbox', ...themedHeader }}
+          />
+          <Stack.Screen
+            name="documents"
+            options={{ headerShown: true, title: 'Documents', ...themedHeader }}
+          />
+          <Stack.Screen
+            name="terms"
+            options={{ headerShown: true, title: 'Terms of Service', ...themedHeader }}
+          />
+          <Stack.Screen
+            name="privacy"
+            options={{ headerShown: true, title: 'Privacy Policy', ...themedHeader }}
+          />
+          <Stack.Screen
+            name="settings/index"
+            options={{ headerShown: true, title: 'Settings', headerBackTitle: 'Settings', ...themedHeader }}
+          />
+          <Stack.Screen
+            name="settings/about"
+            options={{ headerShown: true, title: 'About WopeCar', headerBackTitle: 'Settings', ...themedHeader }}
+          />
+          <Stack.Screen
+            name="settings/help-centre"
+            options={{ headerShown: true, title: 'Help Centre', headerBackTitle: 'Settings', ...themedHeader }}
+          />
+          <Stack.Screen
+            name="settings/safety-centre"
+            options={{ headerShown: true, title: 'Safety Centre', headerBackTitle: 'Settings', ...themedHeader }}
+          />
+        </Stack>
+      </NavigationThemeProvider>
     </View>
   );
 }
