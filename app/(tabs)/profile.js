@@ -1,11 +1,15 @@
-import { StyleSheet, Text, View, TouchableOpacity, Image } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Image, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
+import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
 
+const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
+
 const MENU_ITEMS = [
   { label: 'Inbox', icon: 'mail-outline', route: '/inbox' },
+  { label: 'Documents', icon: 'folder-outline', route: '/documents' },
   { label: 'Terms of Service', icon: 'document-text-outline', route: '/terms' },
   { label: 'Privacy Policy', icon: 'shield-checkmark-outline', route: '/privacy' },
   { label: 'Settings', icon: 'settings-outline', route: '/settings' },
@@ -21,6 +25,7 @@ export default function ProfileScreen() {
         <Text style={styles.headerTitle}>Profile</Text>
       </View>
 
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
       <TouchableOpacity
         style={styles.accountRow}
         onPress={() => router.push(user ? '/account' : '/login')}
@@ -61,6 +66,12 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         ))}
       </View>
+
+      <View style={styles.footer}>
+        <Text style={styles.footerVersion}>WopeCar App v{APP_VERSION}</Text>
+        <Text style={styles.footerSubsidiary}>A subsidiary of ACRE Logistics GH.</Text>
+      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -74,6 +85,9 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 16,
     paddingHorizontal: 20,
+  },
+  scrollContent: {
+    paddingBottom: 32,
   },
   headerTitle: {
     fontFamily: FONTS.bold,
@@ -161,5 +175,21 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: COLORS.navy,
     marginLeft: 14,
+  },
+  footer: {
+    alignItems: 'center',
+    marginTop: 28,
+    paddingHorizontal: 20,
+  },
+  footerVersion: {
+    fontFamily: FONTS.medium,
+    fontSize: 12,
+    color: '#999',
+  },
+  footerSubsidiary: {
+    fontFamily: FONTS.regular,
+    fontSize: 11,
+    color: '#bbb',
+    marginTop: 2,
   },
 });

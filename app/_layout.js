@@ -79,6 +79,15 @@ export default function RootLayout() {
                 }}
               />
               <Stack.Screen
+                name="documents"
+                options={{
+                  headerShown: true,
+                  title: 'Documents',
+                  headerTintColor: COLORS.navy,
+                  headerTitleStyle: { fontFamily: FONTS.semiBold },
+                }}
+              />
+              <Stack.Screen
                 name="terms"
                 options={{
                   headerShown: true,
