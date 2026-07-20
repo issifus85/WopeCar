@@ -65,7 +65,7 @@ export default function DateRangeModal({ visible, onClose, startDate, endDate, o
     (viewMonth.getFullYear() === today.getFullYear() && viewMonth.getMonth() > today.getMonth());
 
   const handleDayPress = (day) => {
-    if (day < today) return;
+    if (day < today || day.getDay() === 0) return;
     if (!tempStart || (tempStart && tempEnd)) {
       setTempStart(day);
       setTempEnd(null);
@@ -134,6 +134,8 @@ export default function DateRangeModal({ visible, onClose, startDate, endDate, o
                 return <View key={`empty-${index}`} style={styles.dayCell} />;
               }
               const isPast = day < today;
+              const isSunday = day.getDay() === 0;
+              const isDisabled = isPast || isSunday;
               const isStart = isSameDay(day, tempStart);
               const isEnd = isSameDay(day, tempEnd);
               const isInRange = tempStart && tempEnd && day > tempStart && day < tempEnd;
@@ -144,7 +146,7 @@ export default function DateRangeModal({ visible, onClose, startDate, endDate, o
                   key={day.toISOString()}
                   style={[styles.dayCell, isInRange && styles.dayCellInRange]}
                   onPress={() => handleDayPress(day)}
-                  disabled={isPast}
+                  disabled={isDisabled}
                 >
                   <View style={[
                     styles.dayCircle,
@@ -153,7 +155,7 @@ export default function DateRangeModal({ visible, onClose, startDate, endDate, o
                   ]}>
                     <Text style={[
                       styles.dayText,
-                      isPast && styles.dayTextPast,
+                      isDisabled && styles.dayTextPast,
                       (isStart || isEnd) && styles.dayTextSelected,
                     ]}>
                       {day.getDate()}

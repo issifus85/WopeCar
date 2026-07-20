@@ -85,7 +85,7 @@ export default function CheckoutDatesScreen() {
   };
 
   const handleDayPress = (day) => {
-    if (day < today || isDayBooked(day)) return;
+    if (day < today || isDayBooked(day) || day.getDay() === 0) return;
     if (!tempStart || (tempStart && tempEnd)) {
       setTempStart(day);
       setTempEnd(null);
@@ -180,7 +180,8 @@ export default function CheckoutDatesScreen() {
 
             const isPast = day < today;
             const isBooked = isDayBooked(day);
-            const isDisabled = isPast || isBooked;
+            const isSunday = day.getDay() === 0;
+            const isDisabled = isPast || isBooked || isSunday;
             const isStart = isSameDay(day, tempStart);
             const isEnd = isSameDay(day, tempEnd);
             const isInRange = tempStart && tempEnd && day > tempStart && day < tempEnd;
@@ -201,7 +202,7 @@ export default function CheckoutDatesScreen() {
                 ]}>
                   <Text style={[
                     styles.dayText,
-                    isPast && styles.dayTextPast,
+                    (isPast || isSunday) && styles.dayTextPast,
                     isBooked && styles.dayTextBooked,
                     (isStart || isEnd) && styles.dayTextSelected,
                   ]}>

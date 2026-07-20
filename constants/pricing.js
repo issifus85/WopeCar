@@ -5,9 +5,9 @@ export function formatCurrency(amount) {
   return `${CURRENCY_CODE} ${value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
-// Self-drive-only fees, matching the live site's booking widget and T&Cs
-// (wopecar.com/book-a-car/<slug>): a flat delivery/collection fee, plus a
-// refundable security deposit of 25% of the rental+add-ons subtotal, or a
+// Matches the live site's booking widget and T&Cs (wopecar.com/book-a-car/<slug>):
+// a flat delivery/collection fee for self-drive rentals only, plus a refundable
+// security deposit (all rentals) of 25% of the rental+add-ons subtotal, or a
 // flat GHS 500 if that subtotal is under GHS 2,000.
 export const SELF_DRIVE_DELIVERY_FEE = 200;
 const SECURITY_DEPOSIT_THRESHOLD = 2000;

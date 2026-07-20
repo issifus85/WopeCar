@@ -45,7 +45,7 @@ export default function CheckoutSummaryScreen() {
   }, 0);
   const subtotal = rentalCost + addonsCost;
   const deliveryFee = isSelfDrive ? SELF_DRIVE_DELIVERY_FEE : 0;
-  const securityDeposit = isSelfDrive ? calculateSecurityDeposit(subtotal) : 0;
+  const securityDeposit = calculateSecurityDeposit(subtotal);
   const total = subtotal + deliveryFee + securityDeposit;
 
   const handleContinue = () => {
@@ -108,12 +108,10 @@ export default function CheckoutSummaryScreen() {
             </View>
           )}
 
-          {isSelfDrive && (
-            <View style={styles.costRow}>
-              <Text style={styles.costLabel}>Security deposit (refundable)</Text>
-              <Text style={styles.costValue}>{formatCurrency(securityDeposit)}</Text>
-            </View>
-          )}
+          <View style={styles.costRow}>
+            <Text style={styles.costLabel}>Security deposit (refundable)</Text>
+            <Text style={styles.costValue}>{formatCurrency(securityDeposit)}</Text>
+          </View>
 
           <View style={styles.divider} />
 

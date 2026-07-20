@@ -106,7 +106,7 @@ export default function BookingDetailScreen() {
     const subtotal = rentalCost + addonsCost;
     const isSelfDrive = car.drivenBy === 'Self-drive';
     const deliveryFee = isSelfDrive ? SELF_DRIVE_DELIVERY_FEE : 0;
-    const securityDeposit = isSelfDrive ? calculateSecurityDeposit(subtotal) : 0;
+    const securityDeposit = calculateSecurityDeposit(subtotal);
     return subtotal + deliveryFee + securityDeposit;
   }, [car, days, booking]);
 
