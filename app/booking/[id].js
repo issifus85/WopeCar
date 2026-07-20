@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../../constants/theme';
 import { formatCurrency, SELF_DRIVE_DELIVERY_FEE, calculateSecurityDeposit } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
+import { payWithPaystack } from '../../services/paystackCheckout';
 import { useBookings } from '../../contexts/BookingsContext';
 import DateRangeModal, { formatDateShort } from '../../components/DateRangeModal';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -20,9 +21,15 @@ const TIME_SLOTS = [
   '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM',
 ];
 
-function formatDate(iso) {
-  if (!iso) return '';
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+function formatDate(date) {
+  if (!date) return '';
+  return new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function daysBetween(start, end) {
+  if (!start || !end) return 0;
+  const diff = new Date(end) - new Date(start);
+  return Math.max(1, Math.round(diff / (1000 * 60 * 60 * 24)));
 }
 
 function TimeSlotPicker({ label, value, onChange }) {
@@ -52,10 +59,12 @@ export default function BookingDetailScreen() {
   const booking = bookings.find(b => b.id === id);
 
   const [car, setCar] = useState(null);
-  const [isEditing, setIsEditing] = useState(false);
+  // 'view' | 'editing' | 'reviewing'
+  const [mode, setMode] = useState('view');
   const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
   const [isCancelModalVisible, setIsCancelModalVisible] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [paymentError, setPaymentError] = useState(null);
 
   const [editStart, setEditStart] = useState(null);
   const [editEnd, setEditEnd] = useState(null);
@@ -79,26 +88,29 @@ export default function BookingDetailScreen() {
     setEditPickupLocation(booking.pickupLocation ?? '');
     setEditReturnLocation(booking.returnLocation ?? '');
     setSameAsPickup(!!booking.pickupLocation && booking.pickupLocation === booking.returnLocation);
-    setIsEditing(true);
+    setPaymentError(null);
+    setMode('editing');
   };
 
-  const nights = useMemo(() => {
-    if (!editStart || !editEnd) return 0;
-    const diff = new Date(editEnd) - new Date(editStart);
-    return Math.max(1, Math.round(diff / (1000 * 60 * 60 * 24)));
-  }, [editStart, editEnd]);
+  const days = useMemo(() => daysBetween(editStart, editEnd), [editStart, editEnd]);
+  const originalDays = useMemo(
+    () => daysBetween(booking?.startDate, booking?.endDate),
+    [booking?.startDate, booking?.endDate]
+  );
 
   const recomputedTotal = useMemo(() => {
-    if (!car || !nights) return booking?.totalCost ?? 0;
-    const rentalCost = (car.pricePerDay ?? 0) * nights;
+    if (!car || !days) return booking?.totalCost ?? 0;
+    const rentalCost = (car.pricePerDay ?? 0) * days;
     const addons = (car.regionalAddons ?? []).filter(a => booking.addonNames?.includes(a.name));
-    const addonsCost = addons.reduce((sum, a) => sum + (a.type === 'per_day' ? a.price * nights : a.price), 0);
+    const addonsCost = addons.reduce((sum, a) => sum + (a.type === 'per_day' ? a.price * days : a.price), 0);
     const subtotal = rentalCost + addonsCost;
     const isSelfDrive = car.drivenBy === 'Self-drive';
     const deliveryFee = isSelfDrive ? SELF_DRIVE_DELIVERY_FEE : 0;
     const securityDeposit = isSelfDrive ? calculateSecurityDeposit(subtotal) : 0;
     return subtotal + deliveryFee + securityDeposit;
-  }, [car, nights, booking]);
+  }, [car, days, booking]);
+
+  const difference = recomputedTotal - (booking?.totalCost ?? 0);
 
   const handlePickupLocationChange = (text) => {
     setEditPickupLocation(text);
@@ -114,20 +126,34 @@ export default function BookingDetailScreen() {
   const isEditValid = editStart && editEnd && editPickupTime && editReturnTime
     && editPickupLocation.trim() && editReturnLocation.trim();
 
-  const handleSave = () => {
-    if (!isEditValid) return;
-    setIsSaving(true);
-    updateBooking(booking.id, {
-      startDate: editStart.toISOString(),
-      endDate: editEnd.toISOString(),
-      pickupTime: editPickupTime,
-      returnTime: editReturnTime,
-      pickupLocation: editPickupLocation,
-      returnLocation: editReturnLocation,
-      totalCost: recomputedTotal,
-    });
-    setIsSaving(false);
-    setIsEditing(false);
+  const buildUpdatedFields = (extra = {}) => ({
+    startDate: editStart.toISOString(),
+    endDate: editEnd.toISOString(),
+    pickupTime: editPickupTime,
+    returnTime: editReturnTime,
+    pickupLocation: editPickupLocation,
+    returnLocation: editReturnLocation,
+    totalCost: recomputedTotal,
+    ...extra,
+  });
+
+  const handleConfirmNoPayment = () => {
+    updateBooking(booking.id, buildUpdatedFields());
+    setMode('view');
+  };
+
+  const handlePayDifference = async () => {
+    setIsProcessingPayment(true);
+    setPaymentError(null);
+    try {
+      const reference = await payWithPaystack(difference);
+      updateBooking(booking.id, buildUpdatedFields({ paystackReference: reference }));
+      setMode('view');
+    } catch (e) {
+      setPaymentError(e.message || 'Something went wrong. Please try again.');
+    } finally {
+      setIsProcessingPayment(false);
+    }
   };
 
   const handleConfirmCancel = () => {
@@ -164,7 +190,7 @@ export default function BookingDetailScreen() {
         </View>
       </View>
 
-      {!isEditing ? (
+      {mode === 'view' && (
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Trip Details</Text>
           <View style={styles.row}>
@@ -184,7 +210,9 @@ export default function BookingDetailScreen() {
             <Text style={styles.rowValue} numberOfLines={2}>{booking.returnLocation}</Text>
           </View>
         </View>
-      ) : (
+      )}
+
+      {mode === 'editing' && (
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Modify Trip Details</Text>
 
@@ -234,16 +262,83 @@ export default function BookingDetailScreen() {
             </View>
           )}
 
-          {!!car && nights > 0 && (
+          {!!car && days > 0 && (
             <View style={styles.recomputedBox}>
-              <Text style={styles.recomputedLabel}>New total for {nights} {nights === 1 ? 'night' : 'nights'}</Text>
+              <Text style={styles.recomputedLabel}>New total for {days} {days === 1 ? 'day' : 'days'}</Text>
               <Text style={styles.recomputedValue}>{formatCurrency(recomputedTotal)}</Text>
             </View>
           )}
         </View>
       )}
 
-      {!isEditing && (
+      {mode === 'reviewing' && (
+        <>
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>New Trip Details</Text>
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>Pickup</Text>
+              <Text style={styles.rowValue}>{formatDate(editStart)} · {editPickupTime}</Text>
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>Return</Text>
+              <Text style={styles.rowValue}>{formatDate(editEnd)} · {editReturnTime}</Text>
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>Pickup Location</Text>
+              <Text style={styles.rowValue} numberOfLines={2}>{editPickupLocation}</Text>
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>Return Location</Text>
+              <Text style={styles.rowValue} numberOfLines={2}>{editReturnLocation}</Text>
+            </View>
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Cost Summary</Text>
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>Original Total ({originalDays} {originalDays === 1 ? 'day' : 'days'})</Text>
+              <Text style={styles.rowValue}>{formatCurrency(booking.totalCost)}</Text>
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>New Total ({days} {days === 1 ? 'day' : 'days'})</Text>
+              <Text style={styles.rowValue}>{formatCurrency(recomputedTotal)}</Text>
+            </View>
+
+            <View style={styles.divider} />
+
+            <View style={styles.row}>
+              <Text style={styles.totalLabel}>
+                {difference > 0 ? 'Amount Due' : difference < 0 ? 'Difference (Credit)' : 'Amount Due'}
+              </Text>
+              <Text style={styles.totalValue}>{formatCurrency(Math.abs(difference))}</Text>
+            </View>
+
+            {difference <= 0 && (
+              <Text style={styles.noPaymentNote}>
+                {difference < 0
+                  ? 'This change lowers your total. No additional payment is required - please contact support about a refund for the difference.'
+                  : 'No additional payment is required for this change.'}
+              </Text>
+            )}
+
+            {isProcessingPayment && (
+              <View style={styles.processingBox}>
+                <ActivityIndicator size="small" color={COLORS.teal} />
+                <Text style={styles.processingText}>Processing payment...</Text>
+              </View>
+            )}
+
+            {!!paymentError && (
+              <View style={styles.errorBox}>
+                <Ionicons name="alert-circle-outline" size={16} color="#C62828" />
+                <Text style={styles.errorText}>{paymentError}</Text>
+              </View>
+            )}
+          </View>
+        </>
+      )}
+
+      {mode === 'view' && (
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Payment</Text>
           <View style={styles.row}>
@@ -265,24 +360,47 @@ export default function BookingDetailScreen() {
 
       {canModify && (
         <View style={styles.actions}>
-          {isEditing ? (
+          {mode === 'editing' && (
             <>
-              <TouchableOpacity style={styles.secondaryButton} onPress={() => setIsEditing(false)}>
+              <TouchableOpacity style={styles.secondaryButton} onPress={() => setMode('view')}>
                 <Text style={styles.secondaryButtonText}>Discard Changes</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.primaryButton, !isEditValid && styles.primaryButtonDisabled]}
-                onPress={handleSave}
-                disabled={!isEditValid || isSaving}
+                onPress={() => setMode('reviewing')}
+                disabled={!isEditValid}
               >
-                {isSaving ? (
+                <Text style={styles.primaryButtonText}>Review Changes</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {mode === 'reviewing' && (
+            <>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={() => setMode('editing')}
+                disabled={isProcessingPayment}
+              >
+                <Text style={styles.secondaryButtonText}>Back to Edit</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.primaryButton}
+                onPress={difference > 0 ? handlePayDifference : handleConfirmNoPayment}
+                disabled={isProcessingPayment}
+              >
+                {isProcessingPayment ? (
                   <ActivityIndicator color="#ffffff" size="small" />
                 ) : (
-                  <Text style={styles.primaryButtonText}>Save Changes</Text>
+                  <Text style={styles.primaryButtonText}>
+                    {difference > 0 ? `Pay ${formatCurrency(difference)}` : 'Confirm Changes'}
+                  </Text>
                 )}
               </TouchableOpacity>
             </>
-          ) : (
+          )}
+
+          {mode === 'view' && (
             <>
               <TouchableOpacity style={styles.secondaryButton} onPress={() => setIsCancelModalVisible(true)}>
                 <Text style={styles.secondaryButtonTextDanger}>Cancel Booking</Text>
@@ -410,6 +528,7 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.medium,
     fontSize: 13,
     color: '#888',
+    flexShrink: 1,
   },
   rowValue: {
     fontFamily: FONTS.semiBold,
@@ -422,6 +541,52 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.bold,
     fontSize: 16,
     color: COLORS.teal,
+  },
+  totalLabel: {
+    fontFamily: FONTS.bold,
+    fontSize: 14,
+    color: COLORS.navy,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#e5e5e5',
+    marginBottom: 12,
+  },
+  noPaymentNote: {
+    fontFamily: FONTS.regular,
+    fontSize: 12,
+    color: '#888',
+    lineHeight: 17,
+    marginTop: 4,
+  },
+  processingBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#EEF9F9',
+    borderRadius: 10,
+    padding: 14,
+    marginTop: 12,
+  },
+  processingText: {
+    fontFamily: FONTS.medium,
+    fontSize: 13,
+    color: COLORS.navy,
+  },
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FFEBEE',
+    borderRadius: 10,
+    padding: 14,
+    marginTop: 12,
+  },
+  errorText: {
+    flex: 1,
+    fontFamily: FONTS.medium,
+    fontSize: 13,
+    color: '#C62828',
   },
   field: {
     marginBottom: 18,

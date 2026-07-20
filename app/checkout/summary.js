@@ -26,7 +26,7 @@ export default function CheckoutSummaryScreen() {
       .finally(() => setIsLoading(false));
   }, [carId]);
 
-  const nights = useMemo(() => {
+  const days = useMemo(() => {
     if (!draft.startDate || !draft.endDate) return 0;
     const diff = new Date(draft.endDate) - new Date(draft.startDate);
     return Math.max(1, Math.round(diff / (1000 * 60 * 60 * 24)));
@@ -39,9 +39,9 @@ export default function CheckoutSummaryScreen() {
 
   const isSelfDrive = car?.drivenBy === 'Self-drive';
 
-  const rentalCost = (car?.pricePerDay ?? 0) * nights;
+  const rentalCost = (car?.pricePerDay ?? 0) * days;
   const addonsCost = selectedAddons.reduce((sum, addon) => {
-    return sum + (addon.type === 'per_day' ? addon.price * nights : addon.price);
+    return sum + (addon.type === 'per_day' ? addon.price * days : addon.price);
   }, 0);
   const subtotal = rentalCost + addonsCost;
   const deliveryFee = isSelfDrive ? SELF_DRIVE_DELIVERY_FEE : 0;
@@ -86,17 +86,17 @@ export default function CheckoutSummaryScreen() {
         <Text style={styles.sectionTitle}>Cost Breakdown</Text>
         <View style={styles.costCard}>
           <View style={styles.costRow}>
-            <Text style={styles.costLabel}>{formatCurrency(car.pricePerDay)} x {nights} {nights === 1 ? 'night' : 'nights'}</Text>
+            <Text style={styles.costLabel}>{formatCurrency(car.pricePerDay)} x {days} {days === 1 ? 'day' : 'days'}</Text>
             <Text style={styles.costValue}>{formatCurrency(rentalCost)}</Text>
           </View>
 
           {selectedAddons.map((addon) => (
             <View style={styles.costRow} key={addon.name}>
               <Text style={styles.costLabel}>
-                {addon.name}{addon.type === 'per_day' ? ` x ${nights}` : ''}
+                {addon.name}{addon.type === 'per_day' ? ` x ${days}` : ''}
               </Text>
               <Text style={styles.costValue}>
-                {formatCurrency(addon.type === 'per_day' ? addon.price * nights : addon.price)}
+                {formatCurrency(addon.type === 'per_day' ? addon.price * days : addon.price)}
               </Text>
             </View>
           ))}
