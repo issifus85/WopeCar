@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS } from '../../constants/theme';
+import { FONTS } from '../../constants/theme';
+import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
@@ -12,7 +13,7 @@ const TIME_SLOTS = [
   '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM',
 ];
 
-function TimeSlotPicker({ label, value, onChange }) {
+function TimeSlotPicker({ label, value, onChange, styles }) {
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
@@ -36,6 +37,8 @@ function TimeSlotPicker({ label, value, onChange }) {
 export default function CheckoutDetailsScreen() {
   const { carId } = useLocalSearchParams();
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { draft, updateDraft } = useCheckout();
 
   const [pickupTime, setPickupTime] = useState(draft.pickupTime);
@@ -69,15 +72,15 @@ export default function CheckoutDetailsScreen() {
       <CheckoutHeader title="Pickup & Return" step={2} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <TimeSlotPicker label="Pickup Time" value={pickupTime} onChange={setPickupTime} />
-        <TimeSlotPicker label="Return Time" value={returnTime} onChange={setReturnTime} />
+        <TimeSlotPicker label="Pickup Time" value={pickupTime} onChange={setPickupTime} styles={styles} />
+        <TimeSlotPicker label="Return Time" value={returnTime} onChange={setReturnTime} styles={styles} />
 
         <View style={styles.field}>
           <Text style={styles.label}>Pickup Location</Text>
           <TextInput
             style={styles.input}
             placeholder="e.g. Impact Hub, Accra"
-            placeholderTextColor="#999"
+            placeholderTextColor={colors.textSubtle}
             value={pickupLocation}
             onChangeText={handlePickupLocationChange}
           />
@@ -85,7 +88,7 @@ export default function CheckoutDetailsScreen() {
 
         <TouchableOpacity style={styles.checkboxRow} onPress={toggleSameAsPickup}>
           <View style={[styles.checkbox, sameAsPickup && styles.checkboxChecked]}>
-            {sameAsPickup && <Ionicons name="checkmark" size={14} color="#ffffff" />}
+            {sameAsPickup && <Ionicons name="checkmark" size={14} color={colors.white} />}
           </View>
           <Text style={styles.checkboxLabel}>Return to the same location</Text>
         </TouchableOpacity>
@@ -96,7 +99,7 @@ export default function CheckoutDetailsScreen() {
             <TextInput
               style={styles.input}
               placeholder="e.g. Kotoka Airport, Accra"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.textSubtle}
               value={returnLocation}
               onChangeText={setReturnLocation}
             />
@@ -109,10 +112,11 @@ export default function CheckoutDetailsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
   },
   scrollContent: {
     padding: 20,
@@ -124,7 +128,7 @@ const styles = StyleSheet.create({
   label: {
     fontFamily: FONTS.semiBold,
     fontSize: 14,
-    color: COLORS.navy,
+    color: colors.textPrimary,
     marginBottom: 10,
   },
   slotGrid: {
@@ -136,32 +140,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 9,
     borderRadius: 8,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    borderColor: colors.border,
   },
   slotActive: {
-    backgroundColor: COLORS.teal,
-    borderColor: COLORS.teal,
+    backgroundColor: colors.teal,
+    borderColor: colors.teal,
   },
   slotText: {
     fontFamily: FONTS.medium,
     fontSize: 13,
-    color: '#666',
+    color: colors.textMuted,
   },
   slotTextActive: {
     fontFamily: FONTS.semiBold,
-    color: '#ffffff',
+    color: colors.white,
   },
   input: {
     fontFamily: FONTS.regular,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.background,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    borderColor: colors.border,
+    color: colors.textPrimary,
   },
   checkboxRow: {
     flexDirection: 'row',
@@ -174,17 +179,18 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 5,
     borderWidth: 1.5,
-    borderColor: '#ccc',
+    borderColor: colors.disabled,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkboxChecked: {
-    backgroundColor: COLORS.teal,
-    borderColor: COLORS.teal,
+    backgroundColor: colors.teal,
+    borderColor: colors.teal,
   },
   checkboxLabel: {
     fontFamily: FONTS.regular,
     fontSize: 13,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
-});
+  });
+}

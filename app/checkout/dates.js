@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS } from '../../constants/theme';
+import { FONTS } from '../../constants/theme';
+import { useAppTheme } from '../../contexts/ThemeContext';
 import { getMinBookingDays } from '../../constants/pricing';
 import { fetchCarById, fetchCarAvailability } from '../../services/carsApi';
 import { useCheckout } from '../../contexts/CheckoutContext';
@@ -42,6 +43,8 @@ function buildMonthGrid(viewMonth) {
 export default function CheckoutDatesScreen() {
   const { carId } = useLocalSearchParams();
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { draft, updateDraft, startCheckout } = useCheckout();
 
   // Reached directly after a login redirect (cart.js only calls
@@ -123,7 +126,7 @@ export default function CheckoutDatesScreen() {
   if (isLoading) {
     return (
       <View style={styles.centerState}>
-        <ActivityIndicator size="large" color={COLORS.teal} />
+        <ActivityIndicator size="large" color={colors.teal} />
       </View>
     );
   }
@@ -151,7 +154,7 @@ export default function CheckoutDatesScreen() {
 
         <View style={styles.legendRow}>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: COLORS.teal }]} />
+            <View style={[styles.legendDot, { backgroundColor: colors.teal }]} />
             <Text style={styles.legendText}>Selected</Text>
           </View>
           <View style={styles.legendItem}>
@@ -162,13 +165,13 @@ export default function CheckoutDatesScreen() {
 
         <View style={styles.monthNav}>
           <TouchableOpacity onPress={() => goToMonth(-1)} disabled={!canGoPrev} hitSlop={10}>
-            <Ionicons name="chevron-back" size={22} color={canGoPrev ? COLORS.navy : '#ccc'} />
+            <Ionicons name="chevron-back" size={22} color={canGoPrev ? colors.textPrimary : colors.disabled} />
           </TouchableOpacity>
           <Text style={styles.monthLabel}>
             {MONTH_NAMES[viewMonth.getMonth()]} {viewMonth.getFullYear()}
           </Text>
           <TouchableOpacity onPress={() => goToMonth(1)} hitSlop={10}>
-            <Ionicons name="chevron-forward" size={22} color={COLORS.navy} />
+            <Ionicons name="chevron-forward" size={22} color={colors.textPrimary} />
           </TouchableOpacity>
         </View>
 
@@ -223,7 +226,7 @@ export default function CheckoutDatesScreen() {
             <Ionicons
               name={isBelowMinimum ? 'alert-circle-outline' : 'calendar-outline'}
               size={18}
-              color={isBelowMinimum ? '#C62828' : COLORS.teal}
+              color={isBelowMinimum ? colors.error : colors.teal}
             />
             <Text style={[styles.summaryText, isBelowMinimum && styles.summaryTextWarning]}>
               {isBelowMinimum
@@ -243,10 +246,11 @@ export default function CheckoutDatesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
   },
   scrollContent: {
     padding: 20,
@@ -261,18 +265,18 @@ const styles = StyleSheet.create({
   errorText: {
     fontFamily: FONTS.regular,
     fontSize: 14,
-    color: '#666',
+    color: colors.textMuted,
     textAlign: 'center',
   },
   carName: {
     fontFamily: FONTS.bold,
     fontSize: 18,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
   carSubtitle: {
     fontFamily: FONTS.regular,
     fontSize: 13,
-    color: '#888',
+    color: colors.textSubtle,
     marginTop: 2,
     marginBottom: 16,
   },
@@ -294,7 +298,7 @@ const styles = StyleSheet.create({
   legendText: {
     fontFamily: FONTS.regular,
     fontSize: 12,
-    color: '#666',
+    color: colors.textMuted,
   },
   monthNav: {
     flexDirection: 'row',
@@ -305,7 +309,7 @@ const styles = StyleSheet.create({
   monthLabel: {
     fontFamily: FONTS.semiBold,
     fontSize: 15,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
   weekdayRow: {
     flexDirection: 'row',
@@ -316,7 +320,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontFamily: FONTS.medium,
     fontSize: 12,
-    color: '#999',
+    color: colors.textSubtle,
   },
   grid: {
     flexDirection: 'row',
@@ -329,7 +333,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dayCellInRange: {
-    backgroundColor: '#EEF9F9',
+    backgroundColor: colors.highlight,
   },
   dayCircle: {
     width: 34,
@@ -342,46 +346,47 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFCDD2',
   },
   dayCircleSelected: {
-    backgroundColor: COLORS.teal,
+    backgroundColor: colors.teal,
   },
   dayCircleToday: {
     borderWidth: 1,
-    borderColor: COLORS.teal,
+    borderColor: colors.teal,
   },
   dayText: {
     fontFamily: FONTS.regular,
     fontSize: 14,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
   dayTextPast: {
-    color: '#ccc',
+    color: colors.disabled,
   },
   dayTextBooked: {
     color: '#C62828',
   },
   dayTextSelected: {
     fontFamily: FONTS.semiBold,
-    color: '#ffffff',
+    color: colors.white,
   },
   summaryBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
     borderRadius: 10,
     padding: 12,
     marginTop: 16,
   },
   summaryBoxWarning: {
-    backgroundColor: '#FFEBEE',
+    backgroundColor: colors.errorBg,
   },
   summaryText: {
     fontFamily: FONTS.medium,
     fontSize: 13,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
   summaryTextWarning: {
-    color: '#C62828',
+    color: colors.error,
     flex: 1,
   },
-});
+  });
+}

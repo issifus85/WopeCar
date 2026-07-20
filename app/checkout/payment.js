@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { StyleSheet, Text, View, ActivityIndicator, ScrollView, Image } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS } from '../../constants/theme';
+import { FONTS } from '../../constants/theme';
+import { useAppTheme } from '../../contexts/ThemeContext';
 import { formatCurrency } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { payWithPaystack } from '../../services/paystackCheckout';
@@ -15,6 +16,8 @@ import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 export default function CheckoutPaymentScreen() {
   const { carId } = useLocalSearchParams();
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { draft, resetCheckout } = useCheckout();
   const { addBooking } = useBookings();
   const { removeFromCart } = useCart();
@@ -68,7 +71,7 @@ export default function CheckoutPaymentScreen() {
   if (isLoading || !car) {
     return (
       <View style={styles.centerState}>
-        <ActivityIndicator size="large" color={COLORS.teal} />
+        <ActivityIndicator size="large" color={colors.teal} />
       </View>
     );
   }
@@ -94,7 +97,7 @@ export default function CheckoutPaymentScreen() {
         </View>
 
         <View style={styles.infoBox}>
-          <Ionicons name="lock-closed-outline" size={16} color={COLORS.teal} />
+          <Ionicons name="lock-closed-outline" size={16} color={colors.teal} />
           <Text style={styles.infoText}>
             Secured by Paystack. Your card details are never stored on this device.
           </Text>
@@ -102,14 +105,14 @@ export default function CheckoutPaymentScreen() {
 
         {isProcessing && (
           <View style={styles.processingBox}>
-            <ActivityIndicator size="small" color={COLORS.teal} />
+            <ActivityIndicator size="small" color={colors.teal} />
             <Text style={styles.processingText}>Processing payment...</Text>
           </View>
         )}
 
         {!!error && (
           <View style={styles.errorBox}>
-            <Ionicons name="alert-circle-outline" size={16} color="#C62828" />
+            <Ionicons name="alert-circle-outline" size={16} color={colors.error} />
             <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
@@ -124,103 +127,105 @@ export default function CheckoutPaymentScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  scrollContent: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  centerState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  paystackBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#00C3F1',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    marginBottom: 20,
-  },
-  paystackText: {
-    fontFamily: FONTS.bold,
-    fontSize: 12,
-    color: '#ffffff',
-  },
-  summaryCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    backgroundColor: COLORS.background,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 20,
-  },
-  carImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 10,
-  },
-  summaryInfo: {
-    flex: 1,
-  },
-  carName: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 14,
-    color: COLORS.navy,
-    marginBottom: 6,
-  },
-  totalLabel: {
-    fontFamily: FONTS.regular,
-    fontSize: 11,
-    color: '#888',
-  },
-  totalValue: {
-    fontFamily: FONTS.bold,
-    fontSize: 20,
-    color: COLORS.teal,
-  },
-  infoBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 16,
-  },
-  infoText: {
-    flex: 1,
-    fontFamily: FONTS.regular,
-    fontSize: 12,
-    color: '#888',
-  },
-  processingBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#EEF9F9',
-    borderRadius: 10,
-    padding: 14,
-  },
-  processingText: {
-    fontFamily: FONTS.medium,
-    fontSize: 13,
-    color: COLORS.navy,
-  },
-  errorBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#FFEBEE',
-    borderRadius: 10,
-    padding: 14,
-  },
-  errorText: {
-    flex: 1,
-    fontFamily: FONTS.medium,
-    fontSize: 13,
-    color: '#C62828',
-  },
-});
+function createStyles(colors) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.surface,
+    },
+    scrollContent: {
+      padding: 20,
+      paddingBottom: 40,
+    },
+    centerState: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    paystackBadge: {
+      alignSelf: 'flex-start',
+      backgroundColor: '#00C3F1',
+      borderRadius: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      marginBottom: 20,
+    },
+    paystackText: {
+      fontFamily: FONTS.bold,
+      fontSize: 12,
+      color: '#ffffff',
+    },
+    summaryCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+      backgroundColor: colors.background,
+      borderRadius: 12,
+      padding: 14,
+      marginBottom: 20,
+    },
+    carImage: {
+      width: 64,
+      height: 64,
+      borderRadius: 10,
+    },
+    summaryInfo: {
+      flex: 1,
+    },
+    carName: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 14,
+      color: colors.textPrimary,
+      marginBottom: 6,
+    },
+    totalLabel: {
+      fontFamily: FONTS.regular,
+      fontSize: 11,
+      color: colors.textSubtle,
+    },
+    totalValue: {
+      fontFamily: FONTS.bold,
+      fontSize: 20,
+      color: colors.teal,
+    },
+    infoBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 16,
+    },
+    infoText: {
+      flex: 1,
+      fontFamily: FONTS.regular,
+      fontSize: 12,
+      color: colors.textSubtle,
+    },
+    processingBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: colors.highlight,
+      borderRadius: 10,
+      padding: 14,
+    },
+    processingText: {
+      fontFamily: FONTS.medium,
+      fontSize: 13,
+      color: colors.textPrimary,
+    },
+    errorBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: colors.errorBg,
+      borderRadius: 10,
+      padding: 14,
+    },
+    errorText: {
+      flex: 1,
+      fontFamily: FONTS.medium,
+      fontSize: 13,
+      color: colors.error,
+    },
+  });
+}

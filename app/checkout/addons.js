@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS } from '../../constants/theme';
+import { FONTS } from '../../constants/theme';
+import { useAppTheme } from '../../contexts/ThemeContext';
 import { formatCurrency } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { useCheckout } from '../../contexts/CheckoutContext';
@@ -12,6 +13,8 @@ import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 export default function CheckoutAddonsScreen() {
   const { carId } = useLocalSearchParams();
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { draft, updateDraft } = useCheckout();
 
   const [car, setCar] = useState(null);
@@ -44,7 +47,7 @@ export default function CheckoutAddonsScreen() {
   if (isLoading) {
     return (
       <View style={styles.centerState}>
-        <ActivityIndicator size="large" color={COLORS.teal} />
+        <ActivityIndicator size="large" color={colors.teal} />
       </View>
     );
   }
@@ -63,7 +66,7 @@ export default function CheckoutAddonsScreen() {
 
         {addons.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="checkmark-circle-outline" size={28} color="#ccc" />
+            <Ionicons name="checkmark-circle-outline" size={28} color={colors.disabled} />
             <Text style={styles.emptyText}>No regional add-ons for this car.</Text>
           </View>
         ) : (
@@ -76,7 +79,7 @@ export default function CheckoutAddonsScreen() {
                 onPress={() => toggleAddon(addon.name)}
               >
                 <View style={[styles.checkbox, isSelected && styles.checkboxChecked]}>
-                  {isSelected && <Ionicons name="checkmark" size={14} color="#ffffff" />}
+                  {isSelected && <Ionicons name="checkmark" size={14} color={colors.white} />}
                 </View>
                 <View style={styles.addonInfo}>
                   <Text style={styles.addonName}>{addon.name}</Text>
@@ -96,88 +99,90 @@ export default function CheckoutAddonsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  scrollContent: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  centerState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sectionTitle: {
-    fontFamily: FONTS.bold,
-    fontSize: 16,
-    color: COLORS.navy,
-  },
-  sectionSubtitle: {
-    fontFamily: FONTS.regular,
-    fontSize: 13,
-    color: '#888',
-    marginTop: 4,
-    marginBottom: 20,
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-    gap: 10,
-  },
-  emptyText: {
-    fontFamily: FONTS.regular,
-    fontSize: 13,
-    color: '#999',
-  },
-  addonRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: COLORS.background,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-  },
-  addonRowSelected: {
-    borderColor: COLORS.teal,
-    backgroundColor: '#EEF9F9',
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: '#ccc',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxChecked: {
-    backgroundColor: COLORS.teal,
-    borderColor: COLORS.teal,
-  },
-  addonInfo: {
-    flex: 1,
-  },
-  addonName: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 14,
-    color: COLORS.navy,
-  },
-  addonType: {
-    fontFamily: FONTS.regular,
-    fontSize: 11,
-    color: '#888',
-    marginTop: 2,
-  },
-  addonPrice: {
-    fontFamily: FONTS.bold,
-    fontSize: 14,
-    color: COLORS.teal,
-  },
-});
+function createStyles(colors) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.surface,
+    },
+    scrollContent: {
+      padding: 20,
+      paddingBottom: 40,
+    },
+    centerState: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    sectionTitle: {
+      fontFamily: FONTS.bold,
+      fontSize: 16,
+      color: colors.textPrimary,
+    },
+    sectionSubtitle: {
+      fontFamily: FONTS.regular,
+      fontSize: 13,
+      color: colors.textSubtle,
+      marginTop: 4,
+      marginBottom: 20,
+    },
+    emptyState: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 40,
+      gap: 10,
+    },
+    emptyText: {
+      fontFamily: FONTS.regular,
+      fontSize: 13,
+      color: colors.textSubtle,
+    },
+    addonRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: colors.background,
+      borderRadius: 12,
+      padding: 14,
+      marginBottom: 10,
+      borderWidth: 1.5,
+      borderColor: 'transparent',
+    },
+    addonRowSelected: {
+      borderColor: colors.teal,
+      backgroundColor: colors.highlight,
+    },
+    checkbox: {
+      width: 22,
+      height: 22,
+      borderRadius: 6,
+      borderWidth: 1.5,
+      borderColor: colors.disabled,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    checkboxChecked: {
+      backgroundColor: colors.teal,
+      borderColor: colors.teal,
+    },
+    addonInfo: {
+      flex: 1,
+    },
+    addonName: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 14,
+      color: colors.textPrimary,
+    },
+    addonType: {
+      fontFamily: FONTS.regular,
+      fontSize: 11,
+      color: colors.textSubtle,
+      marginTop: 2,
+    },
+    addonPrice: {
+      fontFamily: FONTS.bold,
+      fontSize: 14,
+      color: colors.teal,
+    },
+  });
+}

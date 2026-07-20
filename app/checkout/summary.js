@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { StyleSheet, Text, View, ActivityIndicator, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { COLORS, FONTS } from '../../constants/theme';
+import { FONTS } from '../../constants/theme';
+import { useAppTheme } from '../../contexts/ThemeContext';
 import { formatCurrency, SELF_DRIVE_DELIVERY_FEE, calculateSecurityDeposit } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { useCheckout } from '../../contexts/CheckoutContext';
@@ -15,6 +16,8 @@ function formatDate(iso) {
 export default function CheckoutSummaryScreen() {
   const { carId } = useLocalSearchParams();
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { draft, updateDraft } = useCheckout();
 
   const [car, setCar] = useState(null);
@@ -56,7 +59,7 @@ export default function CheckoutSummaryScreen() {
   if (isLoading || !car) {
     return (
       <View style={styles.centerState}>
-        <ActivityIndicator size="large" color={COLORS.teal} />
+        <ActivityIndicator size="large" color={colors.teal} />
       </View>
     );
   }
@@ -127,10 +130,11 @@ export default function CheckoutSummaryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
   },
   scrollContent: {
     padding: 20,
@@ -144,11 +148,11 @@ const styles = StyleSheet.create({
   carName: {
     fontFamily: FONTS.bold,
     fontSize: 18,
-    color: COLORS.navy,
+    color: colors.textPrimary,
     marginBottom: 16,
   },
   tripCard: {
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
     borderRadius: 12,
     padding: 16,
     marginBottom: 24,
@@ -162,23 +166,23 @@ const styles = StyleSheet.create({
   tripLabel: {
     fontFamily: FONTS.medium,
     fontSize: 13,
-    color: '#888',
+    color: colors.textSubtle,
   },
   tripValue: {
     fontFamily: FONTS.semiBold,
     fontSize: 13,
-    color: COLORS.navy,
+    color: colors.textPrimary,
     flexShrink: 1,
     textAlign: 'right',
   },
   sectionTitle: {
     fontFamily: FONTS.bold,
     fontSize: 16,
-    color: COLORS.navy,
+    color: colors.textPrimary,
     marginBottom: 12,
   },
   costCard: {
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
     borderRadius: 12,
     padding: 16,
   },
@@ -190,29 +194,30 @@ const styles = StyleSheet.create({
   costLabel: {
     fontFamily: FONTS.regular,
     fontSize: 13,
-    color: '#666',
+    color: colors.textMuted,
     flexShrink: 1,
     paddingRight: 8,
   },
   costValue: {
     fontFamily: FONTS.medium,
     fontSize: 13,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
   divider: {
     height: 1,
-    backgroundColor: '#e5e5e5',
+    backgroundColor: colors.border,
     marginVertical: 4,
     marginBottom: 12,
   },
   totalLabel: {
     fontFamily: FONTS.bold,
     fontSize: 15,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
   totalValue: {
     fontFamily: FONTS.bold,
     fontSize: 17,
-    color: COLORS.teal,
+    color: colors.teal,
   },
-});
+  });
+}

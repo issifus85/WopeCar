@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Modal, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS } from '../constants/theme';
+import { FONTS } from '../constants/theme';
+import { useAppTheme } from '../contexts/ThemeContext';
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const MONTH_NAMES = [
@@ -43,6 +44,8 @@ export function formatDateShort(date) {
 }
 
 export default function DateRangeModal({ visible, onClose, startDate, endDate, onApply }) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const today = stripTime(new Date());
   const [viewMonth, setViewMonth] = useState(startDate ? stripTime(startDate) : today);
   const [tempStart, setTempStart] = useState(startDate ?? null);
@@ -98,7 +101,7 @@ export default function DateRangeModal({ visible, onClose, startDate, endDate, o
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Select Dates</Text>
             <TouchableOpacity onPress={onClose} hitSlop={10}>
-              <Ionicons name="close" size={24} color={COLORS.navy} />
+              <Ionicons name="close" size={24} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
 
@@ -111,14 +114,14 @@ export default function DateRangeModal({ visible, onClose, startDate, endDate, o
               <Ionicons
                 name="chevron-back"
                 size={22}
-                color={canGoPrev ? COLORS.navy : '#ccc'}
+                color={canGoPrev ? colors.textPrimary : colors.disabled}
               />
             </TouchableOpacity>
             <Text style={styles.monthLabel}>
               {MONTH_NAMES[viewMonth.getMonth()]} {viewMonth.getFullYear()}
             </Text>
             <TouchableOpacity onPress={() => goToMonth(1)} hitSlop={10}>
-              <Ionicons name="chevron-forward" size={22} color={COLORS.navy} />
+              <Ionicons name="chevron-forward" size={22} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
 
@@ -188,14 +191,15 @@ export default function DateRangeModal({ visible, onClose, startDate, endDate, o
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) {
+  return StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
@@ -210,7 +214,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontFamily: FONTS.bold,
     fontSize: 18,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
   monthNav: {
     flexDirection: 'row',
@@ -221,7 +225,7 @@ const styles = StyleSheet.create({
   monthLabel: {
     fontFamily: FONTS.semiBold,
     fontSize: 15,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
   weekdayRow: {
     flexDirection: 'row',
@@ -232,7 +236,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontFamily: FONTS.medium,
     fontSize: 12,
-    color: '#999',
+    color: colors.textSubtle,
   },
   grid: {
     flexDirection: 'row',
@@ -245,7 +249,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dayCellInRange: {
-    backgroundColor: '#EEF9F9',
+    backgroundColor: colors.highlight,
   },
   dayCircle: {
     width: 34,
@@ -255,23 +259,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dayCircleSelected: {
-    backgroundColor: COLORS.teal,
+    backgroundColor: colors.teal,
   },
   dayCircleToday: {
     borderWidth: 1,
-    borderColor: COLORS.teal,
+    borderColor: colors.teal,
   },
   dayText: {
     fontFamily: FONTS.regular,
     fontSize: 14,
-    color: COLORS.navy,
+    color: colors.textPrimary,
   },
   dayTextPast: {
-    color: '#ccc',
+    color: colors.disabled,
   },
   dayTextSelected: {
     fontFamily: FONTS.semiBold,
-    color: '#ffffff',
+    color: colors.white,
   },
   footer: {
     flexDirection: 'row',
@@ -282,20 +286,21 @@ const styles = StyleSheet.create({
   clearText: {
     fontFamily: FONTS.semiBold,
     fontSize: 15,
-    color: '#666',
+    color: colors.textMuted,
   },
   applyButton: {
-    backgroundColor: COLORS.orange,
+    backgroundColor: colors.orange,
     paddingHorizontal: 24,
     paddingVertical: 14,
     borderRadius: 10,
   },
   applyButtonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: colors.disabled,
   },
   applyButtonText: {
     fontFamily: FONTS.semiBold,
-    color: '#ffffff',
+    color: colors.white,
     fontSize: 15,
   },
-});
+  });
+}
