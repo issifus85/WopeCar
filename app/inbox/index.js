@@ -5,6 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useInbox } from '../../contexts/InboxContext';
+import SwipeableRow from '../../components/SwipeableRow';
+import ConfirmModal from '../../components/ConfirmModal';
 
 const TABS = ['Messages', 'Notifications'];
 
@@ -31,10 +33,10 @@ function formatRelativeTime(iso) {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-function ConversationRow({ conversation, onPress, styles, colors }) {
+function ConversationRow({ conversation, styles, colors }) {
   const roleIcon = ROLE_ICONS[conversation.participant.role] ?? 'person-outline';
   return (
-    <TouchableOpacity style={styles.row} onPress={onPress}>
+    <View style={styles.row}>
       {conversation.participant.avatar ? (
         <Image source={{ uri: conversation.participant.avatar }} style={styles.avatarImage} />
       ) : (
@@ -57,14 +59,14 @@ function ConversationRow({ conversation, onPress, styles, colors }) {
           <Text style={styles.unreadBadgeText}>{conversation.unreadCount}</Text>
         </View>
       )}
-    </TouchableOpacity>
+    </View>
   );
 }
 
-function NotificationRow({ notification, onPress, styles, colors }) {
+function NotificationRow({ notification, styles, colors }) {
   const icon = NOTIFICATION_ICONS[notification.type] ?? 'notifications-outline';
   return (
-    <TouchableOpacity style={styles.row} onPress={onPress}>
+    <View style={styles.row}>
       <View style={styles.notificationIcon}>
         <Ionicons name={icon} size={18} color={colors.teal} />
       </View>
@@ -76,7 +78,7 @@ function NotificationRow({ notification, onPress, styles, colors }) {
         <Text style={styles.rowPreview} numberOfLines={2}>{notification.body}</Text>
       </View>
       {!notification.readAt && <View style={styles.unreadDot} />}
-    </TouchableOpacity>
+    </View>
   );
 }
 
@@ -87,8 +89,10 @@ export default function InboxScreen() {
   const {
     conversations, notifications, isLoading,
     markConversationRead, markNotificationRead, markAllNotificationsRead,
+    markConversationUnread, deleteConversation, markNotificationUnread, deleteNotification,
   } = useInbox();
   const [activeTab, setActiveTab] = useState('Messages');
+  const [pendingDelete, setPendingDelete] = useState(null);
 
   const unreadNotificationsCount = notifications.filter(n => !n.readAt).length;
 
@@ -101,6 +105,27 @@ export default function InboxScreen() {
     markNotificationRead(notification.id);
     if (notification.bookingId) router.push(`/booking/${notification.bookingId}`);
   };
+
+  const confirmDelete = () => {
+    if (!pendingDelete) return;
+    if (pendingDelete.type === 'conversation') deleteConversation(pendingDelete.id);
+    else deleteNotification(pendingDelete.id);
+    setPendingDelete(null);
+  };
+
+  const conversationActions = (conversation) => [
+    conversation.unreadCount > 0
+      ? { label: 'Read', icon: 'mail-open-outline', color: colors.teal, onPress: () => markConversationRead(conversation.id) }
+      : { label: 'Unread', icon: 'mail-unread-outline', color: colors.warning, onPress: () => markConversationUnread(conversation.id) },
+    { label: 'Delete', icon: 'trash-outline', color: colors.error, onPress: () => setPendingDelete({ type: 'conversation', id: conversation.id }) },
+  ];
+
+  const notificationActions = (notification) => [
+    notification.readAt
+      ? { label: 'Unread', icon: 'mail-unread-outline', color: colors.warning, onPress: () => markNotificationUnread(notification.id) }
+      : { label: 'Read', icon: 'mail-open-outline', color: colors.teal, onPress: () => markNotificationRead(notification.id) },
+    { label: 'Delete', icon: 'trash-outline', color: colors.error, onPress: () => setPendingDelete({ type: 'notification', id: notification.id }) },
+  ];
 
   return (
     <View style={styles.container}>
@@ -143,7 +168,9 @@ export default function InboxScreen() {
             data={conversations}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
-              <ConversationRow conversation={item} onPress={() => openConversation(item)} styles={styles} colors={colors} />
+              <SwipeableRow colors={colors} onPress={() => openConversation(item)} actions={conversationActions(item)}>
+                <ConversationRow conversation={item} styles={styles} colors={colors} />
+              </SwipeableRow>
             )}
             contentContainerStyle={styles.list}
             showsVerticalScrollIndicator={false}
@@ -159,12 +186,25 @@ export default function InboxScreen() {
           data={notifications}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <NotificationRow notification={item} onPress={() => openNotification(item)} styles={styles} colors={colors} />
+            <SwipeableRow colors={colors} onPress={() => openNotification(item)} actions={notificationActions(item)}>
+              <NotificationRow notification={item} styles={styles} colors={colors} />
+            </SwipeableRow>
           )}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
         />
       )}
+
+      <ConfirmModal
+        visible={!!pendingDelete}
+        title={pendingDelete?.type === 'conversation' ? 'Delete Conversation' : 'Delete Notification'}
+        message={`Are you sure you want to delete this ${pendingDelete?.type === 'conversation' ? 'conversation' : 'notification'}? This cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        destructive
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </View>
   );
 }
@@ -245,14 +285,7 @@ function createStyles(colors) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      backgroundColor: colors.surface,
-      borderRadius: 12,
       padding: 12,
-      marginBottom: 10,
-      shadowColor: colors.shadow,
-      shadowOpacity: 0.05,
-      shadowRadius: 6,
-      elevation: 2,
     },
     avatarImage: {
       width: 44,

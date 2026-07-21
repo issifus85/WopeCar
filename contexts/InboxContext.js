@@ -297,6 +297,45 @@ export function InboxProvider({ children }) {
     });
   }, []);
 
+  const markConversationUnread = useCallback((conversationId) => {
+    setData((prev) => {
+      const conversations = prev.conversations.map((c) =>
+        c.id === conversationId ? { ...c, unreadCount: Math.max(1, c.unreadCount) } : c
+      );
+      const next = { ...prev, conversations };
+      inboxStorage.setInboxData(next);
+      return next;
+    });
+  }, []);
+
+  const deleteConversation = useCallback((conversationId) => {
+    setData((prev) => {
+      const conversations = prev.conversations.filter((c) => c.id !== conversationId);
+      const messages = prev.messages.filter((m) => m.conversationId !== conversationId);
+      const next = { ...prev, conversations, messages };
+      inboxStorage.setInboxData(next);
+      return next;
+    });
+  }, []);
+
+  const markNotificationUnread = useCallback((id) => {
+    setData((prev) => {
+      const notifications = prev.notifications.map((n) => (n.id === id ? { ...n, readAt: null } : n));
+      const next = { ...prev, notifications };
+      inboxStorage.setInboxData(next);
+      return next;
+    });
+  }, []);
+
+  const deleteNotification = useCallback((id) => {
+    setData((prev) => {
+      const notifications = prev.notifications.filter((n) => n.id !== id);
+      const next = { ...prev, notifications };
+      inboxStorage.setInboxData(next);
+      return next;
+    });
+  }, []);
+
   const conversations = useMemo(() => {
     return [...data.conversations].sort((a, b) => {
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
@@ -325,10 +364,15 @@ export function InboxProvider({ children }) {
     markConversationRead,
     markNotificationRead,
     markAllNotificationsRead,
+    markConversationUnread,
+    deleteConversation,
+    markNotificationUnread,
+    deleteNotification,
     notifyBookingEvent,
   }), [
     conversations, notifications, isLoading, totalUnreadCount, getMessages, sendMessage,
-    startConversation, markConversationRead, markNotificationRead, markAllNotificationsRead, notifyBookingEvent,
+    startConversation, markConversationRead, markNotificationRead, markAllNotificationsRead,
+    markConversationUnread, deleteConversation, markNotificationUnread, deleteNotification, notifyBookingEvent,
   ]);
 
   return <InboxContext.Provider value={value}>{children}</InboxContext.Provider>;
