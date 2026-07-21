@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, ActivityIndicator, ScrollView } from 'react-nat
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
-import { formatCurrency, SELF_DRIVE_DELIVERY_FEE, calculateSecurityDeposit } from '../../constants/pricing';
+import { formatCurrency, SELF_DRIVE_DELIVERY_FEE, calculateSecurityDeposit, calculateRentalPricing } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
@@ -30,10 +30,16 @@ export default function CheckoutSummaryScreen() {
   }, [carId]);
 
   const days = useMemo(() => {
-    if (!draft.startDate || !draft.endDate) return 0;
-    const diff = new Date(draft.endDate) - new Date(draft.startDate);
-    return Math.max(1, Math.round(diff / (1000 * 60 * 60 * 24)));
-  }, [draft.startDate, draft.endDate]);
+    if (!draft.startDate || !draft.endDate || !car) return 0;
+    return calculateRentalPricing({
+      startDate: draft.startDate,
+      endDate: draft.endDate,
+      pickupTime: draft.pickupTime,
+      returnTime: draft.returnTime,
+      drivenBy: car.drivenBy,
+      dailyRate: car.pricePerDay,
+    }).billableDays;
+  }, [draft.startDate, draft.endDate, draft.pickupTime, draft.returnTime, car]);
 
   const selectedAddons = useMemo(() => {
     if (!car) return [];
