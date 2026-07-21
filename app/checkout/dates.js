@@ -141,7 +141,13 @@ export default function CheckoutDatesScreen() {
 
   const cells = buildMonthGrid(viewMonth);
   const minDays = getMinBookingDays(car.drivenBy);
-  const selectedDays = tempStart && tempEnd ? Math.round((tempEnd - tempStart) / (1000 * 60 * 60 * 24)) : 0;
+  // Inclusive day count so picking the same day for pickup and return reads
+  // as a 1-day booking (matching calculateRentalPricing's billing cycles)
+  // rather than 0 - which used to silently fail the minimum-days check and
+  // force a same-day chauffeur rental into an unwanted 2nd billable day.
+  const selectedDays = tempStart && tempEnd
+    ? Math.round((tempEnd - tempStart) / (1000 * 60 * 60 * 24)) + 1
+    : 0;
   const isBelowMinimum = tempStart && tempEnd && selectedDays < minDays;
 
   return (
