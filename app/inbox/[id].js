@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
@@ -30,6 +31,7 @@ function MessageBubble({ message, styles }) {
 export default function ConversationScreen() {
   const { id } = useLocalSearchParams();
   const { colors } = useAppTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { conversations, getMessages, sendMessage, markConversationRead } = useInbox();
   const [draft, setDraft] = useState('');
@@ -98,7 +100,7 @@ export default function ConversationScreen() {
         />
       )}
 
-      <View style={styles.composer}>
+      <View style={[styles.composer, { paddingBottom: Math.max(12, insets.bottom) }]}>
         <TextInput
           style={styles.input}
           value={draft}
