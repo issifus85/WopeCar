@@ -90,8 +90,8 @@ Any piece of app state that must survive a reload but doesn't belong on the serv
 
 ### 3.5 Styling conventions
 
-- No CSS-in-JS library, no NativeWind/Tailwind — plain `StyleSheet.create` at the bottom of every file.
-- Colors and fonts always come from `constants/theme.js` (`COLORS.*`, `FONTS.*`), never hardcoded hex/font-family strings in a screen (small exceptions: one-off status colors like `'#C62828'` for errors/destructive text, `'#2E7D32'` for success — these are used ad hoc, not centralized).
+- No CSS-in-JS library, no NativeWind/Tailwind — plain `StyleSheet.create`, but **not called at module scope** — every screen/component wraps it in `function createStyles(colors) { return StyleSheet.create({...}); }` and calls it via `const styles = useMemo(() => createStyles(colors), [colors]);` inside the component, so styles re-derive when the theme flips. See [6.9](#69-dark-theme--themecontext).
+- Colors and fonts always come from `constants/theme.js` — brand-fixed accents via `COLORS.*` (`teal`/`orange`/`mauve`/`navy`, constant across themes) and everything else via the `colors` object from `useAppTheme()` (`colors.textPrimary`, `colors.surface`, `colors.border`, etc.) — never hardcoded hex/font-family strings in a screen. Small deliberate exceptions kept as literals across both themes: decorative drive-type badge tints, the Paystack brand blue badge, star-rating gold, photo-overlay buttons on Car Detail, the booked-date pink indicator in `checkout/dates.js`.
 - Money always formatted via `formatCurrency()` from `constants/pricing.js`, never templated by hand.
 - Modals are `react-native` `Modal` + `Pressable` backdrop, **not** `Alert.alert()` — `Alert.alert()` renders no UI at all on React Native Web, confirmed by testing. See `components/ConfirmModal.js`.
 
@@ -151,16 +151,29 @@ If rebuilding from an empty folder, this is the order it was actually built in, 
 
 ## 5. Design System
 
-`constants/theme.js`:
+`constants/theme.js` exports brand-fixed `COLORS` (unchanged across themes) plus `LIGHT_COLORS`/`DARK_COLORS` (semantic tokens that flip):
 ```js
 export const COLORS = {
-  navy: '#154B59',
-  teal: '#3EB6BA',
-  orange: '#D07E5A',
-  mauve: '#B8826F',
-  background: '#f5f5f5',
-  white: '#ffffff',
-  textMuted: '#666666',
+  navy: '#154B59', teal: '#3EB6BA', orange: '#D07E5A', mauve: '#B8826F',
+  background: '#f5f5f5', white: '#ffffff', textMuted: '#666666',
+};
+
+export const LIGHT_COLORS = {
+  ...COLORS, background: '#f5f5f5', surface: '#ffffff', textPrimary: COLORS.navy,
+  textBody: '#444444', textMuted: '#666666', textSubtle: '#999999',
+  border: '#e5e5e5', divider: '#f0f0f0', disabled: '#cccccc', highlight: '#EEF9F9',
+  white: '#ffffff', black: '#000000', error: '#C62828', errorBg: '#FFEBEE',
+  success: '#2E7D32', successBg: '#E8F5E9', warning: '#E65100', warningBg: '#FFF3E0',
+  shadow: '#000000',
+};
+
+export const DARK_COLORS = {
+  ...COLORS, background: '#12181A', surface: '#1E2A2D', textPrimary: '#F2F7F7',
+  textBody: '#D7E2E2', textMuted: '#A3B5B6', textSubtle: '#7E9294',
+  border: '#2C3B3E', divider: '#243134', disabled: '#4B5C5E', highlight: '#133A3C',
+  white: '#ffffff', black: '#000000', error: '#FF7A7A', errorBg: '#3B1519',
+  success: '#7BD88A', successBg: '#123821', warning: '#FFB86B', warningBg: '#3D2A0C',
+  shadow: '#000000',
 };
 
 export const FONTS = {
@@ -172,7 +185,7 @@ export const FONTS = {
   display: 'DanburyCaps',
 };
 ```
-Ad hoc colors used outside this palette (not centralized — follow existing usage): `'#C62828'` / `'#FFEBEE'` for errors/destructive, `'#2E7D32'` / `'#E8F5E9'` for success/verified, `'#E65100'` / `'#FFF3E0'` for pending/warning.
+`FONTS` is theme-independent and imported directly. `COLORS` is only imported directly for the handful of literal-across-themes uses (e.g. `login.js`'s teal overlay tint and orange submit button) — everywhere else, screens read `colors.*` from `useAppTheme()`. See [6.9](#69-dark-theme--themecontext) for the full token-mapping convention and the component pattern.
 
 ---
 
@@ -330,11 +343,40 @@ Validity gate (`isEditValid`) requires: dates + times + both locations filled, *
 
 `app/settings/index.js` — one scrollable hub, sectioned to match the original spec doc (`WopeCar App Profile Settings.docx`), using local helper components defined in that file: `Section`, `Row`, `ToggleRow`, `PickerRow`, `NavRow`, `StaticRow`. Every row is one of:
 - **Real navigation** to an already-existing screen (Account Information/Change Email/Change Mobile Number → `/account`; Terms/Privacy → existing screens) — never a duplicate of functionality that already exists elsewhere.
-- **Real local toggle/picker**, persisted via `SettingsContext`, that **genuinely saves the value** but doesn't yet change app behavior (no dark theme, i18n, multi-currency, or push service exist yet) — explicitly not faked further than that.
+- **Real local toggle/picker**, persisted via `SettingsContext`, that **genuinely saves the value**. Most don't yet change app behavior (no i18n, multi-currency, or push service exist yet) — explicitly not faked further than that. **Dark Mode is the one exception**: it's fully wired to a real theme via `ThemeContext` (see [6.9](#69-dark-theme--themecontext)), not just persisted.
 - **New real static-content screen** (`app/settings/about.js`, `help-centre.js` — FAQ accordion with real content pulled from wopecar.com/faq, `safety-centre.js` — real support phone/email pulled from wopecar.com/support).
 - **"Coming soon" info modal** (`ConfirmModal` with `cancelLabel={null}`) for the ~20 items needing backend/infra that doesn't exist (2FA, payment methods, active devices, delete account, data export, diagnostics, etc.) — chosen over building ~20 dead-end placeholder screens.
 
 Full row-by-row mapping lives in the commit history (`git log --grep "Settings"`) and in [Section 10](#10-full-component--screen--module-index).
+
+### 6.9 Dark theme / ThemeContext
+
+`contexts/ThemeContext.js` — `ThemeProvider` + `useAppTheme()` hook (named to avoid colliding with `@react-navigation/native`'s own `useTheme`). Reads `settings.darkMode` (`'Light' | 'Dark' | 'Auto'`) from `SettingsContext`:
+- `'Light'` / `'Dark'` are explicit overrides.
+- `'Auto'` is **time-of-day based, not OS appearance** — fixed hours, `6:00–18:00` local device time = light, else dark (`new Date().getHours()`, no location permission needed). Re-evaluated every 60s via `setInterval` **and** on `AppState` change to `'active'`, so it flips live while the app is open without polling wastefully.
+- Legacy persisted `'System'` values (the option `'Auto'` replaced) are coerced to `'Auto'` on load in `SettingsContext`.
+
+Exposes `{ colors, isDark, mode }`. `colors` is `LIGHT_COLORS` or `DARK_COLORS` from `constants/theme.js`.
+
+**Navigation chrome** (native headers, tab bar) is themed centrally, not per-screen: `app/_layout.js` builds a `navTheme` via `toNavigationTheme(colors, isDark)` (also exported from `ThemeContext.js`) and wraps the root `<Stack>` in `@react-navigation/native`'s own `<ThemeProvider>` (imported aliased as `NavigationThemeProvider` to avoid confusion with our own). This overrides header/tab-bar colors for every screen below via React context — no need to set `headerTintColor`/`headerStyle` per screen unless a screen wants a fixed override (e.g. `login.js` keeps `headerTintColor: colors.white` since its header sits over a photo).
+
+**Component pattern** every screen/component follows (see [3.5](#35-styling-conventions)):
+```jsx
+import { useAppTheme } from '../contexts/ThemeContext';
+
+function createStyles(colors) {
+  return StyleSheet.create({ title: { color: colors.textPrimary } });
+}
+
+export default function Screen() {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  // ...
+}
+```
+Local sub-components defined outside the main screen function (e.g. `TimeSlotPicker` in `checkout/details.js` and `booking/[id].js`, `DocumentUploadTile` in `checkout/form.js`, `BookingCard` in `(tabs)/bookings.js`) can't close over the parent's `useMemo`'d `styles`/`colors` — those are passed down as explicit props instead.
+
+**Token mapping convention** (applied consistently across all ~40 migrated files) — see the `LIGHT_COLORS`/`DARK_COLORS` table in [Section 5](#5-design-system) for the token list. Status-badge lookups (Pending/Confirmed/Cancelled, license verification states) that used to be static `{bg, text}` objects are now functions taking `colors`, e.g. `getStatusColors(colors)` in `(tabs)/bookings.js` and `booking/[id].js`.
 
 ---
 
@@ -410,12 +452,11 @@ If you touch the Paystack flow again, remember: this route must stay deployed on
 Explicitly deferred, not oversights — flagged here so future work doesn't accidentally treat them as "done":
 
 - **Bookings have no backend.** Local-device-only. Multi-device sync, admin visibility, and server-side status changes are all impossible until a real Booking API + admin panel are built (see 8.3).
-- **Settings preferences that don't change app behavior yet:** Dark Mode, Language, Theme Colour, Map Provider, Distance Units, Currency, Navigation Preference, all 9 notification toggles, Profile Visibility, Marketing Preferences, Auto-play Videos. They persist correctly; nothing in the app reads them yet.
+- **Settings preferences that don't change app behavior yet:** Language, Theme Colour, Map Provider, Distance Units, Currency, Navigation Preference, all 9 notification toggles, Profile Visibility, Marketing Preferences, Auto-play Videos. They persist correctly; nothing in the app reads them yet. (**Dark Mode is now wired up for real** — see [6.9](#69-dark-theme--themecontext) — it's no longer in this "inert" list.)
 - **~20 Settings items are backend/infra-dependent stubs** ("Coming soon" modal): Change Password, Biometric Login, 2FA, Active Devices, Data Sharing Preferences, Download My Data, Delete Account, all 6 Payment items, Login Activity, Trusted Devices, Security Alerts, Navigation Preference, Cache Management, Check for Updates, Diagnostics, Clear Cache, Developer Mode.
-- **No real dark theme, no i18n, no multi-currency pricing** anywhere in the app (formatCurrency hardcodes GHS).
+- **No i18n, no multi-currency pricing** anywhere in the app (formatCurrency hardcodes GHS).
 - **No push notification service configured** (no `expo-notifications` setup) — notification toggles are inert.
 - **No crash reporting / OTA update checking** (`expo-updates` not installed).
-- **Data discrepancy to reconcile:** the live FAQ page says renters must be 22+; the in-app Terms of Service (also pulled from the live site, earlier session) says 21+. Not fixed — flagged for the user to resolve with the source of truth.
 - **Minimum booking length is a UI-side check only** — nothing stops a booking below the minimum via any other path (there isn't another path today, but note this if a backend booking API is ever added: re-validate server-side too).
 
 ---
@@ -481,6 +522,7 @@ Explicitly deferred, not oversights — flagged here so future work doesn't acci
 | `CheckoutContext.js` | `useCheckout()` | — (in-memory only, by design) | No |
 | `BookingsContext.js` | `useBookings()` | `bookingsStorage.js` | Yes |
 | `SettingsContext.js` | `useSettings()` | `settingsStorage.js` | Yes |
+| `ThemeContext.js` | `useAppTheme()` | — (derives from `SettingsContext.settings.darkMode`) | Via `SettingsContext` |
 
 ### Services (`services/`, non-storage)
 | File | Purpose |
@@ -494,7 +536,7 @@ Explicitly deferred, not oversights — flagged here so future work doesn't acci
 ### Constants (`constants/`)
 | File | Exports |
 |---|---|
-| `theme.js` | `COLORS`, `FONTS` |
+| `theme.js` | `COLORS` (brand-fixed), `LIGHT_COLORS`, `DARK_COLORS`, `FONTS` |
 | `pricing.js` | `CURRENCY_CODE`, `formatCurrency`, `SELF_DRIVE_DELIVERY_FEE`, `calculateSecurityDeposit`, `MIN_BOOKING_DAYS_SELF_DRIVE`, `MIN_BOOKING_DAYS_CHAUFFEUR`, `getMinBookingDays` |
 
 ---
