@@ -6,7 +6,7 @@ import * as Linking from 'expo-linking';
 import { fetchCarById } from '../../services/carsApi';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
-import { formatCurrency } from '../../constants/pricing';
+import { formatCurrency, getMinBookingDays } from '../../constants/pricing';
 import ImageGallery from '../../components/ImageGallery';
 import SectionHeading from '../../components/SectionHeading';
 import FeaturesSection from '../../components/FeaturesSection';
@@ -149,6 +149,15 @@ export default function CarDetailScreen() {
                 <Text style={styles.metaText}>{car.location}</Text>
               </>
             )}
+            <Ionicons
+              name={car.isAvailable ? 'checkmark-circle' : 'close-circle'}
+              size={14}
+              color={car.isAvailable ? colors.success : colors.error}
+              style={{ marginLeft: 10 }}
+            />
+            <Text style={[styles.metaText, { color: car.isAvailable ? colors.success : colors.error }]}>
+              {car.isAvailable ? 'Available' : 'Unavailable'}
+            </Text>
           </View>
 
           <View style={styles.badgeRow}>
@@ -157,17 +166,14 @@ export default function CarDetailScreen() {
                 <Text style={styles.typeText}>{car.type}</Text>
               </View>
             ) : null}
-            <View style={[
-              styles.availabilityBadge,
-              { backgroundColor: car.isAvailable ? colors.successBg : colors.errorBg }
-            ]}>
-              <Text style={[
-                styles.availabilityText,
-                { color: car.isAvailable ? colors.success : colors.error }
-              ]}>
-                {car.isAvailable ? 'Available' : 'Unavailable'}
-              </Text>
-            </View>
+            {car.drivenBy ? (
+              <View style={styles.minDaysBadge}>
+                <Ionicons name="calendar-outline" size={12} color={colors.textMuted} />
+                <Text style={styles.minDaysBadgeText}>
+                  Min. {getMinBookingDays(car.drivenBy)} {getMinBookingDays(car.drivenBy) === 1 ? 'day' : 'days'}
+                </Text>
+              </View>
+            ) : null}
             {car.drivenBy ? (
               <View style={[
                 styles.driveBadge,
@@ -368,14 +374,19 @@ function createStyles(colors) {
     fontSize: 12,
     color: colors.teal,
   },
-  availabilityBadge: {
+  minDaysBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: colors.divider,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 6,
   },
-  availabilityText: {
+  minDaysBadgeText: {
     fontFamily: FONTS.semiBold,
     fontSize: 12,
+    color: colors.textMuted,
   },
   driveBadge: {
     flexDirection: 'row',
