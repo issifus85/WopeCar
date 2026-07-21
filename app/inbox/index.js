@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, FlatList, Image, TouchableOpacity } from 'react
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
+import { formatRelativeTime } from '../../constants/dateUtils';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useInbox } from '../../contexts/InboxContext';
 import SwipeableRow from '../../components/SwipeableRow';
@@ -20,18 +21,6 @@ const NOTIFICATION_ICONS = {
   payment: 'card-outline',
   reminder: 'alarm-outline',
 };
-
-function formatRelativeTime(iso) {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const minutes = Math.floor(diffMs / (60 * 1000));
-  if (minutes < 1) return 'Just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
 
 function ConversationRow({ conversation, styles, colors }) {
   const roleIcon = ROLE_ICONS[conversation.participant.role] ?? 'person-outline';

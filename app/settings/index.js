@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Switch, Alert } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { requestPushPermission } from '../../services/pushNotifications';
+import * as accountApi from '../../services/accountApi';
 import { CATEGORIES } from '../../data/cars';
 import OptionPickerModal from '../../components/OptionPickerModal';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -91,6 +92,55 @@ function StaticRow({ label, value, last, styles }) {
   return <Row label={label} last={last} styles={styles} right={<Text style={styles.rowValue}>{value}</Text>} />;
 }
 
+// Unlike every other ToggleRow here, this one is backed by a real server
+// preference (GET/PUT /api/account/security-alerts), not the local-only
+// SettingsContext - so it manages its own fetch/save state rather than
+// reusing ToggleRow.
+function SecurityAlertsRow({ last, styles, colors }) {
+  const [enabled, setEnabled] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    accountApi.getSecurityAlerts().then(setEnabled).catch(() => setEnabled(false));
+  }, []);
+
+  const handleToggle = async (value) => {
+    const previous = enabled;
+    setEnabled(value);
+    setIsSaving(true);
+    try {
+      await accountApi.updateSecurityAlerts(value);
+    } catch (e) {
+      setEnabled(previous);
+      Alert.alert('Error', 'Could not update this setting.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <Row
+      label="Security Alerts"
+      subtitle="Receive suspicious login notifications"
+      last={last}
+      styles={styles}
+      right={
+        enabled === null ? (
+          <ActivityIndicator color={colors.teal} />
+        ) : (
+          <Switch
+            value={enabled}
+            onValueChange={handleToggle}
+            disabled={isSaving}
+            trackColor={{ false: colors.disabled, true: colors.teal }}
+            thumbColor={colors.white}
+          />
+        )
+      }
+    />
+  );
+}
+
 export default function SettingsScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
@@ -135,10 +185,10 @@ export default function SettingsScreen() {
 
         <Section title="General" styles={styles}>
           <NavRow label="Account Information" subtitle="Manage account details" onPress={() => router.push('/account')} styles={styles} colors={colors} />
-          <NavRow label="Change Password" subtitle="Update password" onPress={() => openComingSoon('Change Password')} styles={styles} colors={colors} />
+          <NavRow label="Change Password" subtitle="Update password" onPress={() => router.push('/settings/change-password')} styles={styles} colors={colors} />
           <NavRow label="Biometric Login" subtitle="Face ID / Fingerprint" onPress={() => openComingSoon('Biometric Login')} styles={styles} colors={colors} />
           <NavRow label="Two-Factor Authentication" subtitle="Enable additional security" onPress={() => openComingSoon('Two-Factor Authentication')} styles={styles} colors={colors} />
-          <NavRow label="Active Devices" subtitle="View signed-in devices" last onPress={() => openComingSoon('Active Devices')} styles={styles} colors={colors} />
+          <NavRow label="Active Devices" subtitle="View signed-in devices" last onPress={() => router.push('/settings/devices')} styles={styles} colors={colors} />
         </Section>
 
         <Section title="Notifications" styles={styles}>
@@ -159,8 +209,8 @@ export default function SettingsScreen() {
           <ToggleRow label="Show Ratings" settingsKey="showRatings" styles={styles} colors={colors} />
           <PickerRow label="Marketing Preferences" settingsKey="marketingPreferences" options={['Opt In', 'Opt Out']} onOpen={openPicker} styles={styles} colors={colors} />
           <NavRow label="Data Sharing Preferences" subtitle="Manage consent" onPress={() => openComingSoon('Data Sharing Preferences')} styles={styles} colors={colors} />
-          <NavRow label="Download My Data" subtitle="Export account data" onPress={() => openComingSoon('Download My Data')} styles={styles} colors={colors} />
-          <NavRow label="Delete Account" subtitle="Permanently remove account" last onPress={() => openComingSoon('Delete Account')} styles={styles} colors={colors} />
+          <NavRow label="Download My Data" subtitle="Export account data" onPress={() => router.push('/settings/export-data')} styles={styles} colors={colors} />
+          <NavRow label="Delete Account" subtitle="Permanently remove account" last onPress={() => router.push('/settings/delete-account')} styles={styles} colors={colors} />
         </Section>
 
         <Section title="Ride Preferences" styles={styles}>
@@ -198,11 +248,11 @@ export default function SettingsScreen() {
         </Section>
 
         <Section title="Security" styles={styles}>
-          <NavRow label="Login Activity" subtitle="Recent login history" onPress={() => openComingSoon('Login Activity')} styles={styles} colors={colors} />
-          <NavRow label="Trusted Devices" subtitle="Manage remembered devices" onPress={() => openComingSoon('Trusted Devices')} styles={styles} colors={colors} />
+          <NavRow label="Login Activity" subtitle="Recent login history" onPress={() => router.push('/settings/login-activity')} styles={styles} colors={colors} />
+          <NavRow label="Trusted Devices" subtitle="Manage remembered devices" onPress={() => router.push('/settings/trusted-devices')} styles={styles} colors={colors} />
           <NavRow label="Change Email" subtitle="Requires verification" onPress={() => router.push('/account')} styles={styles} colors={colors} />
           <NavRow label="Change Mobile Number" subtitle="Requires OTP verification" onPress={() => router.push('/account')} styles={styles} colors={colors} />
-          <NavRow label="Security Alerts" subtitle="Receive suspicious login notifications" last onPress={() => openComingSoon('Security Alerts')} styles={styles} colors={colors} />
+          <SecurityAlertsRow last styles={styles} colors={colors} />
         </Section>
 
         <Section title="About" styles={styles}>

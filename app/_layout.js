@@ -140,6 +140,30 @@ function RootNavigator({ onLayoutRootView }) {
             options={{ headerShown: true, title: 'Settings', ...themedHeader }}
           />
           <Stack.Screen
+            name="settings/change-password"
+            options={{ headerShown: true, title: 'Change Password', headerBackTitle: 'Settings', ...themedHeader }}
+          />
+          <Stack.Screen
+            name="settings/devices"
+            options={{ headerShown: true, title: 'Active Devices', headerBackTitle: 'Settings', ...themedHeader }}
+          />
+          <Stack.Screen
+            name="settings/login-activity"
+            options={{ headerShown: true, title: 'Login Activity', headerBackTitle: 'Settings', ...themedHeader }}
+          />
+          <Stack.Screen
+            name="settings/trusted-devices"
+            options={{ headerShown: true, title: 'Trusted Devices', headerBackTitle: 'Settings', ...themedHeader }}
+          />
+          <Stack.Screen
+            name="settings/delete-account"
+            options={{ headerShown: true, title: 'Delete Account', headerBackTitle: 'Settings', ...themedHeader }}
+          />
+          <Stack.Screen
+            name="settings/export-data"
+            options={{ headerShown: true, title: 'Download My Data', headerBackTitle: 'Settings', ...themedHeader }}
+          />
+          <Stack.Screen
             name="settings/about"
             options={{ headerShown: true, title: 'About WopeCar', headerBackTitle: 'Settings', ...themedHeader }}
           />

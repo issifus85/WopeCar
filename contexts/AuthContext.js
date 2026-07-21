@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import * as authApi from '../services/authApi';
+import * as accountApi from '../services/accountApi';
+import { clearToken } from '../services/tokenStorage';
 
 const AuthContext = createContext(null);
 
@@ -49,8 +51,22 @@ export function AuthProvider({ children }) {
     return updatedUser;
   }, []);
 
+  const changePassword = useCallback((fields) => authApi.changePassword(fields), []);
+
+  const deleteAccount = useCallback(async (password) => {
+    await accountApi.deleteAccount(password);
+    // The server already revoked every Sanctum token for this account, so
+    // just clear the now-invalid local token and drop back to logged-out
+    // state - same end state as logout(), without calling /auth/logout
+    // against an account that no longer exists.
+    await clearToken();
+    setUser(null);
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout, refresh, updateProfile, uploadAvatar }}>
+    <AuthContext.Provider
+      value={{ user, isLoading, login, register, logout, refresh, updateProfile, uploadAvatar, changePassword, deleteAccount }}
+    >
       {children}
     </AuthContext.Provider>
   );

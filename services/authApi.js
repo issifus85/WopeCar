@@ -102,6 +102,23 @@ export async function getCurrentUser() {
 }
 
 /**
+ * POST /api/auth/password
+ * Requires auth:sanctum. Throws ApiError (422) with .errors on validation
+ * failure (wrong current password, new password too short/mismatched).
+ */
+export async function changePassword({ currentPassword, newPassword, newPasswordConfirmation }) {
+  return request('/auth/password', {
+    method: 'POST',
+    auth: true,
+    body: {
+      current_password: currentPassword,
+      new_password: newPassword,
+      new_password_confirmation: newPasswordConfirmation,
+    },
+  });
+}
+
+/**
  * PUT /api/user
  * Partial update - only pass the fields that changed. Changing email/phone
  * resets their verification status server-side. Throws ApiError (422) with
