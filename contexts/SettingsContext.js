@@ -3,10 +3,13 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import * as settingsStorage from '../services/settingsStorage';
 
 // Defaults for every setting from the WopeCar App Profile Settings spec.
-// Several of these (theme/language/currency/units/map provider/notification
-// toggles) don't have real app behavior wired up to them yet - no dark theme,
-// no i18n, no multi-currency pricing, no push notification service. They're
-// genuinely saved here for later use, not silently dropped or faked.
+// Several of these (language/currency/units/map provider, promotions/
+// wishlist/price-drop toggles) don't have real app behavior wired up to
+// them yet - no i18n, no multi-currency pricing. They're genuinely saved
+// here for later use, not silently dropped or faked. Dark Mode drives
+// ThemeContext; pushNotifications/emailNotifications/smsNotifications/
+// bookingUpdates/newMessages/tripReminders gate real dispatch via
+// InboxContext.notifyBookingEvent (see contexts/InboxContext.js).
 const DEFAULT_SETTINGS = {
   // Notification Setting
   pushNotifications: true,

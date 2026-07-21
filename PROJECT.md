@@ -52,7 +52,8 @@ app/                    Expo Router screens (file path = route path)
   car/[id].js             Car detail (dynamic route)
   booking/[id].js          Booking detail + modify/cancel (dynamic route)
   _layout.js               Root Stack: registers non-tab screens, wraps tree in all Providers
-  account.js, login.js, terms.js, privacy.js, inbox.js, documents.js, payment-callback.js
+  inbox/                  Unified Inbox (index = hub, [id] = conversation thread)
+  account.js, login.js, terms.js, privacy.js, documents.js, payment-callback.js
 components/              Reusable presentational + modal components (no routing)
 contexts/                React Context providers — one per domain, each paired with a services/*Storage.js
 services/                API clients + local-storage persistence modules (no React)
@@ -378,6 +379,17 @@ Local sub-components defined outside the main screen function (e.g. `TimeSlotPic
 
 **Token mapping convention** (applied consistently across all ~40 migrated files) — see the `LIGHT_COLORS`/`DARK_COLORS` table in [Section 5](#5-design-system) for the token list. Status-badge lookups (Pending/Confirmed/Cancelled, license verification states) that used to be static `{bg, text}` objects are now functions taking `colors`, e.g. `getStatusColors(colors)` in `(tabs)/bookings.js` and `booking/[id].js`.
 
+### 6.10 Unified Inbox & Notifications
+
+`contexts/InboxContext.js` + `services/inboxStorage.js` — same Context+Storage pattern as [6.2](#62-local-persistence-pattern-context--storage-service), but a deliberate deviation: **one storage key** (`wopecar_local_inbox`) holds a bundled `{ conversations, messages, notifications, remindedBookingIds }` object rather than four separate keys, since these lists are always loaded/saved together. `messages`/`notifications` are trimmed to the last 200/100 entries on every write to stay well under `expo-secure-store`'s native Keychain size ceiling.
+
+- **Conversations** — `{ id, participant: {id, name, role: 'Host'|'Driver'|'Support', avatar}, carId, bookingId, pinned, lastMessageText, lastMessageAt, unreadCount }`. `startConversation({participant, carId, bookingId, welcomeMessage})` is idempotent, keyed by `conv-${role}-${carId}` (or a fixed `conv-support` id) so re-opening "message the host" for the same car reuses the same thread. A permanent pinned "WopeCar Support" conversation is seeded on first-ever load.
+- **Notifications** — `{ id, type, title, body, bookingId, createdAt, readAt }`, created and dispatched through one function: `notifyBookingEvent(type, booking)`. `type` is one of `booking_created`/`booking_confirmed`/`booking_modified`/`booking_cancelled`/`payment`/`reminder`; each is gated by the matching `SettingsContext` toggle (`bookingUpdates` for the booking/payment types, `tripReminders` for `reminder`) — if the toggle is off, no notification is created and no channel fires at all.
+- **Trip reminders** are computed client-side (no backend needed, since bookings are already local): on mount and on `AppState` → `'active'`, scan `bookings` for Pending/Confirmed with `startDate` within the next 24h not yet in `remindedBookingIds`.
+- **Dispatch channels**, called from inside `notifyBookingEvent` when its type's toggle is on: `sendLocalPushNotification()` (real, native `expo-notifications` / web `window.Notification`, gated by `settings.pushNotifications`) from `services/pushNotifications.js`; `sendEmail()`/`sendSms()` stubs (gated by `settings.emailNotifications`/`smsNotifications`, recipient pulled from `useAuth()`'s `user.email`/`user.phone`) from `services/emailService.js`/`smsService.js` — see [Section 9](#9-known-gaps--deferred-work) for why these are stubs, not real delivery.
+- **Settings wiring**: `ToggleRow` in `app/settings/index.js` takes an optional `onToggle` override prop (every other toggle is unaffected). Only the Push Notifications row uses it — enabling calls `requestPushPermission()`; on denial the toggle reverts to off with an explanatory alert rather than silently persisting an "on" setting that can never fire.
+- **UI**: `app/inbox/index.js` (was a flat `app/inbox.js` stub) is now a two-tab hub (Messages/Notifications) using the same `STATUS_TABS` pill pattern as `(tabs)/bookings.js`; `app/inbox/[id].js` is the thread screen (non-inverted `FlatList` + `scrollToEnd()`, not `inverted`, to avoid a react-native-web rendering bug). Entry points: `car/[id].js`'s "Inquiry" button and a "Message Host"/"Message Driver" button on `booking/[id].js` both call `startConversation` then navigate to the thread; `checkout/payment.js` seeds the welcome conversation and fires `booking_created` right after a booking is placed.
+
 ---
 
 ## 7. Business Rules & Constants Reference
@@ -452,10 +464,12 @@ If you touch the Paystack flow again, remember: this route must stay deployed on
 Explicitly deferred, not oversights — flagged here so future work doesn't accidentally treat them as "done":
 
 - **Bookings have no backend.** Local-device-only. Multi-device sync, admin visibility, and server-side status changes are all impossible until a real Booking API + admin panel are built (see 8.3).
-- **Settings preferences that don't change app behavior yet:** Language, Theme Colour, Map Provider, Distance Units, Currency, Navigation Preference, all 9 notification toggles, Profile Visibility, Marketing Preferences, Auto-play Videos. They persist correctly; nothing in the app reads them yet. (**Dark Mode is now wired up for real** — see [6.9](#69-dark-theme--themecontext) — it's no longer in this "inert" list.)
+- **Settings preferences that don't change app behavior yet:** Language, Theme Colour, Map Provider, Distance Units, Currency, Navigation Preference, Promotions & Offers, Wishlist Alerts, Price Drop Alerts, Profile Visibility, Marketing Preferences, Auto-play Videos. They persist correctly; nothing in the app reads them yet. (**Dark Mode** and **Push/Email/SMS Notifications, Booking Updates, New Messages, Trip Reminders** are now wired up for real — see [6.9](#69-dark-theme--themecontext) and [6.10](#610-unified-inbox--notifications) — they're no longer in this "inert" list.)
 - **~20 Settings items are backend/infra-dependent stubs** ("Coming soon" modal): Change Password, Biometric Login, 2FA, Active Devices, Data Sharing Preferences, Download My Data, Delete Account, all 6 Payment items, Login Activity, Trusted Devices, Security Alerts, Navigation Preference, Cache Management, Check for Updates, Diagnostics, Clear Cache, Developer Mode.
 - **No i18n, no multi-currency pricing** anywhere in the app (formatCurrency hardcodes GHS).
-- **No push notification service configured** (no `expo-notifications` setup) — notification toggles are inert.
+- **Email/SMS notifications don't actually deliver.** `services/emailService.js`/`smsService.js` are real, settings-gated dispatch logic ending in a clearly-marked stub (`console.info` + resolved Promise) — real delivery needs a backend endpoint plus a paid third-party provider (SendGrid/SES, Twilio, etc.), neither of which exists in this repo. See [6.10](#610-unified-inbox--notifications).
+- **Push notifications are local-only.** No remote push — no device-token registration, no EAS project, no server ever sends anything. `expo-notifications` fires real on-device local notifications (native) / the browser Notification API (web) purely from client-side triggers.
+- **Inbox conversations have no real second party.** Host/Driver/Support replies are static seeded strings (one welcome message when a conversation is created), not a live person — there's no messaging backend to receive/send real replies through. No typing indicators, read receipts, attachments, search, or archive by design (see [6.10](#610-unified-inbox--notifications)).
 - **No crash reporting / OTA update checking** (`expo-updates` not installed).
 - **Minimum booking length is a UI-side check only** — nothing stops a booking below the minimum via any other path (there isn't another path today, but note this if a backend booking API is ever added: re-validate server-side too).
 
@@ -489,7 +503,8 @@ Explicitly deferred, not oversights — flagged here so future work doesn't acci
 | `login.js` | `/login` | Login/signup |
 | `terms.js` | `/terms` | Terms of Service (static, from live site) |
 | `privacy.js` | `/privacy` | Privacy Policy (static, from live site) |
-| `inbox.js` | `/inbox` | (stub/simple) |
+| `inbox/index.js` | `/inbox` | Unified Inbox hub — Messages/Notifications tabs |
+| `inbox/[id].js` | `/inbox/:id` | Conversation thread (bubbles + composer) |
 | `documents.js` | `/documents` | (stub/simple) |
 | `payment-callback.js` | `/payment-callback` | Deep-link landing target for the Paystack bridge |
 
@@ -523,6 +538,7 @@ Explicitly deferred, not oversights — flagged here so future work doesn't acci
 | `BookingsContext.js` | `useBookings()` | `bookingsStorage.js` | Yes |
 | `SettingsContext.js` | `useSettings()` | `settingsStorage.js` | Yes |
 | `ThemeContext.js` | `useAppTheme()` | — (derives from `SettingsContext.settings.darkMode`) | Via `SettingsContext` |
+| `InboxContext.js` | `useInbox()` | `inboxStorage.js` (bundled conversations/messages/notifications) | Yes |
 
 ### Services (`services/`, non-storage)
 | File | Purpose |
@@ -532,6 +548,9 @@ Explicitly deferred, not oversights — flagged here so future work doesn't acci
 | `carsApi.js` | fetchCars/fetchCarById/fetchCarAvailability/formatDateParam |
 | `paystackApi.js` | initializePayment/verifyPayment/buildPaystackCallbackUrl |
 | `paystackCheckout.js` | `payWithPaystack()` — full orchestration, web + native |
+| `pushNotifications.js` | `requestPushPermission()`/`sendLocalPushNotification()` — real local push, native `expo-notifications` / web `Notification` API |
+| `emailService.js` | `sendEmail()` — settings-gated dispatch, stub send (no backend/provider) |
+| `smsService.js` | `sendSms()` — settings-gated dispatch, stub send (no backend/provider) |
 
 ### Constants (`constants/`)
 | File | Exports |
