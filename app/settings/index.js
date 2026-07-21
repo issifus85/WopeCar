@@ -8,10 +8,12 @@ import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { requestPushPermission } from '../../services/pushNotifications';
+import { CATEGORIES } from '../../data/cars';
 import OptionPickerModal from '../../components/OptionPickerModal';
 import ConfirmModal from '../../components/ConfirmModal';
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
+const VEHICLE_CATEGORIES = CATEGORIES.filter((c) => c.value !== 'All').map((c) => c.label);
 
 function Section({ title, children, styles }) {
   return (
@@ -169,7 +171,7 @@ export default function SettingsScreen() {
             styles={styles}
             colors={colors}
           />
-          <PickerRow label="Preferred Vehicle Type" settingsKey="preferredVehicleType" options={['SUV', 'Sedan', 'Economy', 'Luxury']} onOpen={openPicker} styles={styles} colors={colors} />
+          <PickerRow label="Preferred Vehicle Type" settingsKey="preferredVehicleType" options={VEHICLE_CATEGORIES} onOpen={openPicker} styles={styles} colors={colors} />
           <PickerRow label="Preferred Transmission" settingsKey="preferredTransmission" options={['Automatic', 'Manual']} onOpen={openPicker} styles={styles} colors={colors} />
           <PickerRow label="Fuel Preference" settingsKey="fuelPreference" options={['Petrol', 'Diesel', 'Hybrid', 'EV']} onOpen={openPicker} styles={styles} colors={colors} />
           <PickerRow label="Distance Units" settingsKey="distanceUnits" options={['Kilometres', 'Miles']} onOpen={openPicker} styles={styles} colors={colors} />

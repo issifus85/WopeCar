@@ -27,7 +27,7 @@ const DEFAULT_SETTINGS = {
   showRatings: true,
   marketingPreferences: 'Opt In',
   // Preference Setting
-  preferredVehicleType: 'SUV',
+  preferredVehicleType: 'SUVs/ 4x4s',
   preferredTransmission: 'Automatic',
   fuelPreference: 'Petrol',
   distanceUnits: 'Kilometres',
@@ -53,6 +53,13 @@ export function SettingsProvider({ children }) {
         // based) - coerce any value saved before that change so it doesn't
         // land on an option the Dark Mode picker no longer offers.
         if (saved.darkMode === 'System') saved.darkMode = 'Auto';
+        // Preferred Vehicle Type used to mix in class tiers (Economy/Luxury)
+        // alongside categories - coerce anything from that old option set
+        // to a real car category so it isn't stuck on a removed option.
+        if (saved.preferredVehicleType === 'SUV') saved.preferredVehicleType = 'SUVs/ 4x4s';
+        else if (['Economy', 'Luxury'].includes(saved.preferredVehicleType)) {
+          saved.preferredVehicleType = DEFAULT_SETTINGS.preferredVehicleType;
+        }
         setSettingsState(prev => ({ ...prev, ...saved }));
       })
       .finally(() => setIsLoading(false));
