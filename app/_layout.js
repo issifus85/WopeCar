@@ -81,7 +81,11 @@ function RootNavigator({ onLayoutRootView }) {
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <NavigationThemeProvider value={navTheme}>
         <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(tabs)" />
+          {/* title here is only used as the back-button fallback label for
+              screens pushed straight from a tab (e.g. Inbox, Settings) that
+              don't set their own headerBackTitle - without it, React
+              Navigation falls back to the literal route name "(tabs)". */}
+          <Stack.Screen name="(tabs)" options={{ title: 'Account' }} />
           <Stack.Screen name="car/[id]" options={{ headerShown: false }} />
           <Stack.Screen
             name="booking/[id]"
@@ -105,7 +109,7 @@ function RootNavigator({ onLayoutRootView }) {
           />
           <Stack.Screen
             name="account"
-            options={{ headerShown: true, title: 'Account', headerBackTitle: 'Account', ...themedHeader }}
+            options={{ headerShown: true, title: 'Account', ...themedHeader }}
           />
           <Stack.Screen
             name="inbox/index"
@@ -129,7 +133,7 @@ function RootNavigator({ onLayoutRootView }) {
           />
           <Stack.Screen
             name="settings/index"
-            options={{ headerShown: true, title: 'Settings', headerBackTitle: 'Settings', ...themedHeader }}
+            options={{ headerShown: true, title: 'Settings', ...themedHeader }}
           />
           <Stack.Screen
             name="settings/about"

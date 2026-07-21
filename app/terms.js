@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
+import RichBody from '../components/RichBody';
 
 const SECTIONS = [
   {
@@ -143,7 +144,11 @@ function AccordionSection({ heading, body, styles, colors }) {
         <Text style={styles.heading}>{heading}</Text>
         <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={20} color={colors.teal} />
       </TouchableOpacity>
-      {expanded && <Text style={styles.body}>{body}</Text>}
+      {expanded && (
+        <View style={styles.body}>
+          <RichBody text={body} colors={colors} />
+        </View>
+      )}
     </View>
   );
 }
@@ -207,11 +212,7 @@ function createStyles(colors) {
     color: colors.textPrimary,
   },
   body: {
-    fontFamily: FONTS.regular,
-    fontSize: 14,
-    color: colors.textBody,
-    lineHeight: 21,
-    paddingBottom: 16,
+    paddingBottom: 8,
   },
   });
 }

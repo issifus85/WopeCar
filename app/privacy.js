@@ -1,7 +1,9 @@
-import { useMemo } from 'react';
-import { StyleSheet, Text, View, ScrollView } from 'react-native';
+import { useMemo, useState } from 'react';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
+import RichBody from '../components/RichBody';
 
 const SECTIONS = [
   {
@@ -89,6 +91,23 @@ Website: wopecar.com`,
   },
 ];
 
+function AccordionSection({ heading, body, styles, colors }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <View style={styles.section}>
+      <TouchableOpacity style={styles.sectionHeader} onPress={() => setExpanded(!expanded)} activeOpacity={0.7}>
+        <Text style={styles.heading}>{heading}</Text>
+        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={20} color={colors.teal} />
+      </TouchableOpacity>
+      {expanded && (
+        <View style={styles.body}>
+          <RichBody text={body} colors={colors} />
+        </View>
+      )}
+    </View>
+  );
+}
+
 export default function PrivacyScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -98,14 +117,11 @@ export default function PrivacyScreen() {
       <Text style={styles.title}>Privacy Policy</Text>
       <Text style={styles.effectiveDate}>Effective Date: June 7, 2025</Text>
       <Text style={styles.intro}>
-        At WopeCar Ghana ("WopeCar," "we," "us," or "our"), we are committed to protecting your privacy and handling your personal information with transparency and care. This Privacy Policy describes how we collect, use, process, and share your information when you use our website, mobile applications, and services (collectively, the "Services"). By using our Services, you agree to the collection and use of information in accordance with this policy.
+        At WopeCar Ghana ("WopeCar," "we," "us," or "our"), we are committed to protecting your privacy and handling your personal information with transparency and care. This Privacy Policy describes how we collect, use, process, and share your information when you use our website, mobile applications, and services (collectively, the "Services"). By using our Services, you agree to the collection and use of information in accordance with this policy. Tap a heading to expand it.
       </Text>
 
       {SECTIONS.map((section) => (
-        <View key={section.heading} style={styles.section}>
-          <Text style={styles.heading}>{section.heading}</Text>
-          <Text style={styles.body}>{section.body}</Text>
-        </View>
+        <AccordionSection key={section.heading} heading={section.heading} body={section.body} styles={styles} colors={colors} />
       ))}
     </ScrollView>
   );
@@ -141,19 +157,24 @@ function createStyles(colors) {
     lineHeight: 19,
   },
   section: {
-    marginBottom: 22,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 16,
   },
   heading: {
+    flex: 1,
     fontFamily: FONTS.bold,
     fontSize: 16,
     color: colors.textPrimary,
-    marginBottom: 8,
   },
   body: {
-    fontFamily: FONTS.regular,
-    fontSize: 14,
-    color: colors.textBody,
-    lineHeight: 21,
+    paddingBottom: 8,
   },
   });
 }
