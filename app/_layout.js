@@ -19,6 +19,7 @@ import { CartProvider } from '../contexts/CartContext';
 import { CheckoutProvider } from '../contexts/CheckoutContext';
 import { BookingsProvider } from '../contexts/BookingsContext';
 import { SettingsProvider } from '../contexts/SettingsContext';
+import { InboxProvider } from '../contexts/InboxContext';
 import { ThemeProvider, useAppTheme, toNavigationTheme } from '../contexts/ThemeContext';
 
 SplashScreen.preventAutoHideAsync();
@@ -51,9 +52,11 @@ export default function RootLayout() {
         <CheckoutProvider>
         <BookingsProvider>
         <SettingsProvider>
+        <InboxProvider>
         <ThemeProvider>
           <RootNavigator onLayoutRootView={onLayoutRootView} />
         </ThemeProvider>
+        </InboxProvider>
         </SettingsProvider>
         </BookingsProvider>
         </CheckoutProvider>
@@ -105,8 +108,12 @@ function RootNavigator({ onLayoutRootView }) {
             options={{ headerShown: true, title: 'Account', headerBackTitle: 'Account', ...themedHeader }}
           />
           <Stack.Screen
-            name="inbox"
+            name="inbox/index"
             options={{ headerShown: true, title: 'Inbox', ...themedHeader }}
+          />
+          <Stack.Screen
+            name="inbox/[id]"
+            options={{ headerShown: true, title: 'Conversation', headerBackTitle: 'Inbox', ...themedHeader }}
           />
           <Stack.Screen
             name="documents"

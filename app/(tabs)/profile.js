@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useInbox } from '../../contexts/InboxContext';
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 
@@ -22,6 +23,7 @@ export default function ProfileScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user } = useAuth();
+  const { totalUnreadCount } = useInbox();
 
   return (
     <View style={styles.container}>
@@ -66,6 +68,11 @@ export default function ProfileScreen() {
               <Ionicons name={item.icon} size={20} color={colors.teal} />
             </View>
             <Text style={styles.menuLabel}>{item.label}</Text>
+            {item.route === '/inbox' && totalUnreadCount > 0 && (
+              <View style={styles.menuBadge}>
+                <Text style={styles.menuBadgeText}>{totalUnreadCount}</Text>
+              </View>
+            )}
             <Ionicons name="chevron-forward" size={20} color={colors.textSubtle} />
           </TouchableOpacity>
         ))}
@@ -180,6 +187,21 @@ function createStyles(colors) {
       fontSize: 15,
       color: colors.textPrimary,
       marginLeft: 14,
+    },
+    menuBadge: {
+      minWidth: 20,
+      height: 20,
+      borderRadius: 10,
+      paddingHorizontal: 5,
+      backgroundColor: colors.teal,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 8,
+    },
+    menuBadgeText: {
+      fontFamily: FONTS.bold,
+      fontSize: 11,
+      color: colors.white,
     },
     footer: {
       alignItems: 'center',

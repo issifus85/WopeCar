@@ -10,6 +10,7 @@ import { payWithPaystack } from '../../services/paystackCheckout';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import { useBookings } from '../../contexts/BookingsContext';
 import { useCart } from '../../contexts/CartContext';
+import { useInbox } from '../../contexts/InboxContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 
@@ -21,6 +22,7 @@ export default function CheckoutPaymentScreen() {
   const { draft, resetCheckout } = useCheckout();
   const { addBooking } = useBookings();
   const { removeFromCart } = useCart();
+  const { startConversation, notifyBookingEvent } = useInbox();
 
   const [car, setCar] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -60,6 +62,22 @@ export default function CheckoutPaymentScreen() {
       };
       addBooking(booking);
       removeFromCart(carId);
+
+      const isChauffeur = car?.drivenBy === 'Chauffeur';
+      const participant = {
+        id: `${isChauffeur ? 'driver' : 'host'}-${carId}`,
+        name: car?.owner?.name || (isChauffeur ? 'Driver' : 'Host'),
+        role: isChauffeur ? 'Driver' : 'Host',
+        avatar: car?.owner?.avatar || null,
+      };
+      startConversation({
+        participant,
+        carId,
+        bookingId: booking.id,
+        welcomeMessage: `Hi! Thanks for booking the ${booking.carName}. I'll confirm your pickup details shortly.`,
+      });
+      notifyBookingEvent('booking_created', booking);
+
       resetCheckout();
       router.replace('/(tabs)/bookings');
     } catch (e) {

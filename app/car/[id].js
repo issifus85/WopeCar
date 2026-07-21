@@ -16,6 +16,7 @@ import ReviewsSection from '../../components/ReviewsSection';
 import BookingChoiceModal from '../../components/BookingChoiceModal';
 import { useFavorites } from '../../contexts/FavoritesContext';
 import { useCart } from '../../contexts/CartContext';
+import { useInbox } from '../../contexts/InboxContext';
 
 const DESCRIPTION_TRUNCATE_LENGTH = 220;
 
@@ -26,6 +27,7 @@ export default function CarDetailScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { isFavorite, toggleFavorite } = useFavorites();
   const { addToCart } = useCart();
+  const { startConversation } = useInbox();
   const [car, setCar] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -101,7 +103,18 @@ export default function CarDetailScreen() {
 
   const handleInquiry = () => {
     setIsBookingModalVisible(false);
-    router.push('/inbox');
+    const participant = {
+      id: `host-${car.id}`,
+      name: car.owner?.name || 'Host',
+      role: 'Host',
+      avatar: car.owner?.avatar || null,
+    };
+    const conversationId = startConversation({
+      participant,
+      carId: car.id,
+      welcomeMessage: `Hi! Thanks for your interest in the ${car.name}. Let me know if you have any questions.`,
+    });
+    router.push(`/inbox/${conversationId}`);
   };
 
   const handleContinue = () => {

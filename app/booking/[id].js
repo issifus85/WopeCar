@@ -8,6 +8,7 @@ import { formatCurrency, SELF_DRIVE_DELIVERY_FEE, calculateSecurityDeposit, getM
 import { fetchCarById } from '../../services/carsApi';
 import { payWithPaystack } from '../../services/paystackCheckout';
 import { useBookings } from '../../contexts/BookingsContext';
+import { useInbox } from '../../contexts/InboxContext';
 import DateRangeModal, { formatDateShort } from '../../components/DateRangeModal';
 import ConfirmModal from '../../components/ConfirmModal';
 
@@ -60,6 +61,7 @@ export default function BookingDetailScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { bookings, updateBooking, cancelBooking } = useBookings();
+  const { startConversation, notifyBookingEvent } = useInbox();
 
   const booking = bookings.find(b => b.id === id);
 
@@ -147,6 +149,7 @@ export default function BookingDetailScreen() {
 
   const handleConfirmNoPayment = () => {
     updateBooking(booking.id, buildUpdatedFields());
+    notifyBookingEvent('booking_modified', booking);
     setMode('view');
   };
 
@@ -156,6 +159,7 @@ export default function BookingDetailScreen() {
     try {
       const reference = await payWithPaystack(difference);
       updateBooking(booking.id, buildUpdatedFields({ paystackReference: reference }));
+      notifyBookingEvent('booking_modified', booking);
       setMode('view');
     } catch (e) {
       setPaymentError(e.message || 'Something went wrong. Please try again.');
@@ -166,7 +170,21 @@ export default function BookingDetailScreen() {
 
   const handleConfirmCancel = () => {
     cancelBooking(booking.id);
+    notifyBookingEvent('booking_cancelled', booking);
     setIsCancelModalVisible(false);
+  };
+
+  const handleMessageParticipant = () => {
+    if (!car) return;
+    const isChauffeur = car.drivenBy === 'Chauffeur';
+    const participant = {
+      id: `${isChauffeur ? 'driver' : 'host'}-${car.id}`,
+      name: car.owner?.name || (isChauffeur ? 'Driver' : 'Host'),
+      role: isChauffeur ? 'Driver' : 'Host',
+      avatar: car.owner?.avatar || null,
+    };
+    const conversationId = startConversation({ participant, carId: car.id, bookingId: booking.id });
+    router.push(`/inbox/${conversationId}`);
   };
 
   if (!booking) {
@@ -193,8 +211,18 @@ export default function BookingDetailScreen() {
         )}
         <View style={styles.headerInfo}>
           <Text style={styles.carName}>{booking.carName}</Text>
-          <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-            <Text style={[styles.statusText, { color: statusStyle.text }]}>{booking.status}</Text>
+          <View style={styles.headerBadgeRow}>
+            <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+              <Text style={[styles.statusText, { color: statusStyle.text }]}>{booking.status}</Text>
+            </View>
+            {!!car && (
+              <TouchableOpacity style={styles.messageButton} onPress={handleMessageParticipant}>
+                <Ionicons name="chatbubble-ellipses-outline" size={13} color={colors.teal} />
+                <Text style={styles.messageButtonText}>
+                  Message {car.drivenBy === 'Chauffeur' ? 'Driver' : 'Host'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>
@@ -507,6 +535,12 @@ function createStyles(colors) {
     fontSize: 17,
     color: colors.textPrimary,
   },
+  headerBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
   statusBadge: {
     alignSelf: 'flex-start',
     paddingHorizontal: 10,
@@ -516,6 +550,20 @@ function createStyles(colors) {
   statusText: {
     fontFamily: FONTS.semiBold,
     fontSize: 11,
+  },
+  messageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.highlight,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  messageButtonText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 11,
+    color: colors.teal,
   },
   card: {
     backgroundColor: colors.surface,

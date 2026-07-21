@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Switch, Linking } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Switch, Linking, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +7,7 @@ import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSettings } from '../../contexts/SettingsContext';
+import { requestPushPermission } from '../../services/pushNotifications';
 import OptionPickerModal from '../../components/OptionPickerModal';
 import ConfirmModal from '../../components/ConfirmModal';
 
@@ -35,7 +36,7 @@ function Row({ label, subtitle, onPress, right, last, styles }) {
   );
 }
 
-function ToggleRow({ label, settingsKey, last, styles, colors }) {
+function ToggleRow({ label, settingsKey, last, styles, colors, onToggle }) {
   const { settings, updateSetting } = useSettings();
   return (
     <Row
@@ -45,7 +46,7 @@ function ToggleRow({ label, settingsKey, last, styles, colors }) {
       right={
         <Switch
           value={!!settings[settingsKey]}
-          onValueChange={(value) => updateSetting(settingsKey, value)}
+          onValueChange={(value) => (onToggle ? onToggle(value) : updateSetting(settingsKey, value))}
           trackColor={{ false: colors.disabled, true: colors.teal }}
           thumbColor={colors.white}
         />
@@ -114,6 +115,23 @@ export default function SettingsScreen() {
     Linking.openURL(`mailto:${SUPPORT_EMAIL}${subject ? `?subject=${encodeURIComponent(subject)}` : ''}`);
   };
 
+  const handlePushToggle = async (value) => {
+    if (!value) {
+      updateSetting('pushNotifications', false);
+      return;
+    }
+    const granted = await requestPushPermission();
+    if (granted) {
+      updateSetting('pushNotifications', true);
+    } else {
+      updateSetting('pushNotifications', false);
+      Alert.alert(
+        'Notifications Blocked',
+        "Notifications are blocked at the system level, so WopeCar can't send them. Enable notifications for this app in your device or browser settings, then try again."
+      );
+    }
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -127,7 +145,7 @@ export default function SettingsScreen() {
         </Section>
 
         <Section title="Notifications" styles={styles}>
-          <ToggleRow label="Push Notifications" settingsKey="pushNotifications" styles={styles} colors={colors} />
+          <ToggleRow label="Push Notifications" settingsKey="pushNotifications" styles={styles} colors={colors} onToggle={handlePushToggle} />
           <ToggleRow label="Email Notifications" settingsKey="emailNotifications" styles={styles} colors={colors} />
           <ToggleRow label="SMS Notifications" settingsKey="smsNotifications" styles={styles} colors={colors} />
           <ToggleRow label="Booking Updates" settingsKey="bookingUpdates" styles={styles} colors={colors} />
