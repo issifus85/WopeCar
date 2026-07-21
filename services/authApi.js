@@ -27,6 +27,7 @@ function normalizeUser(raw) {
     city: raw.city ?? '',
     state: raw.state ?? '',
     country: raw.country ?? '',
+    zipCode: raw.zip_code ?? '',
     driverLicenseNumberMasked: raw.driver_license_number_masked ?? null,
     driverLicenseExpiry: raw.driver_license_expiry ?? null,
     driverLicenseCountry: raw.driver_license_country ?? '',

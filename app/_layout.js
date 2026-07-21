@@ -164,6 +164,14 @@ function RootNavigator({ onLayoutRootView }) {
             options={{ headerShown: true, title: 'Download My Data', headerBackTitle: 'Settings', ...themedHeader }}
           />
           <Stack.Screen
+            name="settings/billing-address"
+            options={{ headerShown: true, title: 'Billing Address', headerBackTitle: 'Settings', ...themedHeader }}
+          />
+          <Stack.Screen
+            name="settings/payment-history"
+            options={{ headerShown: true, title: 'Payment History', headerBackTitle: 'Settings', ...themedHeader }}
+          />
+          <Stack.Screen
             name="settings/about"
             options={{ headerShown: true, title: 'About WopeCar', headerBackTitle: 'Settings', ...themedHeader }}
           />

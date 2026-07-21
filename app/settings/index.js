@@ -232,8 +232,8 @@ export default function SettingsScreen() {
         <Section title="Payment" styles={styles}>
           <NavRow label="Saved Payment Methods" subtitle="Manage cards" onPress={() => openComingSoon('Saved Payment Methods')} styles={styles} colors={colors} />
           <NavRow label="Default Payment Method" subtitle="Select default card" onPress={() => openComingSoon('Default Payment Method')} styles={styles} colors={colors} />
-          <NavRow label="Billing Address" subtitle="Edit billing details" onPress={() => openComingSoon('Billing Address')} styles={styles} colors={colors} />
-          <NavRow label="Payment History" subtitle="View transactions" onPress={() => openComingSoon('Payment History')} styles={styles} colors={colors} />
+          <NavRow label="Billing Address" subtitle="Edit billing details" onPress={() => router.push('/settings/billing-address')} styles={styles} colors={colors} />
+          <NavRow label="Payment History" subtitle="View transactions" onPress={() => router.push('/settings/payment-history')} styles={styles} colors={colors} />
           <NavRow label="Invoices & Receipts" subtitle="Download receipts" onPress={() => openComingSoon('Invoices & Receipts')} styles={styles} colors={colors} />
           <NavRow label="Refund History" subtitle="View refunds" last onPress={() => openComingSoon('Refund History')} styles={styles} colors={colors} />
         </Section>
