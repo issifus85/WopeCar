@@ -1,18 +1,29 @@
 import { useRef } from 'react';
-import { Animated, PanResponder, View, TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { Animated, PanResponder, Pressable, View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 
 const ACTION_WIDTH = 76;
-const TAP_SLOP = 6;
 const OPEN_THRESHOLD_RATIO = 0.4;
 
 // Custom swipe-to-reveal-actions row, built on React Native's built-in
 // Animated + PanResponder (no react-native-gesture-handler/reanimated in
-// this project). onStartShouldSetPanResponder stays false and
-// onMoveShouldSetPanResponder only claims the gesture once the drag is
-// clearly horizontal, so vertical drags are left alone for the parent
-// FlatList/ScrollView to scroll normally.
+// this project).
+//
+// Tap and swipe are handled by two separate mechanisms, not one: a real
+// Pressable owns tapping (children), while the PanResponder only ever
+// claims the gesture once a drag is unambiguously horizontal
+// (onMoveShouldSetPanResponderCapture, evaluated top-down before the
+// inner Pressable locks in its own press). A still tap - the ordinary
+// case, no meaningful dx/dy - never crosses that threshold, so the
+// PanResponder is never granted and the Pressable's onPress fires
+// normally and instantly. Earlier this used a single PanResponder for
+// both (treating "released with ~0 movement" as a tap inside
+// onPanResponderRelease), but onMoveShouldSetPanResponder requires
+// movement to fire at all, so a truly still tap never triggered release
+// and onPress never ran - and real fingers' natural jitter meant some
+// taps randomly *did* cross the movement threshold, making the whole
+// row feel inconsistent between "does nothing" and "half-swipes."
 export default function SwipeableRow({ children, actions, onPress, colors }) {
   const translateX = useRef(new Animated.Value(0)).current;
   const isOpen = useRef(false);
@@ -27,7 +38,7 @@ export default function SwipeableRow({ children, actions, onPress, colors }) {
     // sibling doesn't reliably paint above the (untransformed) actions
     // underneath it - animating layout position keeps everything in one
     // normal paint/stacking order instead.
-    Animated.spring(translateX, { toValue, useNativeDriver: false, bounciness: 0, speed: 20 }).start();
+    Animated.timing(translateX, { toValue, duration: 200, useNativeDriver: false }).start();
   };
   const close = () => animateTo(0, false);
   const open = () => animateTo(-maxSwipe, true);
@@ -42,22 +53,25 @@ export default function SwipeableRow({ children, actions, onPress, colors }) {
     extrapolate: 'clamp',
   });
 
+  const isHorizontalDrag = (gesture) =>
+    Math.abs(gesture.dx) > 10 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.5;
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gesture) =>
-        Math.abs(gesture.dx) > 10 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.5,
+      // Capture phase (evaluated top-down, before the inner Pressable's own
+      // responder claim on tap-down) is what lets a real drag steal the
+      // gesture away from the Pressable once it's unambiguous - a still
+      // tap never satisfies isHorizontalDrag, so the Pressable underneath
+      // keeps the touch and fires its own onPress normally.
+      onMoveShouldSetPanResponderCapture: (_, gesture) => isHorizontalDrag(gesture),
+      onMoveShouldSetPanResponder: (_, gesture) => isHorizontalDrag(gesture),
       onPanResponderMove: (_, gesture) => {
         const base = isOpen.current ? -maxSwipe : 0;
         const next = Math.max(-maxSwipe, Math.min(0, base + gesture.dx));
         translateX.setValue(next);
       },
       onPanResponderRelease: (_, gesture) => {
-        if (Math.abs(gesture.dx) < TAP_SLOP && Math.abs(gesture.dy) < TAP_SLOP) {
-          if (isOpen.current) close();
-          else onPress?.();
-          return;
-        }
         const base = isOpen.current ? -maxSwipe : 0;
         const finalX = base + gesture.dx;
         if (finalX < -maxSwipe * OPEN_THRESHOLD_RATIO) open();
@@ -66,6 +80,11 @@ export default function SwipeableRow({ children, actions, onPress, colors }) {
       onPanResponderTerminationRequest: () => true,
     })
   ).current;
+
+  const handlePress = () => {
+    if (isOpen.current) close();
+    else onPress?.();
+  };
 
   return (
     <View style={styles.wrapper}>
@@ -86,7 +105,9 @@ export default function SwipeableRow({ children, actions, onPress, colors }) {
           ))}
         </Animated.View>
         <Animated.View style={[styles.content, { left: translateX }]} {...panResponder.panHandlers}>
-          {children}
+          <Pressable onPress={handlePress}>
+            {children}
+          </Pressable>
         </Animated.View>
       </View>
     </View>
