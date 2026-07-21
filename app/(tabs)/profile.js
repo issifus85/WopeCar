@@ -15,6 +15,7 @@ const MENU_ITEMS = [
   { label: 'Documents', icon: 'folder-outline', route: '/documents' },
   { label: 'Terms of Service', icon: 'document-text-outline', route: '/terms' },
   { label: 'Privacy Policy', icon: 'shield-checkmark-outline', route: '/privacy' },
+  { label: 'Support', icon: 'help-buoy-outline', route: '/support' },
   { label: 'Settings', icon: 'settings-outline', route: '/settings' },
 ];
 

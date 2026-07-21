@@ -132,6 +132,10 @@ function RootNavigator({ onLayoutRootView }) {
             options={{ headerShown: true, title: 'Privacy Policy', ...themedHeader }}
           />
           <Stack.Screen
+            name="support"
+            options={{ headerShown: true, title: 'Support', ...themedHeader }}
+          />
+          <Stack.Screen
             name="settings/index"
             options={{ headerShown: true, title: 'Settings', ...themedHeader }}
           />
@@ -141,11 +145,11 @@ function RootNavigator({ onLayoutRootView }) {
           />
           <Stack.Screen
             name="settings/help-centre"
-            options={{ headerShown: true, title: 'Help Centre', headerBackTitle: 'Settings', ...themedHeader }}
+            options={{ headerShown: true, title: 'Help Centre', headerBackTitle: 'Support', ...themedHeader }}
           />
           <Stack.Screen
             name="settings/safety-centre"
-            options={{ headerShown: true, title: 'Safety Centre', headerBackTitle: 'Settings', ...themedHeader }}
+            options={{ headerShown: true, title: 'Safety Centre', headerBackTitle: 'Support', ...themedHeader }}
           />
         </Stack>
       </NavigationThemeProvider>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Switch, Linking, Alert } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Switch, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,7 +12,6 @@ import OptionPickerModal from '../../components/OptionPickerModal';
 import ConfirmModal from '../../components/ConfirmModal';
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
-const SUPPORT_EMAIL = 'support@wopecar.com';
 
 function Section({ title, children, styles }) {
   return (
@@ -111,10 +110,6 @@ export default function SettingsScreen() {
   };
   const closeComingSoon = () => setComingSoon(null);
 
-  const openMail = (subject) => {
-    Linking.openURL(`mailto:${SUPPORT_EMAIL}${subject ? `?subject=${encodeURIComponent(subject)}` : ''}`);
-  };
-
   const handlePushToggle = async (value) => {
     if (!value) {
       updateSetting('pushNotifications', false);
@@ -208,11 +203,7 @@ export default function SettingsScreen() {
           <NavRow label="Security Alerts" subtitle="Receive suspicious login notifications" last onPress={() => openComingSoon('Security Alerts')} styles={styles} colors={colors} />
         </Section>
 
-        <Section title="Support" styles={styles}>
-          <NavRow label="Help Centre" subtitle="FAQs" onPress={() => router.push('/settings/help-centre')} styles={styles} colors={colors} />
-          <NavRow label="Contact Support" subtitle="Email us" onPress={() => openMail('Support request')} styles={styles} colors={colors} />
-          <NavRow label="Report a Problem" subtitle="Submit issue" onPress={() => openMail('Report a Problem')} styles={styles} colors={colors} />
-          <NavRow label="Safety Centre" subtitle="Emergency & safety resources" onPress={() => router.push('/settings/safety-centre')} styles={styles} colors={colors} />
+        <Section title="About" styles={styles}>
           <NavRow label="Terms & Conditions" subtitle="View legal terms" onPress={() => router.push('/terms')} styles={styles} colors={colors} />
           <NavRow label="Privacy Policy" subtitle="View policy" onPress={() => router.push('/privacy')} styles={styles} colors={colors} />
           <NavRow label="About WopeCar" subtitle="App version & company info" last onPress={() => router.push('/settings/about')} styles={styles} colors={colors} />
