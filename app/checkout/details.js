@@ -1,12 +1,14 @@
 import { useState, useMemo } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
+import LocationSearchModal from '../../components/LocationSearchModal';
 
 const TIME_SLOTS = [
   '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
@@ -39,15 +41,21 @@ export default function CheckoutDetailsScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const { user } = useAuth();
   const { draft, updateDraft } = useCheckout();
 
   const [pickupTime, setPickupTime] = useState(draft.pickupTime);
   const [returnTime, setReturnTime] = useState(draft.returnTime);
-  const [pickupLocation, setPickupLocation] = useState(draft.pickupLocation);
+  // Falls back to the user's saved preferred pickup location (a profile
+  // field that previously had no real behavior anywhere in the app) when
+  // checkout hasn't collected one yet.
+  const [pickupLocation, setPickupLocation] = useState(draft.pickupLocation || user?.preferredPickupLocation || '');
   const [returnLocation, setReturnLocation] = useState(draft.returnLocation);
   const [sameAsPickup, setSameAsPickup] = useState(
     !!draft.pickupLocation && draft.pickupLocation === draft.returnLocation
   );
+  const [isPickupModalVisible, setIsPickupModalVisible] = useState(false);
+  const [isReturnModalVisible, setIsReturnModalVisible] = useState(false);
 
   const handlePickupLocationChange = (text) => {
     setPickupLocation(text);
@@ -76,14 +84,13 @@ export default function CheckoutDetailsScreen() {
         <TimeSlotPicker label="Return Time" value={returnTime} onChange={setReturnTime} styles={styles} />
 
         <View style={styles.field}>
-          <Text style={styles.label}>Pickup Location</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. Impact Hub, Accra"
-            placeholderTextColor={colors.textSubtle}
-            value={pickupLocation}
-            onChangeText={handlePickupLocationChange}
-          />
+          <Text style={styles.label}>Vehicle Delivery Location</Text>
+          <TouchableOpacity style={styles.locationPill} onPress={() => setIsPickupModalVisible(true)}>
+            <Ionicons name="location-outline" size={18} color={colors.teal} />
+            <Text style={[styles.locationPillText, !pickupLocation && styles.locationPillPlaceholder]} numberOfLines={1}>
+              {pickupLocation || 'Search for a vehicle delivery location...'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity style={styles.checkboxRow} onPress={toggleSameAsPickup}>
@@ -95,19 +102,31 @@ export default function CheckoutDetailsScreen() {
 
         {!sameAsPickup && (
           <View style={styles.field}>
-            <Text style={styles.label}>Return Location</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. Kotoka Airport, Accra"
-              placeholderTextColor={colors.textSubtle}
-              value={returnLocation}
-              onChangeText={setReturnLocation}
-            />
+            <Text style={styles.label}>Vehicle Pickup Location</Text>
+            <TouchableOpacity style={styles.locationPill} onPress={() => setIsReturnModalVisible(true)}>
+              <Ionicons name="location-outline" size={18} color={colors.teal} />
+              <Text style={[styles.locationPillText, !returnLocation && styles.locationPillPlaceholder]} numberOfLines={1}>
+                {returnLocation || 'Search for a vehicle pickup location...'}
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
       </ScrollView>
 
       <CheckoutFooterButton label="Continue" onPress={handleContinue} disabled={!isValid} />
+
+      <LocationSearchModal
+        visible={isPickupModalVisible}
+        onClose={() => setIsPickupModalVisible(false)}
+        title="Vehicle Delivery Location"
+        onSelect={handlePickupLocationChange}
+      />
+      <LocationSearchModal
+        visible={isReturnModalVisible}
+        onClose={() => setIsReturnModalVisible(false)}
+        title="Vehicle Pickup Location"
+        onSelect={setReturnLocation}
+      />
     </View>
   );
 }
@@ -157,16 +176,25 @@ function createStyles(colors) {
     fontFamily: FONTS.semiBold,
     color: colors.white,
   },
-  input: {
-    fontFamily: FONTS.regular,
+  locationPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     backgroundColor: colors.background,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    fontSize: 15,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  locationPillText: {
+    flex: 1,
+    fontFamily: FONTS.regular,
+    fontSize: 15,
     color: colors.textPrimary,
+  },
+  locationPillPlaceholder: {
+    color: colors.textSubtle,
   },
   checkboxRow: {
     flexDirection: 'row',
