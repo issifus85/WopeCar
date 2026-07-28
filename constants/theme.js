@@ -20,6 +20,7 @@ export const FONTS = {
   semiBold: 'SourceSans3_600SemiBold',
   bold: 'SourceSans3_700Bold',
   display: 'DanburyCaps',
+  signature: 'DancingScript_700Bold',
 };
 
 // Semantic tokens that flip between Light and Dark. Every screen should read
@@ -45,6 +46,10 @@ export const LIGHT_COLORS = {
   successBg: '#E8F5E9',
   warning: '#E65100',
   warningBg: '#FFF3E0',
+  // "Booked/confirmed" status (Vendor Mode availability calendar) - a 4th
+  // semantic status alongside success/warning/error.
+  info: '#1565C0',
+  infoBg: '#E3F2FD',
   shadow: '#000000',
 };
 
@@ -68,5 +73,7 @@ export const DARK_COLORS = {
   successBg: '#123821',
   warning: '#FFB86B',
   warningBg: '#3D2A0C',
+  info: '#64B5F6',
+  infoBg: '#0F2A3D',
   shadow: '#000000',
 };
