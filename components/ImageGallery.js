@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
-import { StyleSheet, View, Image, FlatList, Text, Dimensions } from 'react-native';
+import { StyleSheet, View, FlatList, Text, Dimensions } from 'react-native';
+import { Image } from 'expo-image';
 import { useAppTheme } from '../contexts/ThemeContext';
 
 export default function ImageGallery({ images, height = 180, borderRadius = 16 }) {
@@ -39,7 +40,7 @@ export default function ImageGallery({ images, height = 180, borderRadius = 16 }
           <Image
             source={{ uri: item }}
             style={{ width, height }}
-            resizeMode="cover"
+            contentFit="cover"
           />
         )}
       />

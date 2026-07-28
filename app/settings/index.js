@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator } from 'react-native';
+import { Platform, StyleSheet, Text, View, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
+import * as LocalAuthentication from 'expo-local-authentication';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSettings } from '../../contexts/SettingsContext';
+import { useCurrency } from '../../contexts/CurrencyContext';
 import { requestPushPermission } from '../../services/pushNotifications';
 import * as accountApi from '../../services/accountApi';
 import { CATEGORIES } from '../../data/cars';
@@ -141,15 +144,83 @@ function SecurityAlertsRow({ last, styles, colors }) {
   );
 }
 
+// Face ID / Fingerprint - client-only (see components/BiometricGate.js for
+// where it actually locks the app), so unlike most rows here this isn't
+// blocked on the backend. Confirms the device can actually authenticate
+// before flipping the setting on, same honesty pattern as Push
+// Notifications' permission check above.
+function BiometricLoginRow({ last, styles, colors }) {
+  const { settings, updateSetting } = useSettings();
+  const [isChecking, setIsChecking] = useState(false);
+
+  const handleToggle = async (value) => {
+    if (!value) {
+      updateSetting('biometricLogin', false);
+      return;
+    }
+    if (Platform.OS === 'web') {
+      Alert.alert('Not Available', 'Biometric login is only available on the WopeCar mobile app.');
+      return;
+    }
+    setIsChecking(true);
+    try {
+      const [hasHardware, isEnrolled] = await Promise.all([
+        LocalAuthentication.hasHardwareAsync(),
+        LocalAuthentication.isEnrolledAsync(),
+      ]);
+      if (!hasHardware) {
+        Alert.alert('Not Available', "This device doesn't support Face ID or Fingerprint login.");
+        return;
+      }
+      if (!isEnrolled) {
+        Alert.alert('Not Set Up', 'Set up Face ID or Fingerprint in your device settings first, then try again.');
+        return;
+      }
+      const result = await LocalAuthentication.authenticateAsync({ promptMessage: 'Confirm to enable biometric login' });
+      if (result.success) {
+        updateSetting('biometricLogin', true);
+      }
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
+  return (
+    <Row
+      label="Biometric Login"
+      subtitle="Face ID / Fingerprint"
+      last={last}
+      styles={styles}
+      right={
+        isChecking ? (
+          <ActivityIndicator color={colors.teal} />
+        ) : (
+          <Switch
+            value={!!settings.biometricLogin}
+            onValueChange={handleToggle}
+            trackColor={{ false: colors.disabled, true: colors.teal }}
+            thumbColor={colors.white}
+          />
+        )
+      }
+    />
+  );
+}
+
 export default function SettingsScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user } = useAuth();
   const { updateSetting } = useSettings();
+  const { currencies } = useCurrency();
+  const currencyOptions = useMemo(() => currencies.map((c) => c.code), [currencies]);
 
   const [picker, setPicker] = useState(null);
   const [comingSoon, setComingSoon] = useState(null);
+  // null | 'confirm' | 'clearing' | 'done' - drives the shared Cache
+  // Management / Clear Cache flow (both rows below call openClearCache).
+  const [cacheStep, setCacheStep] = useState(null);
 
   const openPicker = (config) => setPicker(config);
   const closePicker = () => setPicker(null);
@@ -161,6 +232,13 @@ export default function SettingsScreen() {
     setComingSoon(label);
   };
   const closeComingSoon = () => setComingSoon(null);
+
+  const openClearCache = () => setCacheStep('confirm');
+  const closeCacheModal = () => setCacheStep(null);
+  const handleClearCache = async () => {
+    await Promise.all([Image.clearMemoryCache(), Image.clearDiskCache()]);
+    setCacheStep('done');
+  };
 
   const handlePushToggle = async (value) => {
     if (!value) {
@@ -186,7 +264,7 @@ export default function SettingsScreen() {
         <Section title="General" styles={styles}>
           <NavRow label="Account Information" subtitle="Manage account details" onPress={() => router.push('/account')} styles={styles} colors={colors} />
           <NavRow label="Change Password" subtitle="Update password" onPress={() => router.push('/settings/change-password')} styles={styles} colors={colors} />
-          <NavRow label="Biometric Login" subtitle="Face ID / Fingerprint" onPress={() => openComingSoon('Biometric Login')} styles={styles} colors={colors} />
+          <BiometricLoginRow styles={styles} colors={colors} />
           <NavRow label="Two-Factor Authentication" subtitle="Enable additional security" onPress={() => openComingSoon('Two-Factor Authentication')} styles={styles} colors={colors} />
           <NavRow label="Active Devices" subtitle="View signed-in devices" last onPress={() => router.push('/settings/devices')} styles={styles} colors={colors} />
         </Section>
@@ -225,7 +303,7 @@ export default function SettingsScreen() {
           <PickerRow label="Preferred Transmission" settingsKey="preferredTransmission" options={['Automatic', 'Manual']} onOpen={openPicker} styles={styles} colors={colors} />
           <PickerRow label="Fuel Preference" settingsKey="fuelPreference" options={['Petrol', 'Diesel', 'Hybrid', 'EV']} onOpen={openPicker} styles={styles} colors={colors} />
           <PickerRow label="Distance Units" settingsKey="distanceUnits" options={['Kilometres', 'Miles']} onOpen={openPicker} styles={styles} colors={colors} />
-          <PickerRow label="Currency" settingsKey="currency" options={['GHS', 'USD']} onOpen={openPicker} styles={styles} colors={colors} />
+          <PickerRow label="Currency" settingsKey="currency" options={currencyOptions} onOpen={openPicker} styles={styles} colors={colors} />
           <PickerRow label="Language" settingsKey="language" options={['English', 'French']} onOpen={openPicker} last styles={styles} colors={colors} />
         </Section>
 
@@ -234,7 +312,7 @@ export default function SettingsScreen() {
           <NavRow label="Default Payment Method" subtitle="Select default card" onPress={() => openComingSoon('Default Payment Method')} styles={styles} colors={colors} />
           <NavRow label="Billing Address" subtitle="Edit billing details" onPress={() => router.push('/settings/billing-address')} styles={styles} colors={colors} />
           <NavRow label="Payment History" subtitle="View transactions" onPress={() => router.push('/settings/payment-history')} styles={styles} colors={colors} />
-          <NavRow label="Invoices & Receipts" subtitle="Download receipts" onPress={() => openComingSoon('Invoices & Receipts')} styles={styles} colors={colors} />
+          <NavRow label="Invoices & Receipts" subtitle="Download receipts" onPress={() => router.push('/settings/payment-history')} styles={styles} colors={colors} />
           <NavRow label="Refund History" subtitle="View refunds" last onPress={() => openComingSoon('Refund History')} styles={styles} colors={colors} />
         </Section>
 
@@ -244,7 +322,7 @@ export default function SettingsScreen() {
           <PickerRow label="Map Provider" settingsKey="mapProvider" options={['Google Maps', 'Apple Maps']} onOpen={openPicker} styles={styles} colors={colors} />
           <NavRow label="Navigation Preference" subtitle="Open preferred navigation app" onPress={() => openComingSoon('Navigation Preference')} styles={styles} colors={colors} />
           <ToggleRow label="Auto-play Videos" settingsKey="autoPlayVideos" styles={styles} colors={colors} />
-          <NavRow label="Cache Management" subtitle="Clear downloaded images/data" last onPress={() => openComingSoon('Cache Management')} styles={styles} colors={colors} />
+          <NavRow label="Cache Management" subtitle="Clear downloaded images/data" last onPress={openClearCache} styles={styles} colors={colors} />
         </Section>
 
         <Section title="Security" styles={styles}>
@@ -265,7 +343,7 @@ export default function SettingsScreen() {
           <StaticRow label="App Version" value={APP_VERSION} styles={styles} />
           <NavRow label="Check for Updates" subtitle="Verify latest release" onPress={() => openComingSoon('Check for Updates')} styles={styles} colors={colors} />
           <NavRow label="Diagnostics" subtitle="Send anonymous crash reports" onPress={() => openComingSoon('Diagnostics')} styles={styles} colors={colors} />
-          <NavRow label="Clear Cache" subtitle="Free storage" onPress={() => openComingSoon('Cache Management')} styles={styles} colors={colors} />
+          <NavRow label="Clear Cache" subtitle="Free storage" onPress={openClearCache} styles={styles} colors={colors} />
           <NavRow label="Developer Mode" subtitle="Internal/testing builds only" last onPress={() => openComingSoon('Developer Mode')} styles={styles} colors={colors} />
         </Section>
 
@@ -290,6 +368,24 @@ export default function SettingsScreen() {
         cancelLabel={null}
         onConfirm={closeComingSoon}
         onCancel={closeComingSoon}
+      />
+
+      <ConfirmModal
+        visible={cacheStep === 'confirm'}
+        title="Clear Cache"
+        message="This removes downloaded car photos and profile pictures from this device. They'll be re-downloaded next time they're needed."
+        confirmLabel="Clear Cache"
+        onConfirm={handleClearCache}
+        onCancel={closeCacheModal}
+      />
+      <ConfirmModal
+        visible={cacheStep === 'done'}
+        title="Cache Cleared"
+        message="Downloaded images have been removed from this device."
+        confirmLabel="OK"
+        cancelLabel={null}
+        onConfirm={closeCacheModal}
+        onCancel={closeCacheModal}
       />
     </View>
   );

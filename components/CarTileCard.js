@@ -3,11 +3,13 @@ import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
+import { useCurrency } from '../contexts/CurrencyContext';
 import { formatCurrency } from '../constants/pricing';
 import ImageGallery from './ImageGallery';
 
 export default function CarTileCard({ car, onPress }) {
   const { colors } = useAppTheme();
+  const { activeCurrency } = useCurrency();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
@@ -45,7 +47,7 @@ export default function CarTileCard({ car, onPress }) {
           </View>
         ) : null}
         <View style={styles.bottomRow}>
-          <Text style={styles.price}>{formatCurrency(car.pricePerDay)}<Text style={styles.priceLabel}>/day</Text></Text>
+          <Text style={styles.price}>{formatCurrency(car.pricePerDay, activeCurrency)}<Text style={styles.priceLabel}>/day</Text></Text>
           <View style={[
             styles.availabilityBadge,
             { backgroundColor: car.isAvailable ? colors.successBg : colors.errorBg }

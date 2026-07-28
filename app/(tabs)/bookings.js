@@ -1,9 +1,11 @@
 import { useState, useMemo } from 'react';
-import { StyleSheet, Text, View, FlatList, Image, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, FlatList, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { useCurrency } from '../../contexts/CurrencyContext';
 import { formatCurrency } from '../../constants/pricing';
 import { useBookings } from '../../contexts/BookingsContext';
 
@@ -22,14 +24,14 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function BookingCard({ booking, onPress, styles, colors }) {
+function BookingCard({ booking, onPress, styles, colors, currency }) {
   const statusColors = getStatusColors(colors);
   const statusStyle = statusColors[booking.status] ?? statusColors.Pending;
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress}>
       {booking.carImage ? (
-        <Image source={{ uri: booking.carImage }} style={styles.image} resizeMode="cover" />
+        <Image source={{ uri: booking.carImage }} style={styles.image} contentFit="cover" />
       ) : (
         <View style={[styles.image, styles.imagePlaceholder]}>
           <Text style={styles.imagePlaceholderText}>🚗</Text>
@@ -46,7 +48,7 @@ function BookingCard({ booking, onPress, styles, colors }) {
           {formatDate(booking.startDate)} — {formatDate(booking.endDate)}
         </Text>
         <Text style={styles.location} numberOfLines={1}>📍 {booking.pickupLocation}</Text>
-        <Text style={styles.total}>{formatCurrency(booking.totalCost)}</Text>
+        <Text style={styles.total}>{formatCurrency(booking.totalCost, currency)}</Text>
       </View>
       <Ionicons name="chevron-forward" size={18} color={colors.disabled} style={styles.chevron} />
     </TouchableOpacity>
@@ -56,6 +58,7 @@ function BookingCard({ booking, onPress, styles, colors }) {
 export default function BookingsScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
+  const { activeCurrency } = useCurrency();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { bookings, isLoading } = useBookings();
   const [activeTab, setActiveTab] = useState('Pending');
@@ -114,7 +117,7 @@ export default function BookingsScreen() {
           data={filtered}
           keyExtractor={item => item.id}
           renderItem={({ item }) => (
-            <BookingCard booking={item} onPress={() => router.push(`/booking/${item.id}`)} styles={styles} colors={colors} />
+            <BookingCard booking={item} onPress={() => router.push(`/booking/${item.id}`)} styles={styles} colors={colors} currency={activeCurrency} />
           )}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}

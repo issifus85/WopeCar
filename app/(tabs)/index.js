@@ -6,8 +6,10 @@ import { CATEGORIES } from '../../data/cars';
 import { fetchCars, formatDateParam } from '../../services/carsApi';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { useCurrency } from '../../contexts/CurrencyContext';
 import DateRangeModal, { formatDateShort } from '../../components/DateRangeModal';
 import SortModal, { SORT_OPTIONS } from '../../components/SortModal';
+import CurrencyModal from '../../components/CurrencyModal';
 import FilterModal from '../../components/FilterModal';
 import CarListCard from '../../components/CarListCard';
 import CarTileCard from '../../components/CarTileCard';
@@ -16,6 +18,8 @@ export default function HomeScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const { currencies, activeCurrency, setCurrency } = useCurrency();
+  const [isCurrencyModalVisible, setIsCurrencyModalVisible] = useState(false);
   const [cars, setCars] = useState([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -241,6 +245,13 @@ export default function HomeScreen() {
                 <Text style={styles.sortButtonText} numberOfLines={1}>{currentSortLabel}</Text>
               </TouchableOpacity>
 
+              <TouchableOpacity
+                style={styles.currencyButton}
+                onPress={() => setIsCurrencyModalVisible(true)}
+              >
+                <Text style={styles.currencyButtonText} numberOfLines={1}>{activeCurrency.code}</Text>
+              </TouchableOpacity>
+
               <View style={styles.viewToggle}>
                 <TouchableOpacity
                   style={[styles.viewToggleButton, viewMode === 'list' && styles.viewToggleButtonActive]}
@@ -292,6 +303,17 @@ export default function HomeScreen() {
         onSelect={(value) => {
           setSortBy(value);
           setIsSortModalVisible(false);
+        }}
+      />
+
+      <CurrencyModal
+        visible={isCurrencyModalVisible}
+        onClose={() => setIsCurrencyModalVisible(false)}
+        currencies={currencies}
+        value={activeCurrency.code}
+        onSelect={(code) => {
+          setCurrency(code);
+          setIsCurrencyModalVisible(false);
         }}
       />
 
@@ -487,6 +509,20 @@ function createStyles(colors) {
       fontSize: 12,
       color: colors.textPrimary,
       flexShrink: 1,
+    },
+    currencyButton: {
+      minWidth: 48,
+      height: 34,
+      paddingHorizontal: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.divider,
+      borderRadius: 8,
+    },
+    currencyButtonText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 12,
+      color: colors.textPrimary,
     },
     viewToggle: {
       flexDirection: 'row',

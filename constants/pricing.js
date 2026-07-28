@@ -1,8 +1,49 @@
 export const CURRENCY_CODE = 'GHS';
 
-export function formatCurrency(amount) {
-  const value = Number(amount) || 0;
-  return `${CURRENCY_CODE} ${value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+// Matches the old hardcoded "GHS 1,234" output when no active currency is
+// passed in (e.g. a call site not yet wired to CurrencyContext, or the
+// context still loading).
+const DEFAULT_CURRENCY = {
+  symbol: CURRENCY_CODE,
+  rate: 1,
+  format: 'left_space',
+  decimals: 0,
+  thousandSeparator: ',',
+  decimalSeparator: '.',
+};
+
+// Builds the number string using the admin's configured separators
+// (e.g. EUR on this backend is "." thousands / "," decimals - European
+// style) instead of assuming en-US comma/dot, which toLocaleString('en-US')
+// would silently force regardless of what the admin actually configured.
+function formatNumber(value, decimals, thousandSeparator, decimalSeparator) {
+  const isNegative = value < 0;
+  const fixed = Math.abs(value).toFixed(decimals);
+  const [intPart, decPart] = fixed.split('.');
+  const withThousands = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, thousandSeparator ?? '');
+  return (isNegative ? '-' : '') + withThousands + (decPart ? (decimalSeparator ?? '.') + decPart : '');
+}
+
+// `amount` is always in the base currency (GHS, what the backend stores).
+// `currency` (from useCurrency()'s activeCurrency) carries the admin-
+// configured rate to convert into and how to format the result - rate is
+// GHS-per-unit-of-that-currency (see App\Currency::format() on the
+// backend), so dividing converts a GHS amount into that currency.
+export function formatCurrency(amount, currency = DEFAULT_CURRENCY) {
+  const value = (Number(amount) || 0) / (currency.rate || 1);
+  const decimals = currency.decimals ?? 0;
+  const s = formatNumber(value, decimals, currency.thousandSeparator, currency.decimalSeparator);
+
+  switch (currency.format) {
+    case 'right_space':
+      return `${s} ${currency.symbol}`;
+    case 'left':
+      return `${currency.symbol}${s}`;
+    case 'left_space':
+      return `${currency.symbol} ${s}`;
+    default:
+      return `${s}${currency.symbol}`;
+  }
 }
 
 // Matches the live site's booking widget and T&Cs (wopecar.com/book-a-car/<slug>):

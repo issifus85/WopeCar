@@ -1,18 +1,21 @@
 import { useMemo } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Image } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
+import { useCurrency } from '../contexts/CurrencyContext';
 import { formatCurrency } from '../constants/pricing';
 
 export default function CarListCard({ car, onPress }) {
   const { colors } = useAppTheme();
+  const { activeCurrency } = useCurrency();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress}>
       {car.image ? (
-        <Image source={{ uri: car.image }} style={styles.image} resizeMode="cover" />
+        <Image source={{ uri: car.image }} style={styles.image} contentFit="cover" />
       ) : (
         <View style={[styles.image, styles.imagePlaceholder]}>
           <Text style={styles.imagePlaceholderText}>🚗</Text>
@@ -51,7 +54,7 @@ export default function CarListCard({ car, onPress }) {
         ) : null}
         <View style={styles.bottomRow}>
           <View>
-            <Text style={styles.price}>{formatCurrency(car.pricePerDay)}<Text style={styles.priceLabel}>/day</Text></Text>
+            <Text style={styles.price}>{formatCurrency(car.pricePerDay, activeCurrency)}<Text style={styles.priceLabel}>/day</Text></Text>
           </View>
           <View style={[
             styles.availabilityBadge,

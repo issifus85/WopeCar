@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   StyleSheet, Text, View, TextInput, TouchableOpacity, ActivityIndicator,
-  Image, ScrollView, Alert, Share,
+  ScrollView, Alert, Share,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
