@@ -8,7 +8,10 @@ const EMPTY_DRAFT = {
   returnTime: null,
   pickupLocation: '',
   returnLocation: '',
-  addonNames: [],
+  // {name, days}[] - days is how many of the trip's days this addon
+  // applies for (e.g. a per-day regional travel fee only charged for the
+  // portion of the trip actually spent in that region, not the whole trip).
+  addons: [],
   totalCost: 0,
   form: {
     firstName: '',

@@ -113,11 +113,11 @@ export default function CheckoutFormScreen() {
           <TextInput style={styles.input} value={address} onChangeText={setAddress} placeholder="Street address, city" placeholderTextColor={colors.textSubtle} />
         </View>
 
-        <Text style={styles.sectionTitle}>Driver's License</Text>
+        <Text style={styles.sectionTitle}>Driver's License or ID (for Chauffeur)</Text>
         <DocumentUploadTile label="License - Front" value={licenseFront} onPick={() => pickImage(setLicenseFront)} styles={styles} colors={colors} />
         <DocumentUploadTile label="License - Back" value={licenseBack} onPick={() => pickImage(setLicenseBack)} styles={styles} colors={colors} />
 
-        <Text style={styles.sectionTitle}>Proof of Address</Text>
+        <Text style={styles.sectionTitle}>Proof of Address (eg. Utility bill, hotel reservation, etc)</Text>
         <DocumentUploadTile label="Utility Bill / Bank Statement" value={proofOfAddress} onPick={() => pickImage(setProofOfAddress)} styles={styles} colors={colors} />
       </ScrollView>
 

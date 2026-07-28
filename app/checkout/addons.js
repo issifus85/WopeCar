@@ -4,7 +4,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
-import { formatCurrency } from '../../constants/pricing';
+import { useCurrency } from '../../contexts/CurrencyContext';
+import { formatCurrency, calculateRentalPricing } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
@@ -14,12 +15,19 @@ export default function CheckoutAddonsScreen() {
   const { carId } = useLocalSearchParams();
   const router = useRouter();
   const { colors } = useAppTheme();
+  const { activeCurrency } = useCurrency();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { draft, updateDraft } = useCheckout();
 
   const [car, setCar] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [selected, setSelected] = useState(new Set(draft.addonNames));
+  // { [addonName]: days } - only per_day addons ever read the day count,
+  // but it's harmless to store for every selected addon.
+  const [selected, setSelected] = useState(() => {
+    const map = {};
+    (draft.addons ?? []).forEach((a) => { map[a.name] = a.days; });
+    return map;
+  });
 
   useEffect(() => {
     fetchCarById(carId)
@@ -27,20 +35,44 @@ export default function CheckoutAddonsScreen() {
       .finally(() => setIsLoading(false));
   }, [carId]);
 
-  const toggleAddon = (name) => {
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(name)) {
-        next.delete(name);
+  // Trip length in billable days - a per-day addon can never apply for more
+  // days than the trip itself lasts, and defaults to the full trip (the
+  // common case: touring the other region for the whole rental) so cost
+  // stays unchanged unless the user actually shortens it.
+  const days = useMemo(() => {
+    if (!draft.startDate || !draft.endDate || !car) return 0;
+    return calculateRentalPricing({
+      startDate: draft.startDate,
+      endDate: draft.endDate,
+      pickupTime: draft.pickupTime,
+      returnTime: draft.returnTime,
+      drivenBy: car.drivenBy,
+      dailyRate: car.pricePerDay,
+    }).billableDays;
+  }, [draft.startDate, draft.endDate, draft.pickupTime, draft.returnTime, car]);
+
+  const toggleAddon = (addon) => {
+    setSelected((prev) => {
+      const next = { ...prev };
+      if (addon.name in next) {
+        delete next[addon.name];
       } else {
-        next.add(name);
+        next[addon.name] = Math.max(1, days);
       }
       return next;
     });
   };
 
+  const adjustAddonDays = (name, delta) => {
+    setSelected((prev) => {
+      const current = prev[name] ?? 1;
+      const clamped = Math.min(Math.max(1, current + delta), Math.max(1, days));
+      return { ...prev, [name]: clamped };
+    });
+  };
+
   const handleContinue = () => {
-    updateDraft({ addonNames: [...selected] });
+    updateDraft({ addons: Object.entries(selected).map(([name, addonDays]) => ({ name, days: addonDays })) });
     router.push({ pathname: '/checkout/summary', params: { carId } });
   };
 
@@ -71,24 +103,49 @@ export default function CheckoutAddonsScreen() {
           </View>
         ) : (
           addons.map((addon) => {
-            const isSelected = selected.has(addon.name);
+            const isSelected = addon.name in selected;
+            const isPerDay = addon.type === 'per_day';
+            const addonDays = selected[addon.name] ?? 1;
             return (
-              <TouchableOpacity
-                key={addon.name}
-                style={[styles.addonRow, isSelected && styles.addonRowSelected]}
-                onPress={() => toggleAddon(addon.name)}
-              >
-                <View style={[styles.checkbox, isSelected && styles.checkboxChecked]}>
-                  {isSelected && <Ionicons name="checkmark" size={14} color={colors.white} />}
-                </View>
-                <View style={styles.addonInfo}>
-                  <Text style={styles.addonName}>{addon.name}</Text>
-                  <Text style={styles.addonType}>
-                    {addon.type === 'per_day' ? 'Per day' : addon.type === 'per_hour' ? 'Per hour' : addon.type}
+              <View key={addon.name} style={[styles.addonRow, isSelected && styles.addonRowSelected]}>
+                <TouchableOpacity style={styles.addonToggleRow} onPress={() => toggleAddon(addon)}>
+                  <View style={[styles.checkbox, isSelected && styles.checkboxChecked]}>
+                    {isSelected && <Ionicons name="checkmark" size={14} color={colors.white} />}
+                  </View>
+                  <View style={styles.addonInfo}>
+                    <Text style={styles.addonName}>{addon.name}</Text>
+                    <Text style={styles.addonType}>
+                      {isPerDay ? 'Per day' : addon.type === 'per_hour' ? 'Per hour' : addon.type}
+                    </Text>
+                  </View>
+                  <Text style={styles.addonPrice}>
+                    +{formatCurrency(addon.price, activeCurrency)}{isPerDay ? '/day' : ''}
                   </Text>
-                </View>
-                <Text style={styles.addonPrice}>+{formatCurrency(addon.price)}</Text>
-              </TouchableOpacity>
+                </TouchableOpacity>
+
+                {isSelected && isPerDay && (
+                  <View style={styles.daysStepperRow}>
+                    <Text style={styles.daysStepperLabel}>Days in this region</Text>
+                    <View style={styles.daysStepper}>
+                      <TouchableOpacity
+                        style={styles.stepperButton}
+                        onPress={() => adjustAddonDays(addon.name, -1)}
+                        disabled={addonDays <= 1}
+                      >
+                        <Ionicons name="remove" size={16} color={addonDays <= 1 ? colors.disabled : colors.teal} />
+                      </TouchableOpacity>
+                      <Text style={styles.stepperValue}>{addonDays} {addonDays === 1 ? 'day' : 'days'}</Text>
+                      <TouchableOpacity
+                        style={styles.stepperButton}
+                        onPress={() => adjustAddonDays(addon.name, 1)}
+                        disabled={addonDays >= Math.max(1, days)}
+                      >
+                        <Ionicons name="add" size={16} color={addonDays >= Math.max(1, days) ? colors.disabled : colors.teal} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </View>
             );
           })
         )}
@@ -138,9 +195,6 @@ function createStyles(colors) {
       color: colors.textSubtle,
     },
     addonRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
       backgroundColor: colors.background,
       borderRadius: 12,
       padding: 14,
@@ -151,6 +205,46 @@ function createStyles(colors) {
     addonRowSelected: {
       borderColor: colors.teal,
       backgroundColor: colors.highlight,
+    },
+    addonToggleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    daysStepperRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 12,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
+    daysStepperLabel: {
+      fontFamily: FONTS.medium,
+      fontSize: 12,
+      color: colors.textMuted,
+    },
+    daysStepper: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    stepperButton: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    stepperValue: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 13,
+      color: colors.textPrimary,
+      minWidth: 48,
+      textAlign: 'center',
     },
     checkbox: {
       width: 22,

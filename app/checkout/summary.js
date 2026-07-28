@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, ActivityIndicator, ScrollView } from 'react-nat
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { useCurrency } from '../../contexts/CurrencyContext';
 import { formatCurrency, SELF_DRIVE_DELIVERY_FEE, calculateSecurityDeposit, calculateRentalPricing } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { useCheckout } from '../../contexts/CheckoutContext';
@@ -17,6 +18,7 @@ export default function CheckoutSummaryScreen() {
   const { carId } = useLocalSearchParams();
   const router = useRouter();
   const { colors } = useAppTheme();
+  const { activeCurrency } = useCurrency();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { draft, updateDraft } = useCheckout();
 
@@ -41,16 +43,24 @@ export default function CheckoutSummaryScreen() {
     }).billableDays;
   }, [draft.startDate, draft.endDate, draft.pickupTime, draft.returnTime, car]);
 
+  // Pairs each selected addon with the day count chosen on the previous
+  // screen (draft.addons is {name, days}[]) - a per_day addon is billed for
+  // that many days, not the full trip length.
   const selectedAddons = useMemo(() => {
     if (!car) return [];
-    return (car.regionalAddons ?? []).filter(a => draft.addonNames.includes(a.name));
-  }, [car, draft.addonNames]);
+    return (car.regionalAddons ?? [])
+      .map((addon) => {
+        const selection = draft.addons.find((a) => a.name === addon.name);
+        return selection ? { ...addon, days: selection.days } : null;
+      })
+      .filter(Boolean);
+  }, [car, draft.addons]);
 
   const isSelfDrive = car?.drivenBy === 'Self-drive';
 
   const rentalCost = (car?.pricePerDay ?? 0) * days;
   const addonsCost = selectedAddons.reduce((sum, addon) => {
-    return sum + (addon.type === 'per_day' ? addon.price * days : addon.price);
+    return sum + (addon.type === 'per_day' ? addon.price * addon.days : addon.price);
   }, 0);
   const subtotal = rentalCost + addonsCost;
   const deliveryFee = isSelfDrive ? SELF_DRIVE_DELIVERY_FEE : 0;
@@ -95,17 +105,17 @@ export default function CheckoutSummaryScreen() {
         <Text style={styles.sectionTitle}>Cost Breakdown</Text>
         <View style={styles.costCard}>
           <View style={styles.costRow}>
-            <Text style={styles.costLabel}>{formatCurrency(car.pricePerDay)} x {days} {days === 1 ? 'day' : 'days'}</Text>
-            <Text style={styles.costValue}>{formatCurrency(rentalCost)}</Text>
+            <Text style={styles.costLabel}>{formatCurrency(car.pricePerDay, activeCurrency)} x {days} {days === 1 ? 'day' : 'days'}</Text>
+            <Text style={styles.costValue}>{formatCurrency(rentalCost, activeCurrency)}</Text>
           </View>
 
           {selectedAddons.map((addon) => (
             <View style={styles.costRow} key={addon.name}>
               <Text style={styles.costLabel}>
-                {addon.name}{addon.type === 'per_day' ? ` x ${days}` : ''}
+                {addon.name}{addon.type === 'per_day' ? ` x ${addon.days} ${addon.days === 1 ? 'day' : 'days'}` : ''}
               </Text>
               <Text style={styles.costValue}>
-                {formatCurrency(addon.type === 'per_day' ? addon.price * days : addon.price)}
+                {formatCurrency(addon.type === 'per_day' ? addon.price * addon.days : addon.price, activeCurrency)}
               </Text>
             </View>
           ))}
@@ -113,20 +123,20 @@ export default function CheckoutSummaryScreen() {
           {isSelfDrive && (
             <View style={styles.costRow}>
               <Text style={styles.costLabel}>Delivery fee</Text>
-              <Text style={styles.costValue}>{formatCurrency(deliveryFee)}</Text>
+              <Text style={styles.costValue}>{formatCurrency(deliveryFee, activeCurrency)}</Text>
             </View>
           )}
 
           <View style={styles.costRow}>
             <Text style={styles.costLabel}>Security deposit (refundable)</Text>
-            <Text style={styles.costValue}>{formatCurrency(securityDeposit)}</Text>
+            <Text style={styles.costValue}>{formatCurrency(securityDeposit, activeCurrency)}</Text>
           </View>
 
           <View style={styles.divider} />
 
           <View style={styles.costRow}>
             <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalValue}>{formatCurrency(total)}</Text>
+            <Text style={styles.totalValue}>{formatCurrency(total, activeCurrency)}</Text>
           </View>
         </View>
       </ScrollView>
