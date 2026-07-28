@@ -1,15 +1,23 @@
-import { useState, useEffect, useMemo } from 'react';
-import { StyleSheet, Text, View, Image, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Linking } from 'react-native';
+import { Image } from 'expo-image';
+import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { useCurrency } from '../../contexts/CurrencyContext';
+import { useSettings } from '../../contexts/SettingsContext';
 import { formatCurrency, SELF_DRIVE_DELIVERY_FEE, calculateSecurityDeposit, getMinBookingDays } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { payWithPaystack } from '../../services/paystackCheckout';
+import { openDirections } from '../../services/mapsLauncher';
+import { getInspection } from '../../services/inspectionsApi';
+import { getRentalAgreement } from '../../services/rentalAgreementApi';
 import { useBookings } from '../../contexts/BookingsContext';
 import { useInbox } from '../../contexts/InboxContext';
 import DateRangeModal, { formatDateShort } from '../../components/DateRangeModal';
+import LocationSearchModal from '../../components/LocationSearchModal';
 import ConfirmModal from '../../components/ConfirmModal';
 
 function getStatusColors(colors) {
@@ -28,6 +36,32 @@ const TIME_SLOTS = [
 function formatDate(date) {
   if (!date) return '';
   return new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// inspection is undefined while its GET is still in flight, null once
+// confirmed there's genuinely no draft/report yet - see the useFocusEffect
+// in BookingDetailScreen.
+function inspectionStatusLabel(inspection) {
+  if (inspection === undefined) return '...';
+  if (!inspection) return 'Not Started';
+  return inspection.status === 'submitted' ? 'View Report' : 'Resume Draft';
+}
+
+function inspectionStatusStyle(inspection, colors) {
+  if (!inspection || inspection === undefined) return null;
+  return { color: inspection.status === 'submitted' ? colors.teal : colors.warning };
+}
+
+// Same undefined/null/object convention as inspectionStatusLabel above.
+function agreementStatusLabel(agreement) {
+  if (agreement === undefined) return '...';
+  if (!agreement) return 'Not Started';
+  return agreement.status === 'submitted' ? 'View Agreement' : 'Resume Draft';
+}
+
+function agreementStatusStyle(agreement, colors) {
+  if (!agreement || agreement === undefined) return null;
+  return { color: agreement.status === 'submitted' ? colors.teal : colors.warning };
 }
 
 function daysBetween(start, end) {
@@ -56,12 +90,25 @@ function TimeSlotPicker({ label, value, onChange, styles }) {
 }
 
 export default function BookingDetailScreen() {
-  const { id } = useLocalSearchParams();
+  const { id, from } = useLocalSearchParams();
   const router = useRouter();
+  const navigation = useNavigation();
   const { colors } = useAppTheme();
+  const { activeCurrency } = useCurrency();
+  const { settings } = useSettings();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { bookings, updateBooking, cancelBooking } = useBookings();
-  const { startConversation, notifyBookingEvent } = useInbox();
+  const { conversations, notifyBookingEvent } = useInbox();
+
+  // Static headerBackTitle in _layout.js says "Bookings" (the common path,
+  // reached from the Bookings tab list) - override it here for the other
+  // entry point, a notification tap from the Inbox hub, so the back button
+  // label matches where it actually goes.
+  useLayoutEffect(() => {
+    if (from === 'inbox') {
+      navigation.setOptions({ headerBackTitle: 'Inbox' });
+    }
+  }, [from, navigation]);
 
   const booking = bookings.find(b => b.id === id);
 
@@ -80,12 +127,63 @@ export default function BookingDetailScreen() {
   const [editPickupLocation, setEditPickupLocation] = useState('');
   const [editReturnLocation, setEditReturnLocation] = useState('');
   const [sameAsPickup, setSameAsPickup] = useState(false);
+  const [isPickupModalVisible, setIsPickupModalVisible] = useState(false);
+  const [isReturnModalVisible, setIsReturnModalVisible] = useState(false);
 
   useEffect(() => {
     if (booking?.carId) {
       fetchCarById(booking.carId).then(setCar).catch(() => setCar(null));
     }
   }, [booking?.carId]);
+
+  // undefined = still loading, null = no inspection started yet. Keyed off
+  // booking.serverId (the real server booking id) rather than booking.id
+  // (the local id) - inspections live server-side, same constraint as
+  // messaging's serverConversation lookup above. Re-fetched on focus so
+  // returning from the wizard picks up whatever was just saved.
+  const [preInspection, setPreInspection] = useState(undefined);
+  const [postInspection, setPostInspection] = useState(undefined);
+  const [rentalAgreement, setRentalAgreement] = useState(undefined);
+
+  useFocusEffect(useCallback(() => {
+    if (!booking?.serverId) {
+      setPreInspection(null);
+      setPostInspection(null);
+      setRentalAgreement(null);
+      return;
+    }
+    getInspection(booking.serverId, 'pre').then(setPreInspection).catch(() => setPreInspection(null));
+    getInspection(booking.serverId, 'post').then(setPostInspection).catch(() => setPostInspection(null));
+    getRentalAgreement(booking.serverId).then(setRentalAgreement).catch(() => setRentalAgreement(null));
+  }, [booking?.serverId]));
+
+  const handleInspectionPress = (type, inspection) => {
+    if (!booking.serverId) {
+      Alert.alert('Not available yet', "Vehicle inspection isn't available for this booking yet.");
+      return;
+    }
+    if (inspection?.status === 'submitted' && inspection.document) {
+      Linking.openURL(inspection.document.signedUrl);
+      return;
+    }
+    // localId is the app's own booking.id (used to navigate back to this
+    // exact screen when the wizard finishes) - distinct from bookingId
+    // (booking.serverId), which is what the inspection API itself is keyed
+    // on. The two are unrelated strings/ids, never interchangeable.
+    router.push({ pathname: '/inspection/mileage', params: { bookingId: booking.serverId, localId: booking.id, type } });
+  };
+
+  const handleRentalAgreementPress = () => {
+    if (!booking.serverId) {
+      Alert.alert('Not available yet', "The rental agreement isn't available for this booking yet.");
+      return;
+    }
+    if (rentalAgreement?.status === 'submitted' && rentalAgreement.document) {
+      Linking.openURL(rentalAgreement.document.signedUrl);
+      return;
+    }
+    router.push({ pathname: '/rental-agreement/[bookingId]', params: { bookingId: booking.serverId, localId: booking.id } });
+  };
 
   const startEditing = () => {
     setEditStart(booking.startDate ? new Date(booking.startDate) : null);
@@ -108,14 +206,28 @@ export default function BookingDetailScreen() {
   const recomputedTotal = useMemo(() => {
     if (!car || !days) return booking?.totalCost ?? 0;
     const rentalCost = (car.pricePerDay ?? 0) * days;
-    const addons = (car.regionalAddons ?? []).filter(a => booking.addonNames?.includes(a.name));
-    const addonsCost = addons.reduce((sum, a) => sum + (a.type === 'per_day' ? a.price * days : a.price), 0);
+    // booking.addons ({name, days}[]) is the current shape; bookings made
+    // before per-addon day counts existed only have booking.addonNames
+    // (string[]) with no day count of their own - fall back to the
+    // original trip length for those, matching the old behavior exactly.
+    const addonSelections = booking.addons
+      ?? (booking.addonNames ?? []).map((name) => ({ name, days: originalDays }));
+    const addons = (car.regionalAddons ?? [])
+      .map((addon) => {
+        const selection = addonSelections.find((a) => a.name === addon.name);
+        if (!selection) return null;
+        // An addon can never apply to more days than the (possibly just
+        // edited) trip itself now lasts.
+        return { ...addon, days: Math.min(selection.days, days) };
+      })
+      .filter(Boolean);
+    const addonsCost = addons.reduce((sum, a) => sum + (a.type === 'per_day' ? a.price * a.days : a.price), 0);
     const subtotal = rentalCost + addonsCost;
     const isSelfDrive = car.drivenBy === 'Self-drive';
     const deliveryFee = isSelfDrive ? SELF_DRIVE_DELIVERY_FEE : 0;
     const securityDeposit = calculateSecurityDeposit(subtotal);
     return subtotal + deliveryFee + securityDeposit;
-  }, [car, days, booking]);
+  }, [car, days, booking, originalDays]);
 
   const difference = recomputedTotal - (booking?.totalCost ?? 0);
 
@@ -174,17 +286,19 @@ export default function BookingDetailScreen() {
     setIsCancelModalVisible(false);
   };
 
+  // Hosts are never directly messageable (see InboxContext.js) - this
+  // opens the real, booking-anchored conversation with WopeCar Support
+  // instead, created server-side when the booking was made. Falls back
+  // gracefully if that best-effort server booking call never succeeded.
   const handleMessageParticipant = () => {
-    if (!car) return;
-    const isChauffeur = car.drivenBy === 'Chauffeur';
-    const participant = {
-      id: `${isChauffeur ? 'driver' : 'host'}-${car.id}`,
-      name: car.owner?.name || (isChauffeur ? 'Driver' : 'Host'),
-      role: isChauffeur ? 'Driver' : 'Host',
-      avatar: car.owner?.avatar || null,
-    };
-    const conversationId = startConversation({ participant, carId: car.id, bookingId: booking.id });
-    router.push(`/inbox/${conversationId}`);
+    const serverConversation = conversations.find(
+      (c) => c.source === 'server' && c.bookingId === booking.serverId
+    );
+    if (!serverConversation) {
+      Alert.alert('Messaging unavailable', "Messaging isn't available for this booking yet.");
+      return;
+    }
+    router.push(`/inbox/${serverConversation.id}`);
   };
 
   if (!booking) {
@@ -203,7 +317,7 @@ export default function BookingDetailScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.headerCard}>
         {booking.carImage ? (
-          <Image source={{ uri: booking.carImage }} style={styles.carImage} resizeMode="cover" />
+          <Image source={{ uri: booking.carImage }} style={styles.carImage} contentFit="cover" />
         ) : (
           <View style={[styles.carImage, styles.imagePlaceholder]}>
             <Text style={styles.imagePlaceholderText}>🚗</Text>
@@ -218,9 +332,7 @@ export default function BookingDetailScreen() {
             {!!car && (
               <TouchableOpacity style={styles.messageButton} onPress={handleMessageParticipant}>
                 <Ionicons name="chatbubble-ellipses-outline" size={13} color={colors.teal} />
-                <Text style={styles.messageButtonText}>
-                  Message {car.drivenBy === 'Chauffeur' ? 'Driver' : 'Host'}
-                </Text>
+                <Text style={styles.messageButtonText}>Message Support</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -239,13 +351,80 @@ export default function BookingDetailScreen() {
             <Text style={styles.rowValue}>{formatDate(booking.endDate)} · {booking.returnTime}</Text>
           </View>
           <View style={styles.row}>
-            <Text style={styles.rowLabel}>Pickup Location</Text>
-            <Text style={styles.rowValue} numberOfLines={2}>{booking.pickupLocation}</Text>
+            <Text style={styles.rowLabel}>Vehicle Delivery Location</Text>
+            <View style={styles.rowValueWithAction}>
+              <Text style={styles.rowValue} numberOfLines={2}>{booking.pickupLocation}</Text>
+              {!!booking.pickupLocation && (
+                <TouchableOpacity
+                  onPress={() => openDirections(booking.pickupLocation, settings.mapProvider)}
+                  hitSlop={8}
+                  style={styles.directionsButton}
+                >
+                  <Ionicons name="navigate-outline" size={16} color={colors.teal} />
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
           <View style={styles.row}>
-            <Text style={styles.rowLabel}>Return Location</Text>
-            <Text style={styles.rowValue} numberOfLines={2}>{booking.returnLocation}</Text>
+            <Text style={styles.rowLabel}>Vehicle Pickup Location</Text>
+            <View style={styles.rowValueWithAction}>
+              <Text style={styles.rowValue} numberOfLines={2}>{booking.returnLocation}</Text>
+              {!!booking.returnLocation && (
+                <TouchableOpacity
+                  onPress={() => openDirections(booking.returnLocation, settings.mapProvider)}
+                  hitSlop={8}
+                  style={styles.directionsButton}
+                >
+                  <Ionicons name="navigate-outline" size={16} color={colors.teal} />
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
+        </View>
+      )}
+
+      {mode === 'view' && (
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Vehicle Inspection</Text>
+          <TouchableOpacity style={styles.row} onPress={() => handleInspectionPress('pre', preInspection)}>
+            <Text style={styles.rowLabel}>Pre-Rental Inspection</Text>
+            <View style={styles.rowValueWithAction}>
+              <Text style={[styles.rowValue, inspectionStatusStyle(preInspection, colors)]}>
+                {inspectionStatusLabel(preInspection)}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.textSubtle} />
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.row, styles.rowLast]}
+            onPress={() => handleInspectionPress('post', postInspection)}
+            disabled={preInspection?.status !== 'submitted'}
+          >
+            <Text style={styles.rowLabel}>Post-Rental Inspection</Text>
+            <View style={styles.rowValueWithAction}>
+              <Text style={[styles.rowValue, inspectionStatusStyle(postInspection, colors)]}>
+                {preInspection?.status !== 'submitted' ? 'Locked' : inspectionStatusLabel(postInspection)}
+              </Text>
+              {preInspection?.status === 'submitted' && (
+                <Ionicons name="chevron-forward" size={16} color={colors.textSubtle} />
+              )}
+            </View>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {mode === 'view' && (
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Rental Agreement</Text>
+          <TouchableOpacity style={[styles.row, styles.rowLast]} onPress={handleRentalAgreementPress}>
+            <Text style={styles.rowLabel}>Client Rental Agreement</Text>
+            <View style={styles.rowValueWithAction}>
+              <Text style={[styles.rowValue, agreementStatusStyle(rentalAgreement, colors)]}>
+                {agreementStatusLabel(rentalAgreement)}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.textSubtle} />
+            </View>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -274,14 +453,13 @@ export default function BookingDetailScreen() {
           <TimeSlotPicker label="Return Time" value={editReturnTime} onChange={setEditReturnTime} styles={styles} />
 
           <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Pickup Location</Text>
-            <TextInput
-              style={styles.input}
-              value={editPickupLocation}
-              onChangeText={handlePickupLocationChange}
-              placeholder="e.g. Impact Hub, Accra"
-              placeholderTextColor={colors.textSubtle}
-            />
+            <Text style={styles.fieldLabel}>Vehicle Delivery Location</Text>
+            <TouchableOpacity style={styles.locationPill} onPress={() => setIsPickupModalVisible(true)}>
+              <Ionicons name="location-outline" size={18} color={colors.teal} />
+              <Text style={[styles.locationPillText, !editPickupLocation && styles.locationPillPlaceholder]} numberOfLines={1}>
+                {editPickupLocation || 'Search for a vehicle delivery location...'}
+              </Text>
+            </TouchableOpacity>
           </View>
 
           <TouchableOpacity style={styles.checkboxRow} onPress={toggleSameAsPickup}>
@@ -293,21 +471,20 @@ export default function BookingDetailScreen() {
 
           {!sameAsPickup && (
             <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Return Location</Text>
-              <TextInput
-                style={styles.input}
-                value={editReturnLocation}
-                onChangeText={setEditReturnLocation}
-                placeholder="e.g. Kotoka Airport, Accra"
-                placeholderTextColor={colors.textSubtle}
-              />
+              <Text style={styles.fieldLabel}>Vehicle Pickup Location</Text>
+              <TouchableOpacity style={styles.locationPill} onPress={() => setIsReturnModalVisible(true)}>
+                <Ionicons name="location-outline" size={18} color={colors.teal} />
+                <Text style={[styles.locationPillText, !editReturnLocation && styles.locationPillPlaceholder]} numberOfLines={1}>
+                  {editReturnLocation || 'Search for a vehicle pickup location...'}
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
 
           {!!car && days > 0 && (
             <View style={styles.recomputedBox}>
               <Text style={styles.recomputedLabel}>New total for {days} {days === 1 ? 'day' : 'days'}</Text>
-              <Text style={styles.recomputedValue}>{formatCurrency(recomputedTotal)}</Text>
+              <Text style={styles.recomputedValue}>{formatCurrency(recomputedTotal, activeCurrency)}</Text>
             </View>
           )}
         </View>
@@ -326,11 +503,11 @@ export default function BookingDetailScreen() {
               <Text style={styles.rowValue}>{formatDate(editEnd)} · {editReturnTime}</Text>
             </View>
             <View style={styles.row}>
-              <Text style={styles.rowLabel}>Pickup Location</Text>
+              <Text style={styles.rowLabel}>Vehicle Delivery Location</Text>
               <Text style={styles.rowValue} numberOfLines={2}>{editPickupLocation}</Text>
             </View>
             <View style={styles.row}>
-              <Text style={styles.rowLabel}>Return Location</Text>
+              <Text style={styles.rowLabel}>Vehicle Pickup Location</Text>
               <Text style={styles.rowValue} numberOfLines={2}>{editReturnLocation}</Text>
             </View>
           </View>
@@ -339,11 +516,11 @@ export default function BookingDetailScreen() {
             <Text style={styles.sectionTitle}>Cost Summary</Text>
             <View style={styles.row}>
               <Text style={styles.rowLabel}>Original Total ({originalDays} {originalDays === 1 ? 'day' : 'days'})</Text>
-              <Text style={styles.rowValue}>{formatCurrency(booking.totalCost)}</Text>
+              <Text style={styles.rowValue}>{formatCurrency(booking.totalCost, activeCurrency)}</Text>
             </View>
             <View style={styles.row}>
               <Text style={styles.rowLabel}>New Total ({days} {days === 1 ? 'day' : 'days'})</Text>
-              <Text style={styles.rowValue}>{formatCurrency(recomputedTotal)}</Text>
+              <Text style={styles.rowValue}>{formatCurrency(recomputedTotal, activeCurrency)}</Text>
             </View>
 
             <View style={styles.divider} />
@@ -352,7 +529,7 @@ export default function BookingDetailScreen() {
               <Text style={styles.totalLabel}>
                 {difference > 0 ? 'Amount Due' : difference < 0 ? 'Difference (Credit)' : 'Amount Due'}
               </Text>
-              <Text style={styles.totalValue}>{formatCurrency(Math.abs(difference))}</Text>
+              <Text style={styles.totalValue}>{formatCurrency(Math.abs(difference), activeCurrency)}</Text>
             </View>
 
             {difference <= 0 && (
@@ -385,7 +562,7 @@ export default function BookingDetailScreen() {
           <Text style={styles.sectionTitle}>Payment</Text>
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Total Paid</Text>
-            <Text style={styles.totalValue}>{formatCurrency(booking.totalCost)}</Text>
+            <Text style={styles.totalValue}>{formatCurrency(booking.totalCost, activeCurrency)}</Text>
           </View>
           {!!booking.paystackReference && (
             <View style={styles.row}>
@@ -435,7 +612,7 @@ export default function BookingDetailScreen() {
                   <ActivityIndicator color={colors.white} size="small" />
                 ) : (
                   <Text style={styles.primaryButtonText}>
-                    {difference > 0 ? `Pay ${formatCurrency(difference)}` : 'Confirm Changes'}
+                    {difference > 0 ? `Pay ${formatCurrency(difference, activeCurrency)}` : 'Confirm Changes'}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -475,6 +652,19 @@ export default function BookingDetailScreen() {
         destructive
         onConfirm={handleConfirmCancel}
         onCancel={() => setIsCancelModalVisible(false)}
+      />
+
+      <LocationSearchModal
+        visible={isPickupModalVisible}
+        onClose={() => setIsPickupModalVisible(false)}
+        title="Vehicle Delivery Location"
+        onSelect={handlePickupLocationChange}
+      />
+      <LocationSearchModal
+        visible={isReturnModalVisible}
+        onClose={() => setIsReturnModalVisible(false)}
+        title="Vehicle Pickup Location"
+        onSelect={setEditReturnLocation}
       />
     </ScrollView>
   );
@@ -600,6 +790,21 @@ function createStyles(colors) {
     flexShrink: 1,
     textAlign: 'right',
   },
+  rowValueWithAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 1,
+    justifyContent: 'flex-end',
+  },
+  directionsButton: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.highlight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   totalValue: {
     fontFamily: FONTS.bold,
     fontSize: 16,
@@ -708,16 +913,25 @@ function createStyles(colors) {
     fontFamily: FONTS.semiBold,
     color: colors.white,
   },
-  input: {
-    fontFamily: FONTS.regular,
+  locationPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     backgroundColor: colors.background,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    fontSize: 15,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  locationPillText: {
+    flex: 1,
+    fontFamily: FONTS.regular,
+    fontSize: 15,
     color: colors.textPrimary,
+  },
+  locationPillPlaceholder: {
+    color: colors.textSubtle,
   },
   checkboxRow: {
     flexDirection: 'row',
