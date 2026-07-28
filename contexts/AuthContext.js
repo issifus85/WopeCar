@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import * as authApi from '../services/authApi';
 import * as accountApi from '../services/accountApi';
-import { clearToken } from '../services/tokenStorage';
+import { loginWithSocialProvider } from '../services/socialAuth';
+import { setToken, clearToken } from '../services/tokenStorage';
 
 const AuthContext = createContext(null);
 
@@ -34,6 +35,15 @@ export function AuthProvider({ children }) {
     return newUser;
   }, []);
 
+  // Google/Facebook - find-or-create happens server-side (same action for
+  // sign-in and sign-up), so this returns a Sanctum token rather than a
+  // user directly; refresh() re-fetches /user with it now stored.
+  const loginWithSocial = useCallback(async (provider) => {
+    const token = await loginWithSocialProvider(provider);
+    await setToken(token);
+    return refresh();
+  }, [refresh]);
+
   const logout = useCallback(async () => {
     await authApi.logout();
     setUser(null);
@@ -65,7 +75,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, isLoading, login, register, logout, refresh, updateProfile, uploadAvatar, changePassword, deleteAccount }}
+      value={{ user, isLoading, login, register, loginWithSocial, logout, refresh, updateProfile, uploadAvatar, changePassword, deleteAccount }}
     >
       {children}
     </AuthContext.Provider>

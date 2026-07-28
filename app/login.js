@@ -13,29 +13,44 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { FontAwesome } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import ConfirmModal from '../components/ConfirmModal';
 
 export default function LoginScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { redirect, ...redirectParams } = useLocalSearchParams();
-  const { login, register } = useAuth();
+  const { login, register, loginWithSocial } = useAuth();
   const [mode, setMode] = useState('signin');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [socialProvider, setSocialProvider] = useState(null);
   const [error, setError] = useState(null);
+  const [comingSoon, setComingSoon] = useState(null);
 
   const isSignUp = mode === 'signup';
+  const isBusy = isSubmitting || !!socialProvider;
 
   const switchMode = (nextMode) => {
     setMode(nextMode);
     setError(null);
+  };
+
+  const navigateAfterAuth = () => {
+    if (redirect) {
+      router.replace({ pathname: redirect, params: redirectParams });
+    } else if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/profile');
+    }
   };
 
   const handleSubmit = async () => {
@@ -61,19 +76,38 @@ export default function LoginScreen() {
       } else {
         await login({ email, password });
       }
-      if (redirect) {
-        router.replace({ pathname: redirect, params: redirectParams });
-      } else if (router.canGoBack()) {
-        router.back();
-      } else {
-        router.replace('/profile');
-      }
+      navigateAfterAuth();
     } catch (e) {
       setError(e.message || 'Something went wrong. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  // Google/Facebook are the same action for sign-in and sign-up (the
+  // backend finds-or-creates the account), so this works regardless of
+  // which tab is active. Fully built and working end-to-end (backend
+  // verified live) - not wired to the buttons below yet because the OAuth
+  // redirect URIs still need to be whitelisted on Google/Meta's side (see
+  // Google Cloud Console/Meta for Developers - blocked on account access).
+  // Once that's done, swap openComingSoon(...) below back to
+  // handleSocialLogin(provider).
+  // eslint-disable-next-line no-unused-vars
+  const handleSocialLogin = async (provider) => {
+    setError(null);
+    setSocialProvider(provider);
+    try {
+      await loginWithSocial(provider);
+      navigateAfterAuth();
+    } catch (e) {
+      setError(e.message || 'Something went wrong. Please try again.');
+    } finally {
+      setSocialProvider(null);
+    }
+  };
+
+  const openComingSoon = (label) => setComingSoon(label);
+  const closeComingSoon = () => setComingSoon(null);
 
   return (
     <ImageBackground
@@ -186,9 +220,9 @@ export default function LoginScreen() {
             {!!error && <Text style={styles.errorText}>{error}</Text>}
 
             <TouchableOpacity
-              style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+              style={[styles.submitButton, isBusy && styles.submitButtonDisabled]}
               onPress={handleSubmit}
-              disabled={isSubmitting}
+              disabled={isBusy}
             >
               {isSubmitting ? (
                 <ActivityIndicator color={colors.white} />
@@ -198,6 +232,43 @@ export default function LoginScreen() {
                 </Text>
               )}
             </TouchableOpacity>
+
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or continue with</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <View style={styles.socialRow}>
+              <TouchableOpacity
+                style={[styles.socialButton, isBusy && styles.socialButtonDisabled]}
+                onPress={() => openComingSoon('Google Sign-In')}
+                disabled={isBusy}
+              >
+                {socialProvider === 'google' ? (
+                  <ActivityIndicator color={colors.textMuted} size="small" />
+                ) : (
+                  <>
+                    <FontAwesome name="google" size={16} color="#DB4437" />
+                    <Text style={styles.socialButtonText}>Google</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.socialButton, isBusy && styles.socialButtonDisabled]}
+                onPress={() => openComingSoon('Facebook Sign-In')}
+                disabled={isBusy}
+              >
+                {socialProvider === 'facebook' ? (
+                  <ActivityIndicator color={colors.textMuted} size="small" />
+                ) : (
+                  <>
+                    <FontAwesome name="facebook" size={16} color="#1877F2" />
+                    <Text style={styles.socialButtonText}>Facebook</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
 
             <Text style={styles.switchModeText}>
               {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
@@ -211,6 +282,16 @@ export default function LoginScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <ConfirmModal
+        visible={!!comingSoon}
+        title={comingSoon}
+        message="This feature isn't available yet - we're working on it."
+        confirmLabel="OK"
+        cancelLabel={null}
+        onConfirm={closeComingSoon}
+        onCancel={closeComingSoon}
+      />
     </ImageBackground>
   );
 }
@@ -343,6 +424,47 @@ function createStyles(colors) {
     fontFamily: FONTS.semiBold,
     color: colors.white,
     fontSize: 16,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  dividerText: {
+    fontFamily: FONTS.regular,
+    fontSize: 12,
+    color: colors.textSubtle,
+  },
+  socialRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+  },
+  socialButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 10,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  socialButtonDisabled: {
+    opacity: 0.7,
+  },
+  socialButtonText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 14,
+    color: colors.textPrimary,
   },
   switchModeText: {
     fontFamily: FONTS.regular,
