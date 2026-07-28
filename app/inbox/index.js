@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View, FlatList, Image, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, FlatList, TouchableOpacity } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
@@ -92,7 +93,7 @@ export default function InboxScreen() {
 
   const openNotification = (notification) => {
     markNotificationRead(notification.id);
-    if (notification.bookingId) router.push(`/booking/${notification.bookingId}`);
+    if (notification.bookingId) router.push(`/booking/${notification.bookingId}?from=inbox`);
   };
 
   const confirmDelete = () => {

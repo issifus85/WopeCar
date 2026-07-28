@@ -38,6 +38,10 @@ function normalizeUser(raw) {
     referralCode: raw.referral_code ?? null,
     profileCompletion: raw.profile_completion ?? 0,
     memberSince: raw.created_at ?? null,
+    // Mirrors the backend's App\User::isSupportUser() - role_id 1 ("admin",
+    // confirmed live) grants Staff Inbox access automatically; is_support
+    // stays available as a manual override for a non-admin account.
+    isSupport: !!raw.is_support || raw.role_id === 1,
   };
 }
 

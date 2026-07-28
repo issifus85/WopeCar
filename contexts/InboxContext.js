@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import * as inboxStorage from '../services/inboxStorage';
+import * as conversationsApi from '../services/conversationsApi';
+import * as notificationsApi from '../services/notificationsApi';
 import { sendLocalPushNotification, registerNotificationResponseHandler } from '../services/pushNotifications';
 import { sendEmail } from '../services/emailService';
 import { sendSms } from '../services/smsService';
@@ -10,6 +12,9 @@ import { useBookings } from './BookingsContext';
 
 const SUPPORT_CONVERSATION_ID = 'conv-support';
 const REMINDER_WINDOW_MS = 24 * 60 * 60 * 1000;
+const LIST_POLL_MS = 30 * 1000;
+const SERVER_CONVERSATION_PREFIX = 'booking-';
+const SERVER_NOTIFICATION_PREFIX = 'server-';
 
 // Which Settings toggle gates each notification type - see
 // contexts/SettingsContext.js for the toggle definitions.
@@ -47,13 +52,46 @@ function conversationIdFor({ carId, participant }) {
   return `conv-${participant.role.toLowerCase()}-${carId}`;
 }
 
-const EMPTY_INBOX = { conversations: [], messages: [], notifications: [], remindedBookingIds: [] };
+function isServerConversationId(id) {
+  return typeof id === 'string' && id.startsWith(SERVER_CONVERSATION_PREFIX);
+}
+
+function rawServerConversationId(id) {
+  return id.slice(SERVER_CONVERSATION_PREFIX.length);
+}
+
+// Maps a server conversation summary into the same shape the existing
+// Inbox UI already renders (ConversationRow/[id].js) - always framed as
+// "you and WopeCar Support" from the current viewer's perspective, even
+// though an invited participant (e.g. a driver) may also be present, per
+// "the messaging only includes wopecar support and the client."
+function toLocalConversationShape(raw) {
+  return {
+    id: `${SERVER_CONVERSATION_PREFIX}${raw.id}`,
+    participant: { id: 'support', name: 'WopeCar Support', role: 'Support', avatar: null },
+    carId: null,
+    bookingId: raw.bookingId,
+    pinned: false,
+    lastMessageText: raw.lastMessage?.body ?? (raw.pinnedSummary?.carName ? `Conversation started for your ${raw.pinnedSummary.carName} booking.` : 'Conversation started.'),
+    lastMessageAt: raw.lastMessage?.createdAt ?? raw.createdAt,
+    unreadCount: raw.unreadCount ?? 0,
+    source: 'server',
+    pinnedSummary: raw.pinnedSummary ?? null,
+  };
+}
+
+const EMPTY_INBOX = {
+  conversations: [], messages: [], notifications: [], remindedBookingIds: [], dismissedServerNotificationIds: [],
+};
 
 const InboxContext = createContext(null);
 
 export function InboxProvider({ children }) {
   const [data, setData] = useState(EMPTY_INBOX);
   const [isLoading, setIsLoading] = useState(true);
+  const [serverConversations, setServerConversations] = useState([]);
+  const [serverMessagesByConversationId, setServerMessagesByConversationId] = useState({});
+  const [serverNotifications, setServerNotifications] = useState([]);
   const dataRef = useRef(data);
   const { settings } = useSettings();
   const { user } = useAuth();
@@ -107,6 +145,72 @@ export function InboxProvider({ children }) {
   useEffect(() => {
     const unregister = registerNotificationResponseHandler();
     return unregister;
+  }, []);
+
+  // --- Server-backed conversations & notifications ---------------------
+  // Booking-anchored conversations (client<->support, see
+  // Modules\Booking\Controllers\Api\BookingApiController::store()) and
+  // cross-account notifications (e.g. a host's booking alert) live on the
+  // backend now, not just locally. Polled rather than pushed - see
+  // AGENTS.md-adjacent plan notes; no websocket infra is wired up.
+  const syncServerConversations = useCallback(() => {
+    if (!user) return;
+    conversationsApi.getConversations()
+      .then(setServerConversations)
+      .catch(() => {});
+  }, [user]);
+
+  const syncServerNotifications = useCallback(() => {
+    if (!user) return;
+    notificationsApi.getServerNotifications()
+      .then(setServerNotifications)
+      .catch(() => {});
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    syncServerConversations();
+    syncServerNotifications();
+    const interval = setInterval(() => {
+      syncServerConversations();
+      syncServerNotifications();
+    }, LIST_POLL_MS);
+    return () => clearInterval(interval);
+  }, [user, syncServerConversations, syncServerNotifications]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        syncServerConversations();
+        syncServerNotifications();
+      }
+    });
+    return () => subscription.remove();
+  }, [syncServerConversations, syncServerNotifications]);
+
+  // Called by a thread screen (on mount + its own polling interval) for a
+  // server conversation. Always re-fetches the latest window (no since_id)
+  // and upserts by id, rather than only fetching what's new - a delta fetch
+  // would never surface a message's isRead flag flipping true after the
+  // fact (the other party reading it doesn't mint a new message/id to
+  // trigger a delta pickup), so Delivered->Read would never update once a
+  // message was already cached. Any still-in-flight optimistic entry (a
+  // send not yet confirmed, non-numeric id) is preserved untouched since
+  // the fetch only ever returns confirmed, server-assigned messages.
+  const syncMessages = useCallback((conversationId) => {
+    if (!isServerConversationId(conversationId)) return;
+    const rawId = rawServerConversationId(conversationId);
+
+    conversationsApi.getMessages(rawId)
+      .then((incoming) => {
+        setServerMessagesByConversationId((prev) => {
+          const existing = prev[rawId] ?? [];
+          const stillSending = existing.filter((m) => typeof m.id !== 'number');
+          const merged = [...stillSending, ...incoming];
+          return { ...prev, [rawId]: merged };
+        });
+      })
+      .catch(() => {});
   }, []);
 
   const notifyBookingEvent = useCallback((type, booking) => {
@@ -235,6 +339,49 @@ export function InboxProvider({ children }) {
     const trimmed = text.trim();
     if (!trimmed) return;
     const now = new Date().toISOString();
+
+    if (isServerConversationId(conversationId)) {
+      const rawId = rawServerConversationId(conversationId);
+      const optimistic = {
+        id: `pending-${Date.now()}`,
+        conversationId: rawId,
+        senderId: user?.id,
+        senderName: user?.name,
+        senderIsSupport: !!user?.isSupport,
+        body: trimmed,
+        createdAt: now,
+      };
+      setServerMessagesByConversationId((prev) => ({
+        ...prev,
+        [rawId]: [...(prev[rawId] ?? []), optimistic],
+      }));
+
+      conversationsApi.sendMessage(rawId, trimmed)
+        .then((confirmed) => {
+          // Swap the optimistic placeholder for the real, server-assigned
+          // message as soon as the send confirms, rather than waiting for
+          // the next poll - syncMessages preserves in-flight optimistic
+          // entries (non-numeric ids) on every refresh, so without this the
+          // placeholder would otherwise sit next to its own confirmed
+          // message until the poll interval happened to overwrite it.
+          setServerMessagesByConversationId((prev) => {
+            const withoutOptimistic = (prev[rawId] ?? []).filter((m) => m.id !== optimistic.id);
+            const alreadyPresent = withoutOptimistic.some((m) => m.id === confirmed.id);
+            return { ...prev, [rawId]: alreadyPresent ? withoutOptimistic : [...withoutOptimistic, confirmed] };
+          });
+          syncServerConversations();
+        })
+        .catch(() => {
+          // Never sent - drop the placeholder rather than leaving a bubble
+          // stuck rendering forever.
+          setServerMessagesByConversationId((prev) => ({
+            ...prev,
+            [rawId]: (prev[rawId] ?? []).filter((m) => m.id !== optimistic.id),
+          }));
+        });
+      return;
+    }
+
     const message = {
       id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       conversationId,
@@ -252,15 +399,44 @@ export function InboxProvider({ children }) {
       inboxStorage.setInboxData(next);
       return next;
     });
-  }, []);
+  }, [user, syncServerConversations, syncMessages]);
 
   const getMessages = useCallback((conversationId) => {
+    if (isServerConversationId(conversationId)) {
+      const rawId = rawServerConversationId(conversationId);
+      const raw = serverMessagesByConversationId[rawId] ?? [];
+      return raw
+        .map((m) => ({
+          id: m.id,
+          conversationId,
+          // Translated to 'me' when the viewer is the sender, matching the
+          // shape the existing MessageBubble already knows how to render
+          // (isMe = message.senderId === 'me') - no UI change needed.
+          senderId: m.senderId === user?.id ? 'me' : m.senderId,
+          senderName: m.senderName,
+          senderIsSupport: m.senderIsSupport,
+          text: m.body,
+          createdAt: m.createdAt,
+          readAt: null,
+          isRead: !!m.isRead,
+          isSending: typeof m.id === 'string' && m.id.startsWith('pending-'),
+        }))
+        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    }
+
     return data.messages
       .filter((m) => m.conversationId === conversationId)
       .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-  }, [data.messages]);
+  }, [data.messages, serverMessagesByConversationId, user]);
 
   const markConversationRead = useCallback((conversationId) => {
+    if (isServerConversationId(conversationId)) {
+      const rawId = rawServerConversationId(conversationId);
+      setServerConversations((prev) => prev.map((c) => (c.id === Number(rawId) ? { ...c, unreadCount: 0 } : c)));
+      conversationsApi.markConversationRead(rawId).catch(() => {});
+      return;
+    }
+
     setData((prev) => {
       const conversation = prev.conversations.find((c) => c.id === conversationId);
       if (!conversation || conversation.unreadCount === 0) return prev;
@@ -277,6 +453,13 @@ export function InboxProvider({ children }) {
   }, []);
 
   const markNotificationRead = useCallback((id) => {
+    if (typeof id === 'string' && id.startsWith(SERVER_NOTIFICATION_PREFIX)) {
+      const rawId = id.slice(SERVER_NOTIFICATION_PREFIX.length);
+      setServerNotifications((prev) => prev.map((n) => (String(n.id) === rawId ? { ...n, readAt: n.readAt ?? new Date().toISOString() } : n)));
+      notificationsApi.markNotificationRead(rawId).catch(() => {});
+      return;
+    }
+
     setData((prev) => {
       const notifications = prev.notifications.map((n) =>
         n.id === id && !n.readAt ? { ...n, readAt: new Date().toISOString() } : n
@@ -288,16 +471,24 @@ export function InboxProvider({ children }) {
   }, []);
 
   const markAllNotificationsRead = useCallback(() => {
+    const now = new Date().toISOString();
+    setServerNotifications((prev) => prev.map((n) => (n.readAt ? n : { ...n, readAt: now })));
+    serverNotifications.filter((n) => !n.readAt).forEach((n) => {
+      notificationsApi.markNotificationRead(n.id).catch(() => {});
+    });
+
     setData((prev) => {
-      const now = new Date().toISOString();
       const notifications = prev.notifications.map((n) => (n.readAt ? n : { ...n, readAt: now }));
       const next = { ...prev, notifications };
       inboxStorage.setInboxData(next);
       return next;
     });
-  }, []);
+  }, [serverNotifications]);
 
   const markConversationUnread = useCallback((conversationId) => {
+    // Server conversations don't support marking unread server-side (no
+    // endpoint) - local-only conversations keep the existing behavior.
+    if (isServerConversationId(conversationId)) return;
     setData((prev) => {
       const conversations = prev.conversations.map((c) =>
         c.id === conversationId ? { ...c, unreadCount: Math.max(1, c.unreadCount) } : c
@@ -309,6 +500,10 @@ export function InboxProvider({ children }) {
   }, []);
 
   const deleteConversation = useCallback((conversationId) => {
+    // Server conversations aren't deletable (they're the durable record of
+    // a booking's messaging thread) - swipe-to-delete only applies to
+    // local-only conversations.
+    if (isServerConversationId(conversationId)) return;
     setData((prev) => {
       const conversations = prev.conversations.filter((c) => c.id !== conversationId);
       const messages = prev.messages.filter((m) => m.conversationId !== conversationId);
@@ -319,6 +514,7 @@ export function InboxProvider({ children }) {
   }, []);
 
   const markNotificationUnread = useCallback((id) => {
+    if (typeof id === 'string' && id.startsWith(SERVER_NOTIFICATION_PREFIX)) return;
     setData((prev) => {
       const notifications = prev.notifications.map((n) => (n.id === id ? { ...n, readAt: null } : n));
       const next = { ...prev, notifications };
@@ -328,6 +524,17 @@ export function InboxProvider({ children }) {
   }, []);
 
   const deleteNotification = useCallback((id) => {
+    if (typeof id === 'string' && id.startsWith(SERVER_NOTIFICATION_PREFIX)) {
+      const rawId = id.slice(SERVER_NOTIFICATION_PREFIX.length);
+      setData((prev) => {
+        if (prev.dismissedServerNotificationIds.includes(rawId)) return prev;
+        const next = { ...prev, dismissedServerNotificationIds: [...prev.dismissedServerNotificationIds, rawId] };
+        inboxStorage.setInboxData(next);
+        return next;
+      });
+      return;
+    }
+
     setData((prev) => {
       const notifications = prev.notifications.filter((n) => n.id !== id);
       const next = { ...prev, notifications };
@@ -337,21 +544,34 @@ export function InboxProvider({ children }) {
   }, []);
 
   const conversations = useMemo(() => {
-    return [...data.conversations].sort((a, b) => {
+    const mappedServer = serverConversations.map(toLocalConversationShape);
+    return [...data.conversations, ...mappedServer].sort((a, b) => {
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
       return new Date(b.lastMessageAt) - new Date(a.lastMessageAt);
     });
-  }, [data.conversations]);
+  }, [data.conversations, serverConversations]);
 
   const notifications = useMemo(() => {
-    return [...data.notifications].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  }, [data.notifications]);
+    const dismissed = new Set(data.dismissedServerNotificationIds ?? []);
+    const mappedServer = serverNotifications
+      .filter((n) => !dismissed.has(String(n.id)))
+      .map((n) => ({
+        id: `${SERVER_NOTIFICATION_PREFIX}${n.id}`,
+        type: n.type,
+        title: n.title,
+        body: n.body,
+        bookingId: n.bookingId,
+        createdAt: n.createdAt,
+        readAt: n.readAt,
+      }));
+    return [...data.notifications, ...mappedServer].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }, [data.notifications, data.dismissedServerNotificationIds, serverNotifications]);
 
   const totalUnreadCount = useMemo(() => {
-    const unreadMessages = data.conversations.reduce((sum, c) => sum + c.unreadCount, 0);
-    const unreadNotifications = data.notifications.filter((n) => !n.readAt).length;
+    const unreadMessages = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
+    const unreadNotifications = notifications.filter((n) => !n.readAt).length;
     return unreadMessages + unreadNotifications;
-  }, [data.conversations, data.notifications]);
+  }, [conversations, notifications]);
 
   const value = useMemo(() => ({
     conversations,
@@ -369,10 +589,13 @@ export function InboxProvider({ children }) {
     markNotificationUnread,
     deleteNotification,
     notifyBookingEvent,
+    syncMessages,
+    syncServerConversations,
   }), [
     conversations, notifications, isLoading, totalUnreadCount, getMessages, sendMessage,
     startConversation, markConversationRead, markNotificationRead, markAllNotificationsRead,
     markConversationUnread, deleteConversation, markNotificationUnread, deleteNotification, notifyBookingEvent,
+    syncMessages, syncServerConversations,
   ]);
 
   return <InboxContext.Provider value={value}>{children}</InboxContext.Provider>;

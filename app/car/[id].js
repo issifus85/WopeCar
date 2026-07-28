@@ -6,6 +6,7 @@ import * as Linking from 'expo-linking';
 import { fetchCarById } from '../../services/carsApi';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { useCurrency } from '../../contexts/CurrencyContext';
 import { formatCurrency, getMinBookingDays } from '../../constants/pricing';
 import ImageGallery from '../../components/ImageGallery';
 import SectionHeading from '../../components/SectionHeading';
@@ -24,6 +25,7 @@ export default function CarDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const { colors } = useAppTheme();
+  const { activeCurrency } = useCurrency();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { isFavorite, toggleFavorite } = useFavorites();
   const { addToCart } = useCart();
@@ -79,7 +81,7 @@ export default function CarDetailScreen() {
 
   const handleShare = async () => {
     const link = Linking.createURL(`/car/${car.id}`);
-    const message = `Check out this ${car.name} on WopeCar - ${formatCurrency(car.pricePerDay)}/day in ${car.location}\n${link}`;
+    const message = `Check out this ${car.name} on WopeCar - ${formatCurrency(car.pricePerDay, activeCurrency)}/day in ${car.location}\n${link}`;
 
     try {
       // On native (iOS/Android) this opens the OS share sheet - Messages,
@@ -101,18 +103,15 @@ export default function CarDetailScreen() {
     }
   };
 
+  // Hosts are never directly messageable (see InboxContext.js) - a
+  // pre-booking inquiry has no booking yet to anchor a real conversation
+  // to anyway, so this opens the general WopeCar Support conversation.
   const handleInquiry = () => {
     setIsBookingModalVisible(false);
-    const participant = {
-      id: `host-${car.id}`,
-      name: car.owner?.name || 'Host',
-      role: 'Host',
-      avatar: car.owner?.avatar || null,
-    };
+    const participant = { id: 'support', name: 'WopeCar Support', role: 'Support', avatar: null };
     const conversationId = startConversation({
       participant,
-      carId: car.id,
-      welcomeMessage: `Hi! Thanks for your interest in the ${car.name}. Let me know if you have any questions.`,
+      welcomeMessage: `Hi! I have a question about the ${car.name} (${car.location}).`,
     });
     router.push(`/inbox/${conversationId}`);
   };
@@ -282,7 +281,7 @@ export default function CarDetailScreen() {
       <View style={styles.bottomBar}>
         <View>
           <Text style={styles.priceLabel}>Price per day</Text>
-          <Text style={styles.price}>{formatCurrency(car.pricePerDay)}</Text>
+          <Text style={styles.price}>{formatCurrency(car.pricePerDay, activeCurrency)}</Text>
         </View>
         <TouchableOpacity
           style={[styles.bookButton, !car.isAvailable && styles.bookButtonDisabled]}

@@ -18,6 +18,7 @@ const EMPTY_INBOX = {
   messages: [],
   notifications: [],
   remindedBookingIds: [],
+  dismissedServerNotificationIds: [],
 };
 
 async function readRaw() {
@@ -45,6 +46,7 @@ export async function getInboxData() {
       messages: Array.isArray(parsed.messages) ? parsed.messages : [],
       notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [],
       remindedBookingIds: Array.isArray(parsed.remindedBookingIds) ? parsed.remindedBookingIds : [],
+      dismissedServerNotificationIds: Array.isArray(parsed.dismissedServerNotificationIds) ? parsed.dismissedServerNotificationIds : [],
     };
   } catch {
     return { ...EMPTY_INBOX };
@@ -57,6 +59,7 @@ export async function setInboxData(data) {
     messages: data.messages.slice(-MAX_MESSAGES),
     notifications: data.notifications.slice(-MAX_NOTIFICATIONS),
     remindedBookingIds: data.remindedBookingIds,
+    dismissedServerNotificationIds: (data.dismissedServerNotificationIds ?? []).slice(-MAX_NOTIFICATIONS),
   };
   await writeRaw(JSON.stringify(trimmed));
 }
