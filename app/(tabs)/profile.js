@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View, TouchableOpacity, Image, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
+import { Image } from 'expo-image';
 import { useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
@@ -7,10 +8,11 @@ import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useInbox } from '../../contexts/InboxContext';
+import { useSettings } from '../../contexts/SettingsContext';
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 
-const MENU_ITEMS = [
+const BASE_MENU_ITEMS = [
   { label: 'Inbox', icon: 'mail-outline', route: '/inbox' },
   { label: 'Documents', icon: 'folder-outline', route: '/documents' },
   { label: 'Terms of Service', icon: 'document-text-outline', route: '/terms' },
@@ -25,6 +27,23 @@ export default function ProfileScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user } = useAuth();
   const { totalUnreadCount } = useInbox();
+  const { updateSetting } = useSettings();
+
+  const switchToHostMode = () => {
+    updateSetting('appMode', 'vendor');
+    router.push('/vendor');
+  };
+
+  const MENU_ITEMS = useMemo(() => {
+    if (!user?.isSupport) return BASE_MENU_ITEMS;
+    const inboxIndex = BASE_MENU_ITEMS.findIndex((item) => item.route === '/inbox');
+    const staffInboxItem = { label: 'Express Desk', icon: 'chatbubble-ellipses-outline', route: '/staff-inbox' };
+    return [
+      ...BASE_MENU_ITEMS.slice(0, inboxIndex + 1),
+      staffInboxItem,
+      ...BASE_MENU_ITEMS.slice(inboxIndex + 1),
+    ];
+  }, [user?.isSupport]);
 
   return (
     <View style={styles.container}>
@@ -51,6 +70,17 @@ export default function ProfileScreen() {
           <Text style={styles.accountSubtitle}>
             {user?.email ?? 'Manage your account'}
           </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={colors.textSubtle} />
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.hostRow} onPress={switchToHostMode}>
+        <View style={styles.hostIcon}>
+          <Ionicons name="car-sport-outline" size={20} color={colors.teal} />
+        </View>
+        <View style={styles.accountInfo}>
+          <Text style={styles.hostTitle}>Switch to Host Mode</Text>
+          <Text style={styles.accountSubtitle}>Manage your fleet and bookings as a vendor</Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={colors.textSubtle} />
       </TouchableOpacity>
@@ -151,6 +181,28 @@ function createStyles(colors) {
       fontSize: 13,
       color: colors.textSubtle,
       marginTop: 2,
+    },
+    hostRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.highlight,
+      marginHorizontal: 16,
+      marginTop: 12,
+      borderRadius: 14,
+      padding: 16,
+    },
+    hostIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: colors.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    hostTitle: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 15,
+      color: colors.textPrimary,
     },
     menu: {
       backgroundColor: colors.surface,

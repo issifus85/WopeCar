@@ -3,16 +3,11 @@ import { StyleSheet, Text, View, TouchableOpacity, Modal, Pressable, ScrollView 
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
+import { VEHICLE_CLASSES } from '../constants/vehicleCatalog';
 
 const DRIVE_TYPES = [
   { value: 'Chauffeur', label: 'Chauffeur only' },
   { value: 'Self-drive', label: 'Self-drive or Chauffeur' },
-];
-
-const VEHICLE_CLASSES = [
-  { value: 'luxury', label: 'Luxury' },
-  { value: 'economy-1', label: 'Comfort' },
-  { value: 'economy-2', label: 'Economy' },
 ];
 
 const PRICE_RANGES = [

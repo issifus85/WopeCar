@@ -3,13 +3,20 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import * as settingsStorage from '../services/settingsStorage';
 
 // Defaults for every setting from the WopeCar App Profile Settings spec.
-// Several of these (language/currency/units/map provider, promotions/
-// wishlist/price-drop toggles) don't have real app behavior wired up to
-// them yet - no i18n, no multi-currency pricing. They're genuinely saved
-// here for later use, not silently dropped or faked. Dark Mode drives
-// ThemeContext; pushNotifications/emailNotifications/smsNotifications/
-// bookingUpdates/newMessages/tripReminders gate real dispatch via
-// InboxContext.notifyBookingEvent (see contexts/InboxContext.js).
+// Several of these (language, preferredVehicleType/Transmission/fuelPreference,
+// distanceUnits, themeColour, autoPlayVideos, profileVisibility/
+// showProfilePhoto/showRatings, marketingPreferences/promotions/
+// wishlistAlerts/priceDropAlerts) don't have real app behavior wired up to
+// them yet - no i18n, no distance-from-user feature (needs per-listing
+// coordinates the backend doesn't populate yet), no public profile/ratings
+// view, no promo-notification system. They're genuinely saved here for
+// later use, not silently dropped or faked. Dark Mode drives ThemeContext;
+// pushNotifications/emailNotifications/smsNotifications/bookingUpdates/
+// newMessages/tripReminders gate real dispatch via
+// InboxContext.notifyBookingEvent (see contexts/InboxContext.js); currency
+// drives CurrencyContext.activeCurrency; mapProvider drives the "Get
+// Directions" buttons on booking/[id].js (see services/mapsLauncher.js);
+// biometricLogin gates app launch (see components/BiometricGate.js).
 const DEFAULT_SETTINGS = {
   // Notification Setting
   pushNotifications: true,
@@ -38,6 +45,12 @@ const DEFAULT_SETTINGS = {
   themeColour: 'Default',
   mapProvider: Platform.OS === 'ios' ? 'Apple Maps' : 'Google Maps',
   autoPlayVideos: true,
+  // Security Setting - gates app launch, see components/BiometricGate.js
+  biometricLogin: false,
+  // Which experience the app opens into, Airbnb guest/host style - see
+  // app/_layout.js's launch-time redirect and the switch-mode entry points
+  // in app/(tabs)/profile.js and app/vendor/(tabs)/index.js + menu.js.
+  appMode: 'client', // 'client' | 'vendor'
 };
 
 const SettingsContext = createContext(null);
