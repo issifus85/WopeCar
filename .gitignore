@@ -44,3 +44,6 @@ yarn-error.*
 # and (in password-reset-links.json) live account-recovery tokens. Never
 # belongs in git history.
 supabase/scripts/data/
+
+# Supabase CLI local runtime state (like .expo/ - regenerated per machine)
+supabase/.temp/
