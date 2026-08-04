@@ -209,7 +209,7 @@ function createStyles(colors) {
     },
     scrollContent: {
       padding: 20,
-      paddingBottom: 40,
+      paddingBottom: 140,
     },
     calendarCard: {
       backgroundColor: colors.surface,

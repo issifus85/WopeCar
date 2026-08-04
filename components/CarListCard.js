@@ -5,12 +5,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { useCurrency } from '../contexts/CurrencyContext';
-import { formatCurrency } from '../constants/pricing';
+import { formatCurrency, isBlanketDiscountActive, applyBlanketDiscount } from '../constants/pricing';
 
 export default function CarListCard({ car, onPress }) {
   const { colors } = useAppTheme();
   const { activeCurrency } = useCurrency();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const hasActiveDiscount = isBlanketDiscountActive(car.discount);
+  const discountedPricePerDay = hasActiveDiscount ? applyBlanketDiscount(car.pricePerDay, car.discount) : car.pricePerDay;
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress}>
@@ -53,8 +55,11 @@ export default function CarListCard({ car, onPress }) {
           </View>
         ) : null}
         <View style={styles.bottomRow}>
-          <View>
-            <Text style={styles.price}>{formatCurrency(car.pricePerDay, activeCurrency)}<Text style={styles.priceLabel}>/day</Text></Text>
+          <View style={styles.priceValueRow}>
+            {hasActiveDiscount && (
+              <Text style={styles.priceStrikethrough}>{formatCurrency(car.pricePerDay, activeCurrency)}</Text>
+            )}
+            <Text style={styles.price}>{formatCurrency(discountedPricePerDay, activeCurrency)}<Text style={styles.priceLabel}>/day</Text></Text>
           </View>
           <View style={[
             styles.availabilityBadge,
@@ -163,6 +168,19 @@ function createStyles(colors) {
       alignItems: 'center',
       justifyContent: 'space-between',
       marginTop: 6,
+    },
+    priceValueRow: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      gap: 5,
+      flexShrink: 1,
+      flexWrap: 'wrap',
+    },
+    priceStrikethrough: {
+      fontFamily: FONTS.regular,
+      fontSize: 11,
+      color: colors.textSubtle,
+      textDecorationLine: 'line-through',
     },
     price: {
       fontFamily: FONTS.bold,

@@ -9,12 +9,13 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { formatCurrency } from '../../constants/pricing';
 import { useBookings } from '../../contexts/BookingsContext';
 
-const STATUS_TABS = ['Pending', 'Confirmed', 'Cancelled'];
+const STATUS_TABS = ['Pending', 'Confirmed', 'Completed', 'Cancelled'];
 
 function getStatusColors(colors) {
   return {
     Pending: { bg: colors.warningBg, text: colors.warning },
     Confirmed: { bg: colors.successBg, text: colors.success },
+    Completed: { bg: colors.successBg, text: colors.success },
     Cancelled: { bg: colors.errorBg, text: colors.error },
   };
 }
@@ -187,7 +188,7 @@ function createStyles(colors) {
     },
     list: {
       paddingHorizontal: 16,
-      paddingBottom: 20,
+      paddingBottom: 140,
     },
     card: {
       backgroundColor: colors.surface,

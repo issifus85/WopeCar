@@ -1,3 +1,11 @@
+// LEGACY - kept for now in case anything still references it, but nothing
+// in contexts/AuthContext.js calls into this file anymore. Auth moved to
+// Supabase (services/supabaseAuthApi.js, contexts/AuthContext.js) - token
+// management is now handled internally by the Supabase client
+// (services/supabase.js's own storage adapter, a *different* SecureStore/
+// localStorage key than the one below). This file's `wopecar_auth_token`
+// key was the Laravel Sanctum bearer token specifically; with the Laravel
+// backend being retired, nothing should be writing to it going forward.
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 

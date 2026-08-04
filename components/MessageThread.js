@@ -49,11 +49,16 @@ function MessageBubble({ message, styles, colors }) {
   );
 }
 
-// Shared by the customer-facing Inbox thread (app/inbox/[id].js) and the
-// Express Desk thread (app/staff-inbox/[id].js) - same bubble list, pinned
-// booking summary, and composer (including the safe-area bottom padding
-// fix for the composer-cutoff bug), so neither surface duplicates this.
-export default function MessageThread({ messages, onSend, pinnedSummary, emptyStateText = 'Say hello 👋' }) {
+// Shared by the customer-facing Inbox thread (app/inbox/[id].js), the
+// Express Desk thread (app/staff-inbox/[id].js), and Vendor Mode's Support
+// tab (app/vendor/(tabs)/support.js) - same bubble list, pinned booking
+// summary, and composer (including the safe-area bottom padding fix for the
+// composer-cutoff bug), so no surface duplicates this. `extraBottomInset`
+// is for the one tab-root caller (Support): unlike the two pushed detail
+// screens, that one sits inside a Tabs group with FloatingTabBar overlaid
+// on top, so its composer needs extra clearance to not end up hidden
+// behind the pill.
+export default function MessageThread({ messages, onSend, pinnedSummary, emptyStateText = 'Say hello 👋', extraBottomInset = 0 }) {
   const { colors } = useAppTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -74,7 +79,7 @@ export default function MessageThread({ messages, onSend, pinnedSummary, emptySt
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       {!!pinnedSummary && <PinnedBookingSummary summary={pinnedSummary} />}
@@ -94,7 +99,7 @@ export default function MessageThread({ messages, onSend, pinnedSummary, emptySt
         />
       )}
 
-      <View style={[styles.composer, { paddingBottom: Math.max(12, insets.bottom) }]}>
+      <View style={[styles.composer, { paddingBottom: Math.max(12, insets.bottom) + extraBottomInset }]}>
         <TextInput
           style={styles.input}
           value={draft}

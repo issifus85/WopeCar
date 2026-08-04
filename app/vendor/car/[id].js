@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Switch, ActivityIndicator } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Switch, ActivityIndicator, Alert } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,8 +8,48 @@ import { useAppTheme } from '../../../contexts/ThemeContext';
 import { useCurrency } from '../../../contexts/CurrencyContext';
 import { formatCurrency } from '../../../constants/pricing';
 import { useVendor } from '../../../contexts/VendorContext';
+import supabase from '../../../services/supabase';
 import VendorHeader from '../../../components/VendorHeader';
 import VendorStatusBadge from '../../../components/VendorStatusBadge';
+
+const CANCELLATION_SETTING_KEYS = ['cancellation_full_refund_hours', 'cancellation_partial_refund_hours', 'cancellation_partial_refund_percentage'];
+
+function hoursToPhrase(hours) {
+  if (hours % 24 === 0) {
+    const days = hours / 24;
+    return `${days} day${days === 1 ? '' : 's'}`;
+  }
+  return `${hours} hour${hours === 1 ? '' : 's'}`;
+}
+
+// Set platform-wide in Settings > Business Rules > Cancellation Policy - a
+// vendor can see it here but not change it (matches how it was scoped:
+// global, admin-only, per the actual product decision for this policy).
+function useCancellationPolicySummary() {
+  const [summary, setSummary] = useState('Loading…');
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase
+      .from('app_settings')
+      .select('key, value')
+      .in('key', CANCELLATION_SETTING_KEYS)
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        const map = Object.fromEntries(data.map((row) => [row.key, row.value]));
+        const fullHours = Number(map.cancellation_full_refund_hours ?? 168);
+        const partialHours = Number(map.cancellation_partial_refund_hours ?? 24);
+        const partialPct = Math.round(Number(map.cancellation_partial_refund_percentage ?? 0.5) * 100);
+        setSummary(
+          `100% refund ${hoursToPhrase(fullHours)}+ before pickup · ${partialPct}% refund ${hoursToPhrase(partialHours)}–${hoursToPhrase(fullHours)} before · no refund under ${hoursToPhrase(partialHours)}`
+        );
+      })
+      .catch(() => !cancelled && setSummary('Could not load — check your connection.'));
+    return () => { cancelled = true; };
+  }, []);
+
+  return summary;
+}
 
 function Row({ icon, label, subtitle, onPress, right, last, styles, colors }) {
   const Wrapper = onPress ? TouchableOpacity : View;
@@ -34,6 +74,8 @@ export default function VendorCarManagementScreen() {
   const { activeCurrency } = useCurrency();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { cars, isLoading, updateCar } = useVendor();
+  const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+  const cancellationPolicySummary = useCancellationPolicySummary();
 
   const car = cars.find((c) => c.id === id);
 
@@ -58,6 +100,17 @@ export default function VendorCarManagementScreen() {
   }
 
   const isPending = car.status === 'Pending';
+
+  const handleToggleStatus = async (value) => {
+    setIsTogglingStatus(true);
+    try {
+      await updateCar(car.id, { status: value ? 'Active' : 'Inactive' });
+    } catch (e) {
+      Alert.alert('Could not update listing', e?.message || 'Please check your connection and try again.');
+    } finally {
+      setIsTogglingStatus(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -89,8 +142,8 @@ export default function VendorCarManagementScreen() {
             right={
               <Switch
                 value={car.status === 'Active'}
-                disabled={isPending}
-                onValueChange={(value) => updateCar(car.id, { status: value ? 'Active' : 'Inactive' })}
+                disabled={isPending || isTogglingStatus}
+                onValueChange={handleToggleStatus}
                 trackColor={{ false: colors.disabled, true: colors.teal }}
                 thumbColor={colors.white}
               />
@@ -113,10 +166,31 @@ export default function VendorCarManagementScreen() {
             colors={colors}
           />
           <Row
+            icon="pricetag-outline"
+            label="Pricing & Discounts"
+            subtitle="Set custom date pricing and discounts"
+            onPress={() => router.push(`/vendor/car/pricing/${car.id}`)}
+            styles={styles}
+            colors={colors}
+          />
+          <Row
             icon="receipt-outline"
             label="View Bookings"
             subtitle="This car's booking history"
             onPress={() => router.push({ pathname: '/vendor/history', params: { carId: car.id } })}
+            styles={styles}
+            colors={colors}
+          />
+          <Row
+            icon="shield-checkmark-outline"
+            label="Cancellation Policy"
+            subtitle={cancellationPolicySummary}
+            onPress={() =>
+              Alert.alert(
+                'Cancellation Policy',
+                `${cancellationPolicySummary}\n\nThis policy applies platform-wide and is set by WopeCar admin — it isn't something you can change per listing.`
+              )
+            }
             last
             styles={styles}
             colors={colors}

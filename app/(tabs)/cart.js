@@ -115,7 +115,7 @@ function createStyles(colors) {
     },
     list: {
       paddingHorizontal: 16,
-      paddingBottom: 20,
+      paddingBottom: 140,
     },
     cartItem: {
       position: 'relative',

@@ -10,6 +10,14 @@ import { useSettings } from './SettingsContext';
 import { useAuth } from './AuthContext';
 import { useBookings } from './BookingsContext';
 
+// These two already get a full, richer templated email from a dedicated
+// Edge Function at their real write site (send-booking-confirmation from
+// app/checkout/payment.js, send-booking-cancelled from
+// BookingsContext.cancelBooking()/adminBookingsApi.cancelBooking()) -
+// sending the plain generic email here too would double-email the user for
+// the same event.
+const EMAIL_TYPES_WITH_DEDICATED_TEMPLATE = new Set(['booking_created', 'booking_cancelled']);
+
 const SUPPORT_CONVERSATION_ID = 'conv-support';
 const REMINDER_WINDOW_MS = 24 * 60 * 60 * 1000;
 const LIST_POLL_MS = 30 * 1000;
@@ -148,11 +156,12 @@ export function InboxProvider({ children }) {
   }, []);
 
   // --- Server-backed conversations & notifications ---------------------
-  // Booking-anchored conversations (client<->support, see
-  // Modules\Booking\Controllers\Api\BookingApiController::store()) and
-  // cross-account notifications (e.g. a host's booking alert) live on the
-  // backend now, not just locally. Polled rather than pushed - see
-  // AGENTS.md-adjacent plan notes; no websocket infra is wired up.
+  // Booking-anchored conversations (client<->support, auto-created by a
+  // Postgres trigger on booking insert - see
+  // supabase/migrations/0010_messaging.sql's create_conversation_for_booking())
+  // and cross-account notifications (e.g. a host's booking alert) live on
+  // Supabase now, not just locally. Polled rather than pushed - preserving
+  // parity with the original design; no websocket/Realtime infra wired up.
   const syncServerConversations = useCallback(() => {
     if (!user) return;
     conversationsApi.getConversations()
@@ -195,8 +204,12 @@ export function InboxProvider({ children }) {
   // fact (the other party reading it doesn't mint a new message/id to
   // trigger a delta pickup), so Delivered->Read would never update once a
   // message was already cached. Any still-in-flight optimistic entry (a
-  // send not yet confirmed, non-numeric id) is preserved untouched since
-  // the fetch only ever returns confirmed, server-assigned messages.
+  // send not yet confirmed, id prefixed 'pending-') is preserved untouched
+  // since the fetch only ever returns confirmed, server-assigned messages.
+  // Message ids are uuid strings now, not Laravel's auto-increment
+  // integers - matching on the 'pending-' prefix (not typeof !== 'number')
+  // is the only way to tell "still sending" apart from "confirmed", since
+  // both are strings today.
   const syncMessages = useCallback((conversationId) => {
     if (!isServerConversationId(conversationId)) return;
     const rawId = rawServerConversationId(conversationId);
@@ -205,7 +218,7 @@ export function InboxProvider({ children }) {
       .then((incoming) => {
         setServerMessagesByConversationId((prev) => {
           const existing = prev[rawId] ?? [];
-          const stillSending = existing.filter((m) => typeof m.id !== 'number');
+          const stillSending = existing.filter((m) => typeof m.id === 'string' && m.id.startsWith('pending-'));
           const merged = [...stillSending, ...incoming];
           return { ...prev, [rawId]: merged };
         });
@@ -237,8 +250,8 @@ export function InboxProvider({ children }) {
     if (settings.pushNotifications) {
       sendLocalPushNotification({ title, body, data: { url: `/booking/${booking.id}` } });
     }
-    if (settings.emailNotifications && user?.email) {
-      sendEmail({ to: user.email, subject: title, body });
+    if (settings.emailNotifications && user?.email && !EMAIL_TYPES_WITH_DEDICATED_TEMPLATE.has(type)) {
+      sendEmail({ subject: title, body }).catch(() => {});
     }
     if (settings.smsNotifications && user?.phone) {
       sendSms({ to: user.phone, body: `${title}: ${body}` });
@@ -432,7 +445,11 @@ export function InboxProvider({ children }) {
   const markConversationRead = useCallback((conversationId) => {
     if (isServerConversationId(conversationId)) {
       const rawId = rawServerConversationId(conversationId);
-      setServerConversations((prev) => prev.map((c) => (c.id === Number(rawId) ? { ...c, unreadCount: 0 } : c)));
+      // String compare, not Number(rawId) - conversation ids are uuids now
+      // (this used to assume Laravel's auto-increment integer PK; Number()
+      // on a uuid is NaN, which would never match and silently leave the
+      // unread badge stuck until the next poll).
+      setServerConversations((prev) => prev.map((c) => (c.id === rawId ? { ...c, unreadCount: 0 } : c)));
       conversationsApi.markConversationRead(rawId).catch(() => {});
       return;
     }

@@ -4,16 +4,18 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import { fetchCarById } from '../../services/carsApi';
+import { getCarReviews, getCarReviewScore } from '../../services/reviewsApi';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { formatCurrency, getMinBookingDays } from '../../constants/pricing';
+import { formatCurrency, getMinBookingDays, isBlanketDiscountActive, applyBlanketDiscount } from '../../constants/pricing';
 import ImageGallery from '../../components/ImageGallery';
 import SectionHeading from '../../components/SectionHeading';
 import FeaturesSection from '../../components/FeaturesSection';
 import FaqSection from '../../components/FaqSection';
 import CarOwnerCard from '../../components/CarOwnerCard';
 import ReviewsSection from '../../components/ReviewsSection';
+import RentalTermsSection from '../../components/RentalTermsSection';
 import BookingChoiceModal from '../../components/BookingChoiceModal';
 import { useFavorites } from '../../contexts/FavoritesContext';
 import { useCart } from '../../contexts/CartContext';
@@ -35,6 +37,8 @@ export default function CarDetailScreen() {
   const [error, setError] = useState(null);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isBookingModalVisible, setIsBookingModalVisible] = useState(false);
+  const [reviewScore, setReviewScore] = useState(null);
+  const [reviews, setReviews] = useState([]);
 
   useEffect(() => {
     setIsLoading(true);
@@ -43,6 +47,11 @@ export default function CarDetailScreen() {
       .then(setCar)
       .catch(() => setError('Could not load this car. Please try again.'))
       .finally(() => setIsLoading(false));
+
+    // Independent of the car fetch above/its loading state - reviews are a
+    // secondary section, no reason to hold up the rest of the page for them.
+    getCarReviewScore(id).then(setReviewScore).catch(() => setReviewScore(null));
+    getCarReviews(id).then(setReviews).catch(() => setReviews([]));
   }, [id]);
 
   if (isLoading) {
@@ -69,12 +78,16 @@ export default function CarDetailScreen() {
     );
   }
 
-  const rating = car.reviewScore?.score_total ?? 0;
-  const totalReviews = car.reviewScore?.total_review ?? 0;
+  const rating = reviewScore?.score_total ?? 0;
+  const totalReviews = reviewScore?.total_review ?? 0;
+
+  const hasActiveDiscount = isBlanketDiscountActive(car.discount);
+  const discountedPricePerDay = hasActiveDiscount ? applyBlanketDiscount(car.pricePerDay, car.discount) : car.pricePerDay;
 
   const specs = [
     { icon: 'people-outline', value: car.seats, label: 'Seats' },
     { icon: 'cog-outline', value: car.transmission, label: 'Transmission' },
+    car.energySource ? { icon: 'flash-outline', value: car.energySource, label: 'Energy Source' } : null,
     car.doors ? { icon: 'exit-outline', value: car.doors, label: 'Doors' } : null,
     car.baggage ? { icon: 'briefcase-outline', value: car.baggage, label: 'Baggage' } : null,
   ].filter(Boolean);
@@ -242,6 +255,10 @@ export default function CarDetailScreen() {
             </View>
           )}
 
+          <View style={styles.section}>
+            <RentalTermsSection drivenBy={car.drivenBy} />
+          </View>
+
           {!!car.cancellationPolicy && (
             <View style={styles.section}>
               <SectionHeading>Cancellation Policy</SectionHeading>
@@ -270,18 +287,21 @@ export default function CarDetailScreen() {
             </View>
           )}
 
-          {!!car.reviewScore && (
-            <View style={styles.section}>
-              <ReviewsSection reviewScore={car.reviewScore} reviews={car.reviews} />
-            </View>
-          )}
+          <View style={styles.section}>
+            <ReviewsSection reviewScore={reviewScore} reviews={reviews} />
+          </View>
         </View>
       </ScrollView>
 
       <View style={styles.bottomBar}>
         <View>
           <Text style={styles.priceLabel}>Price per day</Text>
-          <Text style={styles.price}>{formatCurrency(car.pricePerDay, activeCurrency)}</Text>
+          <View style={styles.priceValueRow}>
+            {hasActiveDiscount && (
+              <Text style={styles.priceStrikethrough}>{formatCurrency(car.pricePerDay, activeCurrency)}</Text>
+            )}
+            <Text style={styles.price}>{formatCurrency(discountedPricePerDay, activeCurrency)}</Text>
+          </View>
         </View>
         <TouchableOpacity
           style={[styles.bookButton, !car.isAvailable && styles.bookButtonDisabled]}
@@ -517,6 +537,17 @@ function createStyles(colors) {
     fontFamily: FONTS.regular,
     fontSize: 12,
     color: colors.textSubtle,
+  },
+  priceValueRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+  },
+  priceStrikethrough: {
+    fontFamily: FONTS.regular,
+    fontSize: 14,
+    color: colors.textSubtle,
+    textDecorationLine: 'line-through',
   },
   price: {
     fontFamily: FONTS.bold,

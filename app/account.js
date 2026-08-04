@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   StyleSheet, Text, View, TextInput, TouchableOpacity, ActivityIndicator,
-  ScrollView, Alert, Share,
+  ScrollView, Alert, Share, Pressable,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -82,6 +82,7 @@ export default function AccountScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [error, setError] = useState(null);
+  const [showPhotoSourceModal, setShowPhotoSourceModal] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -141,7 +142,19 @@ export default function AccountScreen() {
     }
   };
 
-  const handlePickAvatar = async () => {
+  const commitAvatar = async (uri) => {
+    setIsUploadingAvatar(true);
+    setError(null);
+    try {
+      await uploadAvatar(uri);
+    } catch (e) {
+      setError(e.message || 'Could not upload your photo. Please try again.');
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
+  const pickFromLibrary = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       Alert.alert('Permission needed', 'Please allow photo library access to update your photo.');
@@ -154,16 +167,35 @@ export default function AccountScreen() {
       aspect: [1, 1],
     });
     if (result.canceled || !result.assets?.[0]) return;
+    await commitAvatar(result.assets[0].uri);
+  };
 
-    setIsUploadingAvatar(true);
-    setError(null);
-    try {
-      await uploadAvatar(result.assets[0].uri);
-    } catch (e) {
-      setError(e.message || 'Could not upload your photo. Please try again.');
-    } finally {
-      setIsUploadingAvatar(false);
+  const pickFromCamera = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission needed', 'Please allow camera access to take a new photo.');
+      return;
     }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.7,
+      allowsEditing: true,
+      aspect: [1, 1],
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    await commitAvatar(result.assets[0].uri);
+  };
+
+  const handlePickAvatar = () => setShowPhotoSourceModal(true);
+
+  const handleChooseCamera = () => {
+    setShowPhotoSourceModal(false);
+    pickFromCamera();
+  };
+
+  const handleChooseLibrary = () => {
+    setShowPhotoSourceModal(false);
+    pickFromLibrary();
   };
 
   const handleShareReferral = async () => {
@@ -331,6 +363,37 @@ export default function AccountScreen() {
           <Text style={styles.signOutButtonText}>Log Out</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {showPhotoSourceModal && (
+        // Deliberately not RN's <Modal> - that mounts its content in a
+        // separate native view controller, and dismissing it in the same
+        // gesture that then presents the camera/library picker races that
+        // picker's own native presentation (confirmed broken on-device:
+        // neither camera nor library opened). A plain absolutely-positioned
+        // overlay inside this same screen has no such transition to race.
+        <View style={styles.sheetBackdrop}>
+          <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setShowPhotoSourceModal(false)} />
+          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.sheetHeader}>
+              <TouchableOpacity onPress={() => setShowPhotoSourceModal(false)} hitSlop={10}>
+                <Ionicons name="close" size={24} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.sheetTitle}>Update Profile Photo</Text>
+
+            <TouchableOpacity style={styles.sheetOptionButton} onPress={handleChooseCamera}>
+              <Ionicons name="camera-outline" size={18} color={colors.textPrimary} />
+              <Text style={styles.sheetOptionButtonText}>Take Photo</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.sheetOptionButton, styles.sheetOptionButtonPrimary]} onPress={handleChooseLibrary}>
+              <Ionicons name="images-outline" size={18} color={colors.white} />
+              <Text style={styles.sheetOptionButtonTextPrimary}>Choose from Library</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
@@ -560,6 +623,57 @@ function createStyles(colors) {
     fontFamily: FONTS.semiBold,
     color: colors.error,
     fontSize: 15,
+  },
+  sheetBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+    zIndex: 10,
+  },
+  sheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 30,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  sheetTitle: {
+    fontFamily: FONTS.bold,
+    fontSize: 18,
+    color: colors.textPrimary,
+    textAlign: 'center',
+    marginTop: -8,
+    marginBottom: 20,
+  },
+  sheetOptionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingVertical: 15,
+    marginBottom: 12,
+  },
+  sheetOptionButtonText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 15,
+    color: colors.textPrimary,
+  },
+  sheetOptionButtonPrimary: {
+    borderWidth: 0,
+    backgroundColor: colors.teal,
+    marginBottom: 0,
+  },
+  sheetOptionButtonTextPrimary: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 15,
+    color: colors.white,
   },
   });
 }

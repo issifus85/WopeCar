@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Linking } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -8,12 +8,14 @@ import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useSettings } from '../../contexts/SettingsContext';
-import { formatCurrency, SELF_DRIVE_DELIVERY_FEE, calculateSecurityDeposit, getMinBookingDays } from '../../constants/pricing';
+import { formatCurrency, getSelfDriveDeliveryFee, calculateSecurityDeposit, calculateRentalPricing, getMinBookingDays } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
+import { getDatePriceMap } from '../../services/carPricingApi';
 import { payWithPaystack } from '../../services/paystackCheckout';
 import { openDirections } from '../../services/mapsLauncher';
 import { getInspection } from '../../services/inspectionsApi';
 import { getRentalAgreement } from '../../services/rentalAgreementApi';
+import { getMyReviewForBooking } from '../../services/reviewsApi';
 import { useBookings } from '../../contexts/BookingsContext';
 import { useInbox } from '../../contexts/InboxContext';
 import DateRangeModal, { formatDateShort } from '../../components/DateRangeModal';
@@ -24,6 +26,7 @@ function getStatusColors(colors) {
   return {
     Pending: { bg: colors.warningBg, text: colors.warning },
     Confirmed: { bg: colors.successBg, text: colors.success },
+    Completed: { bg: colors.successBg, text: colors.success },
     Cancelled: { bg: colors.errorBg, text: colors.error },
   };
 }
@@ -70,6 +73,11 @@ function daysBetween(start, end) {
   return Math.max(1, Math.round(diff / (1000 * 60 * 60 * 24)));
 }
 
+function toISODate(value) {
+  const d = new Date(value);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function TimeSlotPicker({ label, value, onChange, styles }) {
   return (
     <View style={styles.field}>
@@ -100,15 +108,33 @@ export default function BookingDetailScreen() {
   const { bookings, updateBooking, cancelBooking } = useBookings();
   const { conversations, notifyBookingEvent } = useInbox();
 
-  // Static headerBackTitle in _layout.js says "Bookings" (the common path,
-  // reached from the Bookings tab list) - override it here for the other
-  // entry point, a notification tap from the Inbox hub, so the back button
-  // label matches where it actually goes.
+  // A custom headerLeft, not just the default native-stack back button -
+  // that default dispatches a bare GO_BACK action, which React Navigation's
+  // web implementation can fail to resolve for this exact screen
+  // (booking/[id] is a root-level Stack.Screen pushed from inside the
+  // (tabs) group's own nested navigator; on web that combination can leave
+  // GO_BACK with "no screen to go back to" even though a real previous
+  // screen is visible - reproduced live, logging "The action 'GO_BACK' was
+  // not handled by any navigator" in dev while the tap did nothing).
+  // Sidesteps back()/canGoBack() entirely (canGoBack() reports true even in
+  // the broken state, so that fallback still calls the same broken back())
+  // and always replaces to a known-good destination instead - same
+  // "explicit target beats an unreliable back()" call app/login.js already
+  // makes for its own post-auth navigation.
+  const handleBack = useCallback(() => {
+    router.replace(from === 'inbox' ? '/(tabs)' : '/(tabs)/bookings');
+  }, [router, from]);
+
   useLayoutEffect(() => {
-    if (from === 'inbox') {
-      navigation.setOptions({ headerBackTitle: 'Inbox' });
-    }
-  }, [from, navigation]);
+    navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity onPress={handleBack} hitSlop={10} style={styles.headerBackButton}>
+          <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+          <Text style={styles.headerBackLabel}>{from === 'inbox' ? 'Inbox' : 'Bookings'}</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [from, navigation, handleBack, styles, colors]);
 
   const booking = bookings.find(b => b.id === id);
 
@@ -129,6 +155,9 @@ export default function BookingDetailScreen() {
   const [sameAsPickup, setSameAsPickup] = useState(false);
   const [isPickupModalVisible, setIsPickupModalVisible] = useState(false);
   const [isReturnModalVisible, setIsReturnModalVisible] = useState(false);
+  // Dismissed for this screen visit only - not persisted, so the prompt is
+  // free to reappear next time the booking is opened on pickup day.
+  const [directionsPromptDismissed, setDirectionsPromptDismissed] = useState(false);
 
   useEffect(() => {
     if (booking?.carId) {
@@ -136,53 +165,46 @@ export default function BookingDetailScreen() {
     }
   }, [booking?.carId]);
 
-  // undefined = still loading, null = no inspection started yet. Keyed off
-  // booking.serverId (the real server booking id) rather than booking.id
-  // (the local id) - inspections live server-side, same constraint as
-  // messaging's serverConversation lookup above. Re-fetched on focus so
-  // returning from the wizard picks up whatever was just saved.
+  // undefined = still loading, null = not started yet. Both inspections and
+  // rental agreements are Supabase-native now - keyed on booking.id
+  // directly (a Supabase booking has one real id, no more local-vs-server
+  // distinction to bridge). Re-fetched on focus so returning from either
+  // wizard picks up whatever was just saved.
   const [preInspection, setPreInspection] = useState(undefined);
   const [postInspection, setPostInspection] = useState(undefined);
   const [rentalAgreement, setRentalAgreement] = useState(undefined);
+  const [myReview, setMyReview] = useState(undefined);
 
   useFocusEffect(useCallback(() => {
-    if (!booking?.serverId) {
+    if (!booking?.id) {
       setPreInspection(null);
       setPostInspection(null);
       setRentalAgreement(null);
+      setMyReview(null);
       return;
     }
-    getInspection(booking.serverId, 'pre').then(setPreInspection).catch(() => setPreInspection(null));
-    getInspection(booking.serverId, 'post').then(setPostInspection).catch(() => setPostInspection(null));
-    getRentalAgreement(booking.serverId).then(setRentalAgreement).catch(() => setRentalAgreement(null));
-  }, [booking?.serverId]));
+    getInspection(booking.id, 'pre').then(setPreInspection).catch(() => setPreInspection(null));
+    getInspection(booking.id, 'post').then(setPostInspection).catch(() => setPostInspection(null));
+    getRentalAgreement(booking.id).then(setRentalAgreement).catch(() => setRentalAgreement(null));
+    if (booking.status === 'Completed') {
+      getMyReviewForBooking(booking.id).then(setMyReview).catch(() => setMyReview(null));
+    }
+  }, [booking?.id, booking?.status]));
 
   const handleInspectionPress = (type, inspection) => {
-    if (!booking.serverId) {
-      Alert.alert('Not available yet', "Vehicle inspection isn't available for this booking yet.");
+    if (inspection?.status === 'submitted') {
+      router.push({ pathname: '/inspection/report', params: { bookingId: booking.id, type } });
       return;
     }
-    if (inspection?.status === 'submitted' && inspection.document) {
-      Linking.openURL(inspection.document.signedUrl);
-      return;
-    }
-    // localId is the app's own booking.id (used to navigate back to this
-    // exact screen when the wizard finishes) - distinct from bookingId
-    // (booking.serverId), which is what the inspection API itself is keyed
-    // on. The two are unrelated strings/ids, never interchangeable.
-    router.push({ pathname: '/inspection/mileage', params: { bookingId: booking.serverId, localId: booking.id, type } });
+    router.push({ pathname: '/inspection/mileage', params: { bookingId: booking.id, localId: booking.id, type } });
   };
 
   const handleRentalAgreementPress = () => {
-    if (!booking.serverId) {
-      Alert.alert('Not available yet', "The rental agreement isn't available for this booking yet.");
+    if (rentalAgreement?.status === 'submitted') {
+      router.push({ pathname: '/rental-agreement/report', params: { bookingId: booking.id } });
       return;
     }
-    if (rentalAgreement?.status === 'submitted' && rentalAgreement.document) {
-      Linking.openURL(rentalAgreement.document.signedUrl);
-      return;
-    }
-    router.push({ pathname: '/rental-agreement/[bookingId]', params: { bookingId: booking.serverId, localId: booking.id } });
+    router.push({ pathname: '/rental-agreement/[bookingId]', params: { bookingId: booking.id, localId: booking.id } });
   };
 
   const startEditing = () => {
@@ -197,15 +219,42 @@ export default function BookingDetailScreen() {
     setMode('editing');
   };
 
-  const days = useMemo(() => daysBetween(editStart, editEnd), [editStart, editEnd]);
   const originalDays = useMemo(
     () => daysBetween(booking?.startDate, booking?.endDate),
     [booking?.startDate, booking?.endDate]
   );
 
+  // Per-date custom pricing for just the (possibly just-edited) trip range -
+  // falls back to the car's base price_per_day for any date without an
+  // override, same as checkout/summary.js and checkout/payment.js.
+  const [datePriceMap, setDatePriceMap] = useState({});
+  useEffect(() => {
+    if (!car?.id || !editStart || !editEnd) return;
+    getDatePriceMap(car.id, { fromDate: toISODate(editStart), toDate: toISODate(editEnd) })
+      .then(setDatePriceMap)
+      .catch(() => {});
+  }, [car?.id, editStart, editEnd]);
+
+  const pricing = useMemo(() => {
+    if (!car || !editStart || !editEnd || !editPickupTime || !editReturnTime) return null;
+    return calculateRentalPricing({
+      startDate: editStart,
+      endDate: editEnd,
+      pickupTime: editPickupTime,
+      returnTime: editReturnTime,
+      drivenBy: car.drivenBy,
+      dailyRate: car.pricePerDay,
+      getDatePrice: (iso) => datePriceMap[iso],
+      lengthOfStayDiscounts: car.lengthOfStayDiscounts,
+      discount: car.discount,
+    });
+  }, [car, editStart, editEnd, editPickupTime, editReturnTime, datePriceMap]);
+
+  const days = pricing?.billableDays ?? 0;
+
   const recomputedTotal = useMemo(() => {
-    if (!car || !days) return booking?.totalCost ?? 0;
-    const rentalCost = (car.pricePerDay ?? 0) * days;
+    if (!car || !pricing || !days) return booking?.totalCost ?? 0;
+    const rentalCost = pricing.rentalCost;
     // booking.addons ({name, days}[]) is the current shape; bookings made
     // before per-addon day counts existed only have booking.addonNames
     // (string[]) with no day count of their own - fall back to the
@@ -224,10 +273,10 @@ export default function BookingDetailScreen() {
     const addonsCost = addons.reduce((sum, a) => sum + (a.type === 'per_day' ? a.price * a.days : a.price), 0);
     const subtotal = rentalCost + addonsCost;
     const isSelfDrive = car.drivenBy === 'Self-drive';
-    const deliveryFee = isSelfDrive ? SELF_DRIVE_DELIVERY_FEE : 0;
+    const deliveryFee = isSelfDrive ? getSelfDriveDeliveryFee() : 0;
     const securityDeposit = calculateSecurityDeposit(subtotal);
     return subtotal + deliveryFee + securityDeposit;
-  }, [car, days, booking, originalDays]);
+  }, [car, pricing, days, booking, originalDays]);
 
   const difference = recomputedTotal - (booking?.totalCost ?? 0);
 
@@ -280,19 +329,29 @@ export default function BookingDetailScreen() {
     }
   };
 
-  const handleConfirmCancel = () => {
-    cancelBooking(booking.id);
-    notifyBookingEvent('booking_cancelled', booking);
+  const handleConfirmCancel = async () => {
     setIsCancelModalVisible(false);
+    try {
+      // Awaited (not fire-and-forget) so a rejected Supabase update - e.g.
+      // RLS/network - never leaves the UI showing "Cancelled" for a booking
+      // that, in reality, wasn't.
+      await cancelBooking(booking.id);
+      notifyBookingEvent('booking_cancelled', booking);
+    } catch (e) {
+      Alert.alert('Could not cancel booking', e.message || 'Please try again.');
+    }
   };
 
   // Hosts are never directly messageable (see InboxContext.js) - this
   // opens the real, booking-anchored conversation with WopeCar Support
-  // instead, created server-side when the booking was made. Falls back
-  // gracefully if that best-effort server booking call never succeeded.
+  // instead, created server-side (a Postgres trigger) when the booking was
+  // made. Keyed on booking.id directly, not a separate serverId - bookings
+  // are Supabase-native now, so a booking's own id IS the real id a
+  // conversation's booking_id refers to; there's no more local-vs-server
+  // indirection to bridge.
   const handleMessageParticipant = () => {
     const serverConversation = conversations.find(
-      (c) => c.source === 'server' && c.bookingId === booking.serverId
+      (c) => c.source === 'server' && c.bookingId === booking.id
     );
     if (!serverConversation) {
       Alert.alert('Messaging unavailable', "Messaging isn't available for this booking yet.");
@@ -311,7 +370,23 @@ export default function BookingDetailScreen() {
 
   const statusColors = getStatusColors(colors);
   const statusStyle = statusColors[booking.status] ?? statusColors.Pending;
-  const canModify = booking.status !== 'Cancelled';
+  // A finished trip can't be cancelled or modified - this used to be
+  // impossible to express (completed bookings showed as 'Confirmed', see
+  // BookingsContext's STATUS_MAP), so this exclusion is new alongside that
+  // fix, not a behavior change on top of already-correct logic.
+  const canModify = booking.status !== 'Cancelled' && booking.status !== 'Completed';
+
+  // "Today" per calendar date, not exact time - a booking whose pickup is
+  // today should prompt regardless of what time pickup is scheduled for.
+  const isPickupToday = booking.startDate
+    && new Date(booking.startDate).toDateString() === new Date().toDateString();
+  const showDirectionsPrompt = mode === 'view' && settings.autoOpenDirections && isPickupToday
+    && booking.status === 'Confirmed' && !!booking.pickupLocation && !directionsPromptDismissed;
+
+  const handleDirectionsPromptPress = () => {
+    openDirections(booking.pickupLocation, settings.mapProvider);
+    setDirectionsPromptDismissed(true);
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -338,6 +413,22 @@ export default function BookingDetailScreen() {
           </View>
         </View>
       </View>
+
+      {showDirectionsPrompt && (
+        <View style={styles.directionsPromptCard}>
+          <Ionicons name="navigate-circle-outline" size={24} color={colors.teal} />
+          <View style={styles.directionsPromptTextWrap}>
+            <Text style={styles.directionsPromptTitle}>Today's your pickup day</Text>
+            <Text style={styles.directionsPromptBody} numberOfLines={1}>Directions to {booking.pickupLocation}</Text>
+          </View>
+          <TouchableOpacity style={styles.directionsPromptButton} onPress={handleDirectionsPromptPress}>
+            <Text style={styles.directionsPromptButtonText}>Go</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setDirectionsPromptDismissed(true)} hitSlop={8}>
+            <Ionicons name="close" size={18} color={colors.textSubtle} />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {mode === 'view' && (
         <View style={styles.card}>
@@ -577,6 +668,17 @@ export default function BookingDetailScreen() {
         </View>
       )}
 
+      {mode === 'view' && booking.status === 'Completed' && myReview !== undefined && (
+        <View style={styles.actions}>
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={() => router.push({ pathname: '/review/[bookingId]', params: { bookingId: booking.id } })}
+          >
+            <Text style={styles.primaryButtonText}>{myReview ? 'Edit Your Review' : 'Rate Your Trip'}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {canModify && (
         <View style={styles.actions}>
           {mode === 'editing' && (
@@ -672,6 +774,17 @@ export default function BookingDetailScreen() {
 
 function createStyles(colors) {
   return StyleSheet.create({
+  headerBackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 8,
+  },
+  headerBackLabel: {
+    fontFamily: FONTS.regular,
+    fontSize: 17,
+    color: colors.textPrimary,
+    marginLeft: -4,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -764,6 +877,40 @@ function createStyles(colors) {
     shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 3,
+  },
+  directionsPromptCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: colors.highlight,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+  },
+  directionsPromptTextWrap: {
+    flex: 1,
+  },
+  directionsPromptTitle: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 13,
+    color: colors.textPrimary,
+  },
+  directionsPromptBody: {
+    fontFamily: FONTS.regular,
+    fontSize: 12,
+    color: colors.textSubtle,
+    marginTop: 1,
+  },
+  directionsPromptButton: {
+    backgroundColor: colors.teal,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  directionsPromptButtonText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 13,
+    color: colors.white,
   },
   sectionTitle: {
     fontFamily: FONTS.bold,

@@ -13,6 +13,15 @@ const EMPTY_DRAFT = {
   // portion of the trip actually spent in that region, not the whole trip).
   addons: [],
   totalCost: 0,
+  // Only the code + the promo's own discount shape are kept, not a raw
+  // discount amount - it's recomputed reactively against whatever the
+  // subtotal actually is on each screen (see checkout/summary.js and
+  // checkout/payment.js), the same way car-level discounts already work,
+  // so going back and changing dates/addons after applying a code doesn't
+  // leave a stale discount amount behind.
+  promoCode: null,
+  promoDiscountType: null,
+  promoDiscountValue: 0,
   form: {
     firstName: '',
     lastName: '',

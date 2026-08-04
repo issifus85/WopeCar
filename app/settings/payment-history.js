@@ -11,13 +11,8 @@ import * as bookingsApi from '../../services/bookingsApi';
 
 const STATUS_META = {
   paid: { label: 'Paid', tone: 'success' },
-  partial_payment: { label: 'Partially Paid', tone: 'warning' },
-  completed: { label: 'Completed', tone: 'success' },
-  confirmed: { label: 'Confirmed', tone: 'success' },
-  processing: { label: 'Processing', tone: 'warning' },
+  refunded: { label: 'Refunded', tone: 'warning' },
   unpaid: { label: 'Unpaid', tone: 'neutral' },
-  draft: { label: 'Draft', tone: 'neutral' },
-  cancelled: { label: 'Cancelled', tone: 'error' },
 };
 
 function formatDate(iso) {

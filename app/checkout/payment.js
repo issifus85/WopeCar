@@ -6,16 +6,24 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { formatCurrency } from '../../constants/pricing';
+import { formatCurrency, calculateRentalPricing, calculateSecurityDeposit, getSelfDriveDeliveryFee } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
-import { createBooking } from '../../services/bookingsApi';
+import { getDatePriceMap } from '../../services/carPricingApi';
+import { redeemPromoCode } from '../../services/promoApi';
+import { createBooking, updateBooking as confirmSupabaseBooking, uploadBookingDocument, markDatesBooked, sendBookingConfirmationEmail, sendBookingRequestVendorEmail } from '../../services/supabaseApi';
 import { payWithPaystack } from '../../services/paystackCheckout';
+import { useAuth } from '../../contexts/AuthContext';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import { useBookings } from '../../contexts/BookingsContext';
 import { useCart } from '../../contexts/CartContext';
 import { useInbox } from '../../contexts/InboxContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
+
+function toISODate(value) {
+  const d = new Date(value);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 export default function CheckoutPaymentScreen() {
   const { carId } = useLocalSearchParams();
@@ -24,9 +32,10 @@ export default function CheckoutPaymentScreen() {
   const { activeCurrency } = useCurrency();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { draft, resetCheckout } = useCheckout();
-  const { addBooking, updateBooking } = useBookings();
+  const { addBooking } = useBookings();
   const { removeFromCart } = useCart();
   const { notifyBookingEvent } = useInbox();
+  const { user } = useAuth();
 
   const [car, setCar] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,15 +49,147 @@ export default function CheckoutPaymentScreen() {
       .finally(() => setIsLoading(false));
   }, [carId]);
 
+  // Same billableDays/rentalCost/addonsCost/deliveryFee/securityDeposit
+  // formulas as checkout/summary.js - re-derived here (not imported from
+  // there, there's nothing to import - summary.js only keeps these as local
+  // consts) since the Supabase bookings row has real columns for each
+  // component, not just the combined total draft.totalCost already carries.
+  // Fetches the trip's per-date price overrides and runs them through the
+  // same calculateRentalPricing() engine as summary.js, so the rentalCost
+  // persisted to bookings.rental_cost matches what the renter was shown -
+  // custom per-date pricing and discounts included, not the flat rate.
+  const buildPricingBreakdown = async () => {
+    const datePriceMap = await getDatePriceMap(carId, {
+      fromDate: toISODate(draft.startDate),
+      toDate: toISODate(draft.endDate),
+    }).catch(() => ({}));
+    const pricing = calculateRentalPricing({
+      startDate: draft.startDate,
+      endDate: draft.endDate,
+      pickupTime: draft.pickupTime,
+      returnTime: draft.returnTime,
+      drivenBy: car.drivenBy,
+      dailyRate: car.pricePerDay,
+      getDatePrice: (iso) => datePriceMap[iso],
+      lengthOfStayDiscounts: car.lengthOfStayDiscounts,
+      discount: car.discount,
+    });
+    const selectedAddons = (car.regionalAddons ?? [])
+      .map((addon) => {
+        const selection = draft.addons.find((a) => a.name === addon.name);
+        return selection ? { ...addon, days: selection.days } : null;
+      })
+      .filter(Boolean);
+    const rentalCost = pricing.rentalCost;
+    const addonsCost = selectedAddons.reduce((sum, addon) => (
+      sum + (addon.type === 'per_day' ? addon.price * addon.days : addon.price)
+    ), 0);
+    const subtotal = rentalCost + addonsCost;
+    const deliveryFee = car.drivenBy === 'Self-drive' ? getSelfDriveDeliveryFee() : 0;
+    const securityDeposit = calculateSecurityDeposit(subtotal);
+    // Same reactive formula as checkout/summary.js - recomputed against this
+    // trip's actual subtotal rather than trusting a stored amount.
+    const promoDiscountAmount = draft.promoCode
+      ? Math.min(subtotal, Math.max(0, draft.promoDiscountType === 'percentage'
+        ? subtotal * (draft.promoDiscountValue / 100)
+        : draft.promoDiscountValue))
+      : 0;
+    return { rentalCost, addonsCost, deliveryFee, securityDeposit, promoDiscountAmount };
+  };
+
   const handlePay = async () => {
     setIsProcessing(true);
     setError(null);
 
     try {
+      // Reserve: insert the Supabase row BEFORE any money moves. If this
+      // fails, nothing was charged - just show an error. This is the whole
+      // point of the reorder (see the "Bookings Phase 2" plan): the old
+      // "charge first, hope the record write succeeds after" ordering could
+      // charge a card with no booking ever created; that's now structurally
+      // impossible, since a Supabase write failure can only happen here,
+      // before Paystack is ever called.
+      const { rentalCost, addonsCost, deliveryFee, securityDeposit, promoDiscountAmount } = await buildPricingBreakdown();
+
+      // Redeemed (uses_count incremented) here, immediately before the
+      // booking that actually spends it gets created - not back on the
+      // Cost Breakdown screen's "Apply" preview, so a code is only ever
+      // consumed by a booking that goes through. A failure here (e.g. it
+      // was just exhausted by someone else) aborts before any booking row
+      // or charge exists, same as every other failure in this block.
+      let promoCode = null;
+      if (draft.promoCode) {
+        const redeemed = await redeemPromoCode(draft.promoCode);
+        promoCode = redeemed.code;
+      }
+
+      const reserved = await createBooking({
+        renter_id: user.id,
+        car_id: carId,
+        vendor_id: car.vendorId,
+        start_date: draft.startDate,
+        end_date: draft.endDate,
+        pickup_time: draft.pickupTime,
+        return_time: draft.returnTime,
+        pickup_location: draft.pickupLocation,
+        return_location: draft.returnLocation,
+        drive_type: car.drivenBy,
+        addon_names: draft.addons.map((a) => a.name),
+        addon_days: draft.addons.map((a) => a.days),
+        rental_cost: rentalCost,
+        addons_cost: addonsCost,
+        delivery_fee: deliveryFee,
+        security_deposit: securityDeposit,
+        promo_code: promoCode,
+        promo_discount_amount: promoDiscountAmount,
+        total_cost: draft.totalCost,
+        status: 'pending',
+        payment_status: 'unpaid',
+      });
+
+      // Best-effort, in parallel: a failed upload shouldn't block the
+      // booking itself - same "local state/booking always wins, best-effort
+      // sync" spirit as the rest of this app. Uploaded under the booking's
+      // own id now that one exists.
+      await Promise.all(
+        [
+          draft.licenseFront && ['license_front', draft.licenseFront],
+          draft.licenseBack && ['license_back', draft.licenseBack],
+          draft.proofOfAddress && ['proof_of_address', draft.proofOfAddress],
+        ]
+          .filter(Boolean)
+          .map(([type, uri]) => uploadBookingDocument(user.id, reserved.id, type, uri).catch(() => {}))
+      );
+
       const reference = await payWithPaystack(draft.totalCost);
 
+      // Last fragile step: the row already exists (visible to the renter/
+      // vendor/admin either way), so a failure here is a "confirm this
+      // paid booking" data-fix, not a lost-money-with-no-record situation
+      // like before. Still worth a few retries rather than a bare attempt,
+      // since this is genuinely the one place left where a transient
+      // failure would leave real state (a successful charge) unreflected.
+      let confirmed;
+      let lastConfirmError;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          confirmed = await confirmSupabaseBooking(reserved.id, {
+            payment_status: 'paid',
+            payment_ref: reference,
+          });
+          break;
+        } catch (e) {
+          lastConfirmError = e;
+        }
+      }
+      if (!confirmed) throw lastConfirmError;
+
+      await markDatesBooked(carId, draft.startDate, draft.endDate).catch(() => {});
+      sendBookingConfirmationEmail(confirmed.id).catch(() => {});
+      sendBookingRequestVendorEmail(confirmed.id).catch(() => {});
+
       const booking = {
-        id: `local-${Date.now()}`,
+        id: confirmed.id,
         carId,
         carName: car?.name,
         carImage: car?.image,
@@ -63,38 +204,11 @@ export default function CheckoutPaymentScreen() {
         form: draft.form,
         paystackReference: reference,
         status: 'Pending',
-        createdAt: new Date().toISOString(),
+        createdAt: confirmed.created_at,
       };
       addBooking(booking);
       removeFromCart(carId);
       notifyBookingEvent('booking_created', booking);
-
-      // Best-effort: creates the real server-side booking row, which
-      // triggers a real client<->support conversation server-side (see
-      // BookingApiController::store()). Payment already succeeded and the
-      // local booking already exists by this point, so a failure here must
-      // never be allowed to fail checkout - messaging for this booking
-      // just won't be available until a later retry/sync.
-      try {
-        const serverBooking = await createBooking({
-          carId,
-          startDate: draft.startDate,
-          endDate: draft.endDate,
-          pickupTime: draft.pickupTime,
-          returnTime: draft.returnTime,
-          pickupLocation: draft.pickupLocation,
-          returnLocation: draft.returnLocation,
-          totalCost: draft.totalCost,
-          addons: draft.addons,
-          paystackReference: reference,
-          licenseFront: draft.licenseFront,
-          licenseBack: draft.licenseBack,
-          proofOfAddress: draft.proofOfAddress,
-        });
-        updateBooking(booking.id, { serverId: serverBooking.id });
-      } catch (e) {
-        // swallowed by design - see comment above
-      }
 
       resetCheckout();
       router.replace('/(tabs)/bookings');

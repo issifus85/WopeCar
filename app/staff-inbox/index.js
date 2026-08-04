@@ -6,8 +6,17 @@ import { FONTS } from '../../constants/theme';
 import { formatRelativeTime } from '../../constants/dateUtils';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import * as conversationsApi from '../../services/conversationsApi';
+import FilterTabs from '../../components/admin/FilterTabs';
+import BadgeStatus from '../../components/admin/BadgeStatus';
 
 const LIST_POLL_MS = 15000;
+
+const TABS = [
+  { key: 'all', label: 'All' },
+  { key: 'unread', label: 'Unread' },
+  { key: 'urgent', label: 'Urgent' },
+  { key: 'resolved', label: 'Resolved' },
+];
 
 function ConversationRow({ conversation, styles, colors }) {
   const summary = conversation.pinnedSummary;
@@ -26,6 +35,12 @@ function ConversationRow({ conversation, styles, colors }) {
         </View>
         <Text style={styles.rowSubtitle} numberOfLines={1}>{summary?.carName}</Text>
         <Text style={styles.rowPreview} numberOfLines={1}>{preview}</Text>
+        {(conversation.isUrgent || conversation.isResolved) && (
+          <View style={styles.rowBadges}>
+            {conversation.isUrgent && <BadgeStatus label="Urgent" tone="error" />}
+            {conversation.isResolved && <BadgeStatus label="Resolved" tone="muted" />}
+          </View>
+        )}
       </View>
       {conversation.unreadCount > 0 && (
         <View style={styles.unreadBadge}>
@@ -42,6 +57,7 @@ export default function StaffInboxScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [conversations, setConversations] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('all');
 
   const load = useCallback(() => {
     conversationsApi.getConversations({ scope: 'all' })
@@ -58,6 +74,20 @@ export default function StaffInboxScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  const tabCounts = useMemo(() => ({
+    all: conversations.length,
+    unread: conversations.filter((c) => c.unreadCount > 0).length,
+    urgent: conversations.filter((c) => c.isUrgent).length,
+    resolved: conversations.filter((c) => c.isResolved).length,
+  }), [conversations]);
+
+  const filteredConversations = useMemo(() => {
+    if (activeTab === 'unread') return conversations.filter((c) => c.unreadCount > 0);
+    if (activeTab === 'urgent') return conversations.filter((c) => c.isUrgent);
+    if (activeTab === 'resolved') return conversations.filter((c) => c.isResolved);
+    return conversations;
+  }, [conversations, activeTab]);
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -65,14 +95,20 @@ export default function StaffInboxScreen() {
         <Text style={styles.headerSubtitle}>Every client conversation, across all bookings</Text>
       </View>
 
-      {isLoading ? null : conversations.length === 0 ? (
+      <FilterTabs
+        tabs={TABS.map((t) => ({ ...t, count: tabCounts[t.key] }))}
+        activeKey={activeTab}
+        onChange={setActiveTab}
+      />
+
+      {isLoading ? null : filteredConversations.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="chatbubbles-outline" size={32} color={colors.disabled} />
-          <Text style={styles.emptyStateText}>No conversations yet.</Text>
+          <Text style={styles.emptyStateText}>No conversations here.</Text>
         </View>
       ) : (
         <FlatList
-          data={conversations}
+          data={filteredConversations}
           keyExtractor={(item) => String(item.id)}
           renderItem={({ item }) => (
             <TouchableOpacity onPress={() => router.push(`/staff-inbox/${item.id}`)}>
@@ -123,7 +159,7 @@ function createStyles(colors) {
     },
     list: {
       paddingHorizontal: 16,
-      paddingBottom: 20,
+      paddingBottom: 140,
     },
     row: {
       flexDirection: 'row',
@@ -176,6 +212,11 @@ function createStyles(colors) {
       fontFamily: FONTS.regular,
       fontSize: 12,
       color: colors.textMuted,
+    },
+    rowBadges: {
+      flexDirection: 'row',
+      gap: 6,
+      marginTop: 4,
     },
     unreadBadge: {
       minWidth: 20,

@@ -28,7 +28,7 @@ function damageColor(type) {
 }
 
 // Vendor Mode variant of app/inspection/exterior.js - see mileage.js's
-// header comment for why this is a separate, backend-free copy.
+// header comment for the draft-vs-real-sync split.
 export default function VendorInspectionExteriorScreen() {
   const { bookingId, type } = useLocalSearchParams();
   const router = useRouter();

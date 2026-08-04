@@ -1,47 +1,54 @@
-import { request } from './api';
+// Real account deletion lives in services/supabaseAuthApi.js (Supabase-
+// native, via the delete-account Edge Function) and is wired through
+// AuthContext.deleteAccount - this file used to have its own legacy
+// Laravel version, but nothing has ever called it (confirmed unused),
+// so it's not carried forward here.
+
+import supabase, { getCurrentUser } from './supabase';
 
 /**
- * DELETE /api/account
- * Requires auth:sanctum + re-entering the current password. The server
- * revokes every Sanctum token on success, so the caller should clear the
- * locally stored token right after this resolves (see
- * AuthContext.deleteAccount).
- */
-export async function deleteAccount(password) {
-  return request('/account', {
-    method: 'DELETE',
-    auth: true,
-    body: { password },
-  });
-}
-
-/**
- * GET /api/account/export
- * Returns the user's own profile + bookings as one raw payload - this is a
- * one-off data dump the user shares/saves, not app state, so it's returned
- * as-is rather than run through normalizeUser()/normalizeBooking().
+ * The caller's own profile + bookings as one raw payload - a one-off data
+ * dump the user shares/saves, not app state. Both reads are scoped to the
+ * caller via existing RLS (`users_own_select`, `bookings_renter_select`),
+ * no proxy needed. Replaces the old Laravel GET /api/account/export, which
+ * required the same dead Sanctum token as the Places/Paystack bugs (see
+ * services/tokenStorage.js's header comment).
  */
 export async function exportData() {
-  const json = await request('/account/export', { auth: true });
-  return json.data;
+  const user = await getCurrentUser();
+  const [{ data: profile, error: profileError }, { data: bookings, error: bookingsError }] = await Promise.all([
+    supabase.from('users').select('full_name, email, phone').eq('id', user.id).single(),
+    supabase.from('bookings').select('booking_ref, start_date, end_date, total_cost, payment_status, created_at').eq('renter_id', user.id),
+  ]);
+  if (profileError) throw profileError;
+  if (bookingsError) throw bookingsError;
+
+  return {
+    profile: { name: profile.full_name, email: profile.email, phone: profile.phone },
+    bookings: bookings ?? [],
+  };
 }
 
 /**
- * GET /api/account/security-alerts
+ * Settings > Security Alerts toggle. Real `users.security_alerts_enabled`
+ * column (migration `add_security_alerts_enabled_to_users`) - replaces the
+ * old Laravel GET/PUT /api/account/security-alerts, same dead-token issue.
  */
 export async function getSecurityAlerts() {
-  const json = await request('/account/security-alerts', { auth: true });
-  return json.data.enabled;
+  const user = await getCurrentUser();
+  const { data, error } = await supabase.from('users').select('security_alerts_enabled').eq('id', user.id).single();
+  if (error) throw error;
+  return !!data.security_alerts_enabled;
 }
 
-/**
- * PUT /api/account/security-alerts
- */
 export async function updateSecurityAlerts(enabled) {
-  const json = await request('/account/security-alerts', {
-    method: 'PUT',
-    auth: true,
-    body: { enabled },
-  });
-  return json.data.enabled;
+  const user = await getCurrentUser();
+  const { data, error } = await supabase
+    .from('users')
+    .update({ security_alerts_enabled: enabled })
+    .eq('id', user.id)
+    .select('security_alerts_enabled')
+    .single();
+  if (error) throw error;
+  return !!data.security_alerts_enabled;
 }

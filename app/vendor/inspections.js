@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,6 +6,7 @@ import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useVendor } from '../../contexts/VendorContext';
 import { useInspection } from '../../contexts/InspectionContext';
+import { getInspection } from '../../services/inspectionsApi';
 import VendorHeader from '../../components/VendorHeader';
 import VendorStatusBadge from '../../components/VendorStatusBadge';
 
@@ -13,12 +14,12 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-// Mirrors app/booking/[id].js's inspectionStatusLabel/Style, but reads from
-// the local vendorInspections record (submitted) or the shared, single-slot
-// InspectionContext draft (in-progress) instead of a server GET - Vendor
-// Mode's bookings have no real server id to fetch against.
+// Mirrors app/booking/[id].js's inspectionStatusLabel/Style - reads real
+// per-booking status fetched from the server (see the statuses state below)
+// or the shared, single-slot InspectionContext draft for an in-progress one
+// that hasn't synced yet.
 function inspectionState(submitted, isDraftHere) {
-  if (submitted) return 'submitted';
+  if (submitted?.status === 'submitted') return 'submitted';
   if (isDraftHere) return 'draft';
   return 'none';
 }
@@ -39,8 +40,10 @@ export default function VendorInspectionsScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { bookingHistory, getVendorInspection, isLoading } = useVendor();
+  const { bookingHistory, isLoading } = useVendor();
   const { draft: inspectionDraft } = useInspection();
+  const [statuses, setStatuses] = useState({});
+  const [statusesLoading, setStatusesLoading] = useState(true);
 
   // Pre-inspection is available once a booking has been Confirmed (and
   // stays available through Completed, since that's the same booking's
@@ -48,12 +51,34 @@ export default function VendorInspectionsScreen() {
   // app/booking/[id].js. Requested/Declined bookings aren't real rentals
   // yet, so there's nothing to inspect.
   const inspectable = bookingHistory.filter((b) => b.status === 'Confirmed' || b.status === 'Completed');
+  const inspectableIds = inspectable.map((b) => b.id).join(',');
+
+  useEffect(() => {
+    if (!inspectableIds) {
+      setStatusesLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setStatusesLoading(true);
+    const ids = inspectableIds.split(',');
+    Promise.all(
+      ids.flatMap((id) => [
+        getInspection(id, 'pre').then((r) => [`${id}:pre`, r]).catch(() => [`${id}:pre`, null]),
+        getInspection(id, 'post').then((r) => [`${id}:post`, r]).catch(() => [`${id}:post`, null]),
+      ])
+    ).then((entries) => {
+      if (cancelled) return;
+      setStatuses(Object.fromEntries(entries));
+      setStatusesLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [inspectableIds]);
 
   const handlePress = (booking, type) => {
     router.push({ pathname: '/vendor/inspection/mileage', params: { bookingId: booking.id, type } });
   };
 
-  if (isLoading) {
+  if (isLoading || statusesLoading) {
     return (
       <View style={styles.centerState}>
         <ActivityIndicator size="large" color={colors.teal} />
@@ -81,10 +106,10 @@ export default function VendorInspectionsScreen() {
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => {
-            const preSubmitted = getVendorInspection(item.id, 'pre');
-            const postSubmitted = getVendorInspection(item.id, 'post');
-            const preState = inspectionState(preSubmitted, inspectionDraft.bookingId === item.id && inspectionDraft.type === 'pre');
-            const postState = inspectionState(postSubmitted, inspectionDraft.bookingId === item.id && inspectionDraft.type === 'post');
+            const preInspection = statuses[`${item.id}:pre`];
+            const postInspection = statuses[`${item.id}:post`];
+            const preState = inspectionState(preInspection, inspectionDraft.bookingId === item.id && inspectionDraft.type === 'pre');
+            const postState = inspectionState(postInspection, inspectionDraft.bookingId === item.id && inspectionDraft.type === 'post');
             const postLocked = preState !== 'submitted';
 
             return (

@@ -26,6 +26,7 @@ const EMPTY_DRAFT = {
   type: '',
   vehicleClass: '',
   drivenBy: 'Self-drive',
+  energySource: '',
   transmission: 'Automatic',
   seats: '',
   doors: '',
@@ -40,6 +41,11 @@ const EMPTY_DRAFT = {
   regionalAddons: [],
   vettingDate: null,
   vettingTime: null,
+  // Compliance docs - local device uris until review.js's submit uploads
+  // them for real (needs the car's own id first, see uploadCarDocument).
+  insurancePolicyNumber: '',
+  roadworthyDocUri: null,
+  insuranceDocUri: null,
 };
 
 const AddCarContext = createContext(null);

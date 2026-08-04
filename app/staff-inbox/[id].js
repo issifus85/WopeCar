@@ -19,10 +19,23 @@ export default function StaffConversationScreen() {
   const [conversation, setConversation] = useState(null);
   const [messages, setMessages] = useState([]);
   const [isInviteVisible, setIsInviteVisible] = useState(false);
+  const [isUpdatingFlags, setIsUpdatingFlags] = useState(false);
 
   const loadMeta = useCallback(() => {
     conversationsApi.getConversation(id).then(setConversation).catch(() => {});
   }, [id]);
+
+  const toggleFlag = (flag) => {
+    if (!conversation || isUpdatingFlags) return;
+    setIsUpdatingFlags(true);
+    const patch = flag === 'urgent'
+      ? { isUrgent: !conversation.isUrgent }
+      : { isResolved: !conversation.isResolved };
+    conversationsApi.setConversationFlags(id, patch)
+      .then(loadMeta)
+      .catch(() => {})
+      .finally(() => setIsUpdatingFlags(false));
+  };
 
   // Always re-fetches the latest window rather than only what's new -
   // otherwise a message's isRead flag flipping true (the other party
@@ -81,7 +94,31 @@ export default function StaffConversationScreen() {
           <Text style={styles.headerName} numberOfLines={1}>{conversation.pinnedSummary?.customerName ?? 'Customer'}</Text>
           <Text style={styles.headerSubtitle} numberOfLines={1}>{conversation.pinnedSummary?.carName}</Text>
         </View>
-        <TouchableOpacity onPress={() => setIsInviteVisible(true)} hitSlop={10}>
+        <TouchableOpacity
+          onPress={() => toggleFlag('urgent')}
+          disabled={isUpdatingFlags}
+          hitSlop={10}
+          style={styles.headerIconButton}
+        >
+          <Ionicons
+            name={conversation.isUrgent ? 'alert-circle' : 'alert-circle-outline'}
+            size={20}
+            color={conversation.isUrgent ? colors.error : colors.textSubtle}
+          />
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => toggleFlag('resolved')}
+          disabled={isUpdatingFlags}
+          hitSlop={10}
+          style={styles.headerIconButton}
+        >
+          <Ionicons
+            name={conversation.isResolved ? 'checkmark-circle' : 'checkmark-circle-outline'}
+            size={20}
+            color={conversation.isResolved ? colors.success : colors.textSubtle}
+          />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setIsInviteVisible(true)} hitSlop={10} style={styles.headerIconButton}>
           <Ionicons name="person-add-outline" size={20} color={colors.teal} />
         </TouchableOpacity>
       </View>
@@ -126,6 +163,9 @@ function createStyles(colors) {
       backgroundColor: colors.surface,
       borderBottomWidth: 1,
       borderBottomColor: colors.divider,
+    },
+    headerIconButton: {
+      padding: 2,
     },
     headerAvatar: {
       width: 36,

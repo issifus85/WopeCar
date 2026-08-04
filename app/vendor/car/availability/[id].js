@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../../../constants/theme';
@@ -66,6 +66,7 @@ export default function VendorAvailabilityScreen() {
   const [rangeStart, setRangeStart] = useState(null);
   const [localSettings, setLocalSettings] = useState(null);
   const [showSaved, setShowSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (car) setLocalSettings(getAvailabilitySettings(car.id));
@@ -115,7 +116,7 @@ export default function VendorAvailabilityScreen() {
       const iso = toISODate(day);
       const current = blockedDates[car.id] ?? [];
       const next = state === 'blocked' ? current.filter((d) => d !== iso) : [...current, iso];
-      setBlockedDates(car.id, next);
+      setBlockedDates(car.id, next).catch(() => Alert.alert('Could not update', 'Please check your connection and try again.'));
       return;
     }
 
@@ -139,7 +140,7 @@ export default function VendorAvailabilityScreen() {
       }
       cursor = addDays(cursor, 1);
     }
-    setBlockedDates(car.id, Array.from(nextSet));
+    setBlockedDates(car.id, Array.from(nextSet)).catch(() => Alert.alert('Could not update', 'Please check your connection and try again.'));
     setRangeStart(null);
   };
 
@@ -149,9 +150,16 @@ export default function VendorAvailabilityScreen() {
     savedSettings.bookingWindowMonths !== localSettings.bookingWindowMonths ||
     savedSettings.minBookingDays !== localSettings.minBookingDays;
 
-  const handleSave = () => {
-    setAvailabilitySettings(car.id, localSettings);
-    setShowSaved(true);
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await setAvailabilitySettings(car.id, localSettings);
+      setShowSaved(true);
+    } catch (e) {
+      Alert.alert('Could not save settings', e?.message || 'Please check your connection and try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const cells = buildMonthGrid(viewMonth);
@@ -281,7 +289,7 @@ export default function VendorAvailabilityScreen() {
         </View>
       </ScrollView>
 
-      <CheckoutFooterButton label="Save Settings" onPress={handleSave} disabled={!isDirty} />
+      <CheckoutFooterButton label={isSaving ? 'Saving...' : 'Save Settings'} onPress={handleSave} disabled={!isDirty || isSaving} />
 
       <ConfirmModal
         visible={showSaved}

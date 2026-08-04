@@ -1,13 +1,28 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { FONTS } from '../../../constants/theme';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 import { useAddCar } from '../../../contexts/AddCarContext';
 import { WEEKDAYS, MONTH_NAMES, stripTime, toISODate, buildMonthGrid } from '../../../services/vendorCalendar';
 import VendorWizardHeader from '../../../components/VendorWizardHeader';
 import CheckoutFooterButton from '../../../components/CheckoutFooterButton';
+
+function DocUploadTile({ label, uri, onPick, styles, colors }) {
+  return (
+    <TouchableOpacity style={styles.docTile} onPress={onPick}>
+      {uri ? (
+        <Image source={{ uri }} style={styles.docThumbnail} contentFit="cover" />
+      ) : (
+        <Ionicons name="document-attach-outline" size={26} color={colors.textSubtle} />
+      )}
+      <Text style={styles.docTileLabel}>{uri ? `${label} ✓` : `Upload ${label}`}</Text>
+    </TouchableOpacity>
+  );
+}
 
 const TIME_SLOTS = [
   '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
@@ -24,7 +39,22 @@ export default function AddCarVettingScreen() {
   const [viewMonth, setViewMonth] = useState(today);
   const cells = useMemo(() => buildMonthGrid(viewMonth), [viewMonth]);
 
-  const isValid = !!draft.vettingDate && !!draft.vettingTime;
+  const isValid = !!draft.vettingDate && !!draft.vettingTime
+    && !!draft.insurancePolicyNumber.trim() && !!draft.roadworthyDocUri && !!draft.insuranceDocUri;
+
+  const pickDocument = async (field) => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission needed', 'Please allow photo library access to upload documents.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.7,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    updateDraft({ [field]: result.assets[0].uri });
+  };
 
   const goToMonth = (offset) => {
     setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + offset, 1));
@@ -128,6 +158,38 @@ export default function AddCarVettingScreen() {
             );
           })}
         </View>
+
+        <Text style={[styles.label, styles.labelSpaced]}>Compliance Documents</Text>
+        <View style={styles.field}>
+          <Text style={styles.sublabel}>Insurance Policy Number</Text>
+          <TextInput
+            style={styles.input}
+            value={draft.insurancePolicyNumber}
+            onChangeText={(v) => updateDraft({ insurancePolicyNumber: v })}
+            placeholder="e.g. POL-2026-004821"
+            placeholderTextColor={colors.textSubtle}
+            autoCapitalize="characters"
+          />
+        </View>
+        <View style={styles.docRow}>
+          <DocUploadTile
+            label="Roadworthy Cert."
+            uri={draft.roadworthyDocUri}
+            onPick={() => pickDocument('roadworthyDocUri')}
+            styles={styles}
+            colors={colors}
+          />
+          <DocUploadTile
+            label="Insurance Doc"
+            uri={draft.insuranceDocUri}
+            onPick={() => pickDocument('insuranceDocUri')}
+            styles={styles}
+            colors={colors}
+          />
+        </View>
+        <Text style={styles.docHint}>
+          Both documents and a valid policy number are required before this car can be listed.
+        </Text>
       </ScrollView>
 
       <CheckoutFooterButton label="Continue" onPress={handleContinue} disabled={!isValid} />
@@ -261,6 +323,64 @@ function createStyles(colors) {
     slotTextActive: {
       fontFamily: FONTS.semiBold,
       color: colors.white,
+    },
+    field: {
+      marginBottom: 14,
+    },
+    sublabel: {
+      fontFamily: FONTS.medium,
+      fontSize: 12,
+      color: colors.textSubtle,
+      marginBottom: 6,
+    },
+    input: {
+      backgroundColor: colors.surface,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      fontFamily: FONTS.regular,
+      fontSize: 14,
+      color: colors.textPrimary,
+    },
+    docRow: {
+      flexDirection: 'row',
+      gap: 12,
+    },
+    docTile: {
+      flex: 1,
+      aspectRatio: 1.4,
+      borderRadius: 12,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      overflow: 'hidden',
+      padding: 8,
+    },
+    docThumbnail: {
+      ...StyleSheet.absoluteFillObject,
+    },
+    docTileLabel: {
+      fontFamily: FONTS.medium,
+      fontSize: 11,
+      color: colors.textSubtle,
+      textAlign: 'center',
+      backgroundColor: colors.surface,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 6,
+      overflow: 'hidden',
+    },
+    docHint: {
+      fontFamily: FONTS.regular,
+      fontSize: 11,
+      color: colors.textSubtle,
+      marginTop: 10,
+      lineHeight: 16,
     },
   });
 }

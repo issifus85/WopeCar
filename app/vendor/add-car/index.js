@@ -18,6 +18,7 @@ import CheckoutFooterButton from '../../../components/CheckoutFooterButton';
 import SearchableOptionModal from '../../../components/SearchableOptionModal';
 
 const DRIVEN_BY_OPTIONS = ['Self-drive', 'Chauffeur'];
+const ENERGY_SOURCE_OPTIONS = ['Gasoline', 'Diesel', 'EV'];
 const TRANSMISSION_OPTIONS = ['Automatic', 'Manual'];
 // Vendor-facing options are the human-readable labels, stored directly (same
 // convention as make/model/drivenBy/transmission) - matches how car.type is
@@ -59,7 +60,7 @@ export default function AddCarDetailsScreen() {
   }, []);
 
   const modelOptions = useMemo(() => getModelsForMake(draft.make), [draft.make]);
-  const isValid = !!draft.make && !!draft.model && !!draft.year && !!draft.type && !!draft.vehicleClass && !!draft.drivenBy;
+  const isValid = !!draft.make && !!draft.model && !!draft.year && !!draft.type && !!draft.vehicleClass && !!draft.drivenBy && !!draft.energySource;
 
   const handleSelectMake = (make) => {
     // Changing the make invalidates whatever model was picked for the old one.
@@ -86,7 +87,7 @@ export default function AddCarDetailsScreen() {
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <PickerField
@@ -141,6 +142,24 @@ export default function AddCarDetailsScreen() {
                   key={option}
                   style={[styles.pill, active && styles.pillActive]}
                   onPress={() => updateDraft({ drivenBy: option })}
+                >
+                  <Text style={[styles.pillText, active && styles.pillTextActive]}>{option}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.field}>
+          <Text style={styles.label}>Energy Source</Text>
+          <View style={styles.pillsRow}>
+            {ENERGY_SOURCE_OPTIONS.map((option) => {
+              const active = option === draft.energySource;
+              return (
+                <TouchableOpacity
+                  key={option}
+                  style={[styles.pill, active && styles.pillActive]}
+                  onPress={() => updateDraft({ energySource: option })}
                 >
                   <Text style={[styles.pillText, active && styles.pillTextActive]}>{option}</Text>
                 </TouchableOpacity>

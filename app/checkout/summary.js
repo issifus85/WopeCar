@@ -1,17 +1,25 @@
 import { useState, useEffect, useMemo } from 'react';
-import { StyleSheet, Text, View, ActivityIndicator, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { formatCurrency, SELF_DRIVE_DELIVERY_FEE, calculateSecurityDeposit, calculateRentalPricing } from '../../constants/pricing';
+import { formatCurrency, getSelfDriveDeliveryFee, calculateSecurityDeposit, calculateRentalPricing } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
+import { getDatePriceMap } from '../../services/carPricingApi';
+import { validatePromoCode } from '../../services/promoApi';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 
 function formatDate(iso) {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function toISODate(value) {
+  const d = new Date(value);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export default function CheckoutSummaryScreen() {
@@ -24,6 +32,7 @@ export default function CheckoutSummaryScreen() {
 
   const [car, setCar] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [datePriceMap, setDatePriceMap] = useState({});
 
   useEffect(() => {
     fetchCarById(carId)
@@ -31,8 +40,18 @@ export default function CheckoutSummaryScreen() {
       .finally(() => setIsLoading(false));
   }, [carId]);
 
-  const days = useMemo(() => {
-    if (!draft.startDate || !draft.endDate || !car) return 0;
+  // Per-date custom pricing for just this trip's range - falls back to the
+  // car's base price_per_day for any date without an override (see
+  // calculateRentalPricing's getDatePrice).
+  useEffect(() => {
+    if (!carId || !draft.startDate || !draft.endDate) return;
+    getDatePriceMap(carId, { fromDate: toISODate(draft.startDate), toDate: toISODate(draft.endDate) })
+      .then(setDatePriceMap)
+      .catch(() => {});
+  }, [carId, draft.startDate, draft.endDate]);
+
+  const pricing = useMemo(() => {
+    if (!draft.startDate || !draft.endDate || !car) return null;
     return calculateRentalPricing({
       startDate: draft.startDate,
       endDate: draft.endDate,
@@ -40,8 +59,13 @@ export default function CheckoutSummaryScreen() {
       returnTime: draft.returnTime,
       drivenBy: car.drivenBy,
       dailyRate: car.pricePerDay,
-    }).billableDays;
-  }, [draft.startDate, draft.endDate, draft.pickupTime, draft.returnTime, car]);
+      getDatePrice: (iso) => datePriceMap[iso],
+      lengthOfStayDiscounts: car.lengthOfStayDiscounts,
+      discount: car.discount,
+    });
+  }, [draft.startDate, draft.endDate, draft.pickupTime, draft.returnTime, car, datePriceMap]);
+
+  const days = pricing?.billableDays ?? 0;
 
   // Pairs each selected addon with the day count chosen on the previous
   // screen (draft.addons is {name, days}[]) - a per_day addon is billed for
@@ -58,14 +82,52 @@ export default function CheckoutSummaryScreen() {
 
   const isSelfDrive = car?.drivenBy === 'Self-drive';
 
-  const rentalCost = (car?.pricePerDay ?? 0) * days;
+  const rentalCost = pricing?.rentalCost ?? 0;
+  const baseRentalCost = pricing?.baseRentalCost ?? 0;
+  const hasDiscount = !!pricing && pricing.totalDiscount > 0;
   const addonsCost = selectedAddons.reduce((sum, addon) => {
     return sum + (addon.type === 'per_day' ? addon.price * addon.days : addon.price);
   }, 0);
   const subtotal = rentalCost + addonsCost;
-  const deliveryFee = isSelfDrive ? SELF_DRIVE_DELIVERY_FEE : 0;
+  const deliveryFee = isSelfDrive ? getSelfDriveDeliveryFee() : 0;
   const securityDeposit = calculateSecurityDeposit(subtotal);
-  const total = subtotal + deliveryFee + securityDeposit;
+
+  // Recomputed from the promo's own discount shape (not a stored amount) so
+  // it stays correct if the renter goes back and changes dates/addons after
+  // applying a code - see the comment on CheckoutContext's EMPTY_DRAFT.
+  const promoDiscountAmount = useMemo(() => {
+    if (!draft.promoCode) return 0;
+    const amount = draft.promoDiscountType === 'percentage'
+      ? subtotal * (draft.promoDiscountValue / 100)
+      : draft.promoDiscountValue;
+    return Math.min(subtotal, Math.max(0, amount));
+  }, [draft.promoCode, draft.promoDiscountType, draft.promoDiscountValue, subtotal]);
+
+  const total = subtotal - promoDiscountAmount + deliveryFee + securityDeposit;
+
+  const [promoInput, setPromoInput] = useState('');
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
+  const [promoError, setPromoError] = useState(null);
+
+  const handleApplyPromo = async () => {
+    if (!promoInput.trim()) return;
+    setIsApplyingPromo(true);
+    setPromoError(null);
+    try {
+      const result = await validatePromoCode(promoInput.trim());
+      updateDraft({ promoCode: result.code, promoDiscountType: result.discountType, promoDiscountValue: result.discountValue });
+      setPromoInput('');
+    } catch (e) {
+      setPromoError(e.message || 'Invalid promo code.');
+    } finally {
+      setIsApplyingPromo(false);
+    }
+  };
+
+  const handleRemovePromo = () => {
+    setPromoError(null);
+    updateDraft({ promoCode: null, promoDiscountType: null, promoDiscountValue: 0 });
+  };
 
   const handleContinue = () => {
     updateDraft({ totalCost: total });
@@ -105,9 +167,23 @@ export default function CheckoutSummaryScreen() {
         <Text style={styles.sectionTitle}>Cost Breakdown</Text>
         <View style={styles.costCard}>
           <View style={styles.costRow}>
-            <Text style={styles.costLabel}>{formatCurrency(car.pricePerDay, activeCurrency)} x {days} {days === 1 ? 'day' : 'days'}</Text>
-            <Text style={styles.costValue}>{formatCurrency(rentalCost, activeCurrency)}</Text>
+            <Text style={styles.costLabel}>Rental ({days} {days === 1 ? 'day' : 'days'})</Text>
+            <View style={styles.costValueGroup}>
+              {hasDiscount && (
+                <Text style={styles.strikethroughValue}>{formatCurrency(baseRentalCost, activeCurrency)}</Text>
+              )}
+              <Text style={styles.costValue}>{formatCurrency(rentalCost, activeCurrency)}</Text>
+            </View>
           </View>
+
+          {hasDiscount && (
+            <View style={styles.costRow}>
+              <Text style={[styles.costLabel, styles.discountLabel]}>
+                {pricing.appliedLengthOfStayTier ? 'Length of trip + listing discount' : 'Listing discount applied'}
+              </Text>
+              <Text style={styles.discountValue}>-{formatCurrency(pricing.totalDiscount, activeCurrency)}</Text>
+            </View>
+          )}
 
           {selectedAddons.map((addon) => (
             <View style={styles.costRow} key={addon.name}>
@@ -132,12 +208,56 @@ export default function CheckoutSummaryScreen() {
             <Text style={styles.costValue}>{formatCurrency(securityDeposit, activeCurrency)}</Text>
           </View>
 
+          {promoDiscountAmount > 0 && (
+            <View style={styles.costRow}>
+              <Text style={[styles.costLabel, styles.discountLabel]}>Promo code ({draft.promoCode})</Text>
+              <Text style={styles.discountValue}>-{formatCurrency(promoDiscountAmount, activeCurrency)}</Text>
+            </View>
+          )}
+
           <View style={styles.divider} />
 
           <View style={styles.costRow}>
             <Text style={styles.totalLabel}>Total</Text>
             <Text style={styles.totalValue}>{formatCurrency(total, activeCurrency)}</Text>
           </View>
+        </View>
+
+        <View style={styles.promoCard}>
+          <Text style={styles.promoTitle}>Promo Code</Text>
+          {draft.promoCode ? (
+            <View style={styles.promoAppliedRow}>
+              <View style={styles.promoAppliedInfo}>
+                <Ionicons name="pricetag" size={16} color={colors.success} />
+                <Text style={styles.promoAppliedText}>{draft.promoCode} applied</Text>
+              </View>
+              <TouchableOpacity onPress={handleRemovePromo} hitSlop={8}>
+                <Text style={styles.promoRemoveText}>Remove</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.promoInputRow}>
+              <TextInput
+                style={styles.promoInput}
+                value={promoInput}
+                onChangeText={(value) => { setPromoInput(value); setPromoError(null); }}
+                placeholder="Enter code"
+                placeholderTextColor={colors.textSubtle}
+                autoCapitalize="characters"
+                editable={!isApplyingPromo}
+              />
+              <TouchableOpacity
+                style={[styles.promoApplyButton, (!promoInput.trim() || isApplyingPromo) && styles.promoApplyButtonDisabled]}
+                onPress={handleApplyPromo}
+                disabled={!promoInput.trim() || isApplyingPromo}
+              >
+                {isApplyingPromo
+                  ? <ActivityIndicator size="small" color={colors.white} />
+                  : <Text style={styles.promoApplyButtonText}>Apply</Text>}
+              </TouchableOpacity>
+            </View>
+          )}
+          {!!promoError && <Text style={styles.promoErrorText}>{promoError}</Text>}
         </View>
       </ScrollView>
 
@@ -219,6 +339,25 @@ function createStyles(colors) {
     fontSize: 13,
     color: colors.textPrimary,
   },
+  costValueGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  strikethroughValue: {
+    fontFamily: FONTS.regular,
+    fontSize: 12,
+    color: colors.textSubtle,
+    textDecorationLine: 'line-through',
+  },
+  discountLabel: {
+    color: colors.success,
+  },
+  discountValue: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 13,
+    color: colors.success,
+  },
   divider: {
     height: 1,
     backgroundColor: colors.border,
@@ -234,6 +373,75 @@ function createStyles(colors) {
     fontFamily: FONTS.bold,
     fontSize: 17,
     color: colors.teal,
+  },
+  promoCard: {
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 16,
+  },
+  promoTitle: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 14,
+    color: colors.textPrimary,
+    marginBottom: 10,
+  },
+  promoInputRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  promoInput: {
+    flex: 1,
+    fontFamily: FONTS.regular,
+    fontSize: 14,
+    color: colors.textPrimary,
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  promoApplyButton: {
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.teal,
+  },
+  promoApplyButtonDisabled: {
+    opacity: 0.5,
+  },
+  promoApplyButtonText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 14,
+    color: colors.white,
+  },
+  promoAppliedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  promoAppliedInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  promoAppliedText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 14,
+    color: colors.success,
+  },
+  promoRemoveText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 13,
+    color: colors.error,
+  },
+  promoErrorText: {
+    fontFamily: FONTS.regular,
+    fontSize: 12,
+    color: colors.error,
+    marginTop: 8,
   },
   });
 }

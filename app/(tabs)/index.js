@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CATEGORIES } from '../../data/cars';
-import { fetchCars, formatDateParam } from '../../services/carsApi';
+import { fetchCars } from '../../services/carsApi';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -61,23 +61,24 @@ export default function HomeScreen() {
     setError(null);
     const params = {};
     if (selectedCategory && selectedCategory !== 'All') {
-      params['attrs[9][]'] = selectedCategory;
+      params.type = selectedCategory;
     }
-    if (startDate && endDate) {
-      params.start = formatDateParam(startDate);
-      params.end = formatDateParam(endDate);
-    }
+    // No list-level date-availability filter yet against Supabase (see
+    // services/carsApi.js's fetchCars doc comment) - startDate/endDate stay
+    // selected for display and for the checkout flow, just not sent here.
     if (sortBy && sortBy !== 'special') {
-      params.orderby = sortBy;
+      params.orderBy = sortBy;
     }
     if (drivenBy.length) {
-      params['driven_by[]'] = drivenBy;
+      params.driveType = drivenBy;
     }
     if (priceRange) {
-      params.price_range = priceRange;
+      const [min, max] = priceRange.split(';').map(Number);
+      if (min) params.minPrice = min;
+      if (max) params.maxPrice = max;
     }
     if (vehicleClass.length) {
-      params['attrs[25][]'] = vehicleClass;
+      params.vehicleClass = vehicleClass;
     }
     fetchCars(params)
       .then(({ cars, meta }) => {
@@ -541,7 +542,7 @@ function createStyles(colors) {
     },
     list: {
       paddingHorizontal: 16,
-      paddingBottom: 20,
+      paddingBottom: 140,
     },
     centerState: {
       flex: 1,

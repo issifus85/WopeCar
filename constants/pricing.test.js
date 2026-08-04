@@ -179,4 +179,146 @@ describe('calculateRentalPricing - shared behavior', () => {
     });
     expect(result.rentalCost).toBe(0);
   });
+
+  it('aligns billable days to calendar dates starting from a bare date-only string regardless of runtime timezone', () => {
+    const result = calculateRentalPricing({
+      startDate: '2026-09-01',
+      endDate: '2026-09-03',
+      drivenBy: 'Self-drive',
+      dailyRate: 100,
+    });
+    expect(result.dailyBreakdown.map((d) => d.date)).toEqual(['2026-09-01', '2026-09-02']);
+  });
+});
+
+describe('calculateRentalPricing - per-date custom pricing', () => {
+  it('uses getDatePrice for a specific calendar date and falls back to dailyRate elsewhere', () => {
+    const getDatePrice = (iso) => (iso === '2026-09-02' ? 900 : undefined);
+    const result = calculateRentalPricing({
+      startDate: '2026-09-01',
+      endDate: '2026-09-04',
+      drivenBy: 'Self-drive',
+      dailyRate: 300,
+      getDatePrice,
+    });
+    expect(result.billableDays).toBe(3);
+    expect(result.dailyBreakdown).toEqual([
+      { date: '2026-09-01', rate: 300 },
+      { date: '2026-09-02', rate: 900 },
+      { date: '2026-09-03', rate: 300 },
+    ]);
+    expect(result.baseRentalCost).toBe(1500);
+    expect(result.rentalCost).toBe(1500);
+  });
+});
+
+describe('calculateRentalPricing - length-of-stay discount', () => {
+  const tiers = [
+    { minDays: 7, type: 'percentage', value: 10 },
+    { minDays: 28, type: 'percentage', value: 20 },
+  ];
+
+  it('applies no tier below the shortest threshold', () => {
+    const result = calculateRentalPricing({
+      startDate: '2026-09-01',
+      endDate: '2026-09-04',
+      drivenBy: 'Self-drive',
+      dailyRate: 100,
+      lengthOfStayDiscounts: tiers,
+    });
+    expect(result.appliedLengthOfStayTier).toBeNull();
+    expect(result.rentalCost).toBe(300);
+  });
+
+  it('applies the weekly tier once the trip is long enough', () => {
+    const result = calculateRentalPricing({
+      startDate: '2026-09-01',
+      endDate: '2026-09-08',
+      drivenBy: 'Self-drive',
+      dailyRate: 100,
+      lengthOfStayDiscounts: tiers,
+    });
+    expect(result.billableDays).toBe(7);
+    expect(result.appliedLengthOfStayTier.minDays).toBe(7);
+    expect(result.lengthOfStayDiscountAmount).toBe(70);
+    expect(result.rentalCost).toBe(630);
+  });
+
+  it('applies the richest eligible tier rather than stacking them', () => {
+    const startDate = '2026-09-01';
+    const endDate = new Date(2026, 8, 1 + 28);
+    const result = calculateRentalPricing({
+      startDate,
+      endDate,
+      drivenBy: 'Self-drive',
+      dailyRate: 100,
+      lengthOfStayDiscounts: tiers,
+    });
+    expect(result.billableDays).toBe(28);
+    expect(result.appliedLengthOfStayTier.minDays).toBe(28);
+    expect(result.lengthOfStayDiscountAmount).toBe(560);
+    expect(result.rentalCost).toBe(2240);
+  });
+});
+
+describe('calculateRentalPricing - blanket discount', () => {
+  it('applies a flat discount after the length-of-stay discount', () => {
+    const result = calculateRentalPricing({
+      startDate: '2026-09-01',
+      endDate: '2026-09-04',
+      drivenBy: 'Self-drive',
+      dailyRate: 100,
+      discount: { enabled: true, type: 'flat', value: 50 },
+    });
+    expect(result.blanketDiscountAmount).toBe(50);
+    expect(result.rentalCost).toBe(250);
+  });
+
+  it('applies a percentage discount on top of an already length-of-stay-discounted subtotal', () => {
+    const result = calculateRentalPricing({
+      startDate: '2026-09-01',
+      endDate: '2026-09-08',
+      drivenBy: 'Self-drive',
+      dailyRate: 100,
+      lengthOfStayDiscounts: [{ minDays: 7, type: 'percentage', value: 10 }],
+      discount: { enabled: true, type: 'percentage', value: 10 },
+    });
+    // base 700 -> -10% length-of-stay = 630 -> -10% blanket = 567
+    expect(result.lengthOfStayDiscountAmount).toBe(70);
+    expect(result.blanketDiscountAmount).toBe(63);
+    expect(result.rentalCost).toBe(567);
+    expect(result.totalDiscount).toBe(133);
+  });
+
+  it('does nothing when disabled', () => {
+    const result = calculateRentalPricing({
+      startDate: '2026-09-01',
+      endDate: '2026-09-04',
+      drivenBy: 'Self-drive',
+      dailyRate: 100,
+      discount: { enabled: false, type: 'flat', value: 50 },
+    });
+    expect(result.blanketDiscountAmount).toBe(0);
+    expect(result.rentalCost).toBe(300);
+  });
+
+  it('only applies within its start/end date window', () => {
+    const outsideWindow = calculateRentalPricing({
+      startDate: '2026-09-01',
+      endDate: '2026-09-04',
+      drivenBy: 'Self-drive',
+      dailyRate: 100,
+      discount: { enabled: true, type: 'flat', value: 50, startsAt: '2026-10-01', endsAt: '2026-10-31' },
+    });
+    expect(outsideWindow.blanketDiscountAmount).toBe(0);
+
+    const insideWindow = calculateRentalPricing({
+      startDate: '2026-09-01',
+      endDate: '2026-09-04',
+      drivenBy: 'Self-drive',
+      dailyRate: 100,
+      discount: { enabled: true, type: 'flat', value: 50, startsAt: '2026-08-15', endsAt: '2026-09-15' },
+    });
+    expect(insideWindow.blanketDiscountAmount).toBe(50);
+  });
 });

@@ -99,7 +99,7 @@ function createStyles(colors) {
     },
     scrollContent: {
       padding: 20,
-      paddingBottom: 40,
+      paddingBottom: 140,
       gap: 20,
     },
     card: {

@@ -17,7 +17,6 @@ import { FontAwesome } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
-import ConfirmModal from '../components/ConfirmModal';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -33,7 +32,6 @@ export default function LoginScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [socialProvider, setSocialProvider] = useState(null);
   const [error, setError] = useState(null);
-  const [comingSoon, setComingSoon] = useState(null);
 
   const isSignUp = mode === 'signup';
   const isBusy = isSubmitting || !!socialProvider;
@@ -84,15 +82,8 @@ export default function LoginScreen() {
     }
   };
 
-  // Google/Facebook are the same action for sign-in and sign-up (the
-  // backend finds-or-creates the account), so this works regardless of
-  // which tab is active. Fully built and working end-to-end (backend
-  // verified live) - not wired to the buttons below yet because the OAuth
-  // redirect URIs still need to be whitelisted on Google/Meta's side (see
-  // Google Cloud Console/Meta for Developers - blocked on account access).
-  // Once that's done, swap openComingSoon(...) below back to
-  // handleSocialLogin(provider).
-  // eslint-disable-next-line no-unused-vars
+  // Same action for sign-in and sign-up (the backend finds-or-creates the
+  // account), so this works regardless of which tab is active.
   const handleSocialLogin = async (provider) => {
     setError(null);
     setSocialProvider(provider);
@@ -106,9 +97,6 @@ export default function LoginScreen() {
     }
   };
 
-  const openComingSoon = (label) => setComingSoon(label);
-  const closeComingSoon = () => setComingSoon(null);
-
   return (
     <ImageBackground
       source={require('../assets/auth-background.jpg')}
@@ -118,7 +106,7 @@ export default function LoginScreen() {
       <View style={styles.overlay} />
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
@@ -212,7 +200,7 @@ export default function LoginScreen() {
             )}
 
             {!isSignUp && (
-              <TouchableOpacity style={styles.forgotLink}>
+              <TouchableOpacity style={styles.forgotLink} onPress={() => router.push('/forgot-password')}>
                 <Text style={styles.forgotText}>Forgot password?</Text>
               </TouchableOpacity>
             )}
@@ -242,7 +230,7 @@ export default function LoginScreen() {
             <View style={styles.socialRow}>
               <TouchableOpacity
                 style={[styles.socialButton, isBusy && styles.socialButtonDisabled]}
-                onPress={() => openComingSoon('Google Sign-In')}
+                onPress={() => handleSocialLogin('google')}
                 disabled={isBusy}
               >
                 {socialProvider === 'google' ? (
@@ -251,20 +239,6 @@ export default function LoginScreen() {
                   <>
                     <FontAwesome name="google" size={16} color="#DB4437" />
                     <Text style={styles.socialButtonText}>Google</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.socialButton, isBusy && styles.socialButtonDisabled]}
-                onPress={() => openComingSoon('Facebook Sign-In')}
-                disabled={isBusy}
-              >
-                {socialProvider === 'facebook' ? (
-                  <ActivityIndicator color={colors.textMuted} size="small" />
-                ) : (
-                  <>
-                    <FontAwesome name="facebook" size={16} color="#1877F2" />
-                    <Text style={styles.socialButtonText}>Facebook</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -282,16 +256,6 @@ export default function LoginScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-
-      <ConfirmModal
-        visible={!!comingSoon}
-        title={comingSoon}
-        message="This feature isn't available yet - we're working on it."
-        confirmLabel="OK"
-        cancelLabel={null}
-        onConfirm={closeComingSoon}
-        onCancel={closeComingSoon}
-      />
     </ImageBackground>
   );
 }

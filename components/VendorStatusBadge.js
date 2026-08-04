@@ -16,6 +16,11 @@ const STATUS_VARIANT = {
   Inactive: 'muted',
   Declined: 'error',
   Cancelled: 'error',
+  Verified: 'success',
+  'Under Review': 'warning',
+  Rejected: 'error',
+  'Not Submitted': 'muted',
+  'Not Set': 'muted',
 };
 
 export default function VendorStatusBadge({ status }) {

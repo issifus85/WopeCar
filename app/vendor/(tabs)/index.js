@@ -8,6 +8,7 @@ import { useCurrency } from '../../../contexts/CurrencyContext';
 import { formatCurrency } from '../../../constants/pricing';
 import { useVendor } from '../../../contexts/VendorContext';
 import { useSettings } from '../../../contexts/SettingsContext';
+import { useAuth } from '../../../contexts/AuthContext';
 import VendorEarningsBarChart from '../../../components/VendorEarningsBarChart';
 
 const QUICK_ACTIONS = [
@@ -24,6 +25,8 @@ export default function VendorDashboardScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const {
     isLoading,
+    vendorProfile,
+    isVendorApproved,
     fleetSize,
     currentMonthEarnings,
     bookingsThisMonthCount,
@@ -31,21 +34,37 @@ export default function VendorDashboardScreen() {
     earningsHistory,
   } = useVendor();
   const { settings, updateSetting } = useSettings();
+  const { user, isLoading: isAuthLoading } = useAuth();
 
-  // Reaching the Vendor Dashboard by any path (the Profile switch, a
-  // relaunch redirect, a direct link) means the app should remember Vendor
-  // Mode for next launch too - see app/_layout.js's appMode redirect.
+  // Every path into Vendor Mode (the Profile switch, a relaunch redirect, a
+  // direct link) converges on this Dashboard mount - so this is the one
+  // place that needs to verify a real vendor row exists before treating the
+  // app as being in Vendor Mode. Signed-out visitors (e.g. a stale local
+  // appMode='vendor' setting with no active session) go to /login first -
+  // Vendor Mode never had its own auth guard before this, only the appMode
+  // check. No vendor row (e.g. a stale pre-gate appMode setting, or a direct
+  // deep link with none) bounces to the application screen instead of
+  // force-syncing appMode - see app/vendor/apply.js.
   useEffect(() => {
+    if (isAuthLoading || isLoading) return;
+    if (!user) {
+      router.replace('/login');
+      return;
+    }
+    if (!vendorProfile) {
+      router.replace('/vendor/apply');
+      return;
+    }
     if (settings.appMode !== 'vendor') updateSetting('appMode', 'vendor');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isAuthLoading, isLoading, user, vendorProfile]);
 
   const switchToClientMode = () => {
     updateSetting('appMode', 'client');
     router.replace('/(tabs)/profile');
   };
 
-  if (isLoading) {
+  if (isAuthLoading || isLoading || !user || !vendorProfile) {
     return (
       <View style={styles.centerState}>
         <ActivityIndicator size="large" color={colors.teal} />
@@ -70,6 +89,16 @@ export default function VendorDashboardScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {!isVendorApproved && (
+          <View style={styles.noticeBox}>
+            <Ionicons name="information-circle-outline" size={18} color={colors.warning} />
+            <Text style={styles.noticeText}>
+              Your vendor account is <Text style={styles.noticeBold}>pending verification</Text>. You can list cars
+              and manage your fleet now - we'll follow up if we need anything else from you.
+            </Text>
+          </View>
+        )}
+
         <View style={styles.earningsCard}>
           <Text style={styles.earningsLabel}>This Month's Earnings</Text>
           <Text style={styles.earningsValue}>{formatCurrency(currentMonthEarnings, activeCurrency)}</Text>
@@ -172,7 +201,26 @@ function createStyles(colors) {
     },
     scrollContent: {
       paddingHorizontal: 20,
-      paddingBottom: 40,
+      paddingBottom: 140,
+    },
+    noticeBox: {
+      flexDirection: 'row',
+      gap: 10,
+      backgroundColor: colors.warningBg,
+      borderRadius: 12,
+      padding: 14,
+      marginBottom: 16,
+    },
+    noticeText: {
+      flex: 1,
+      fontFamily: FONTS.regular,
+      fontSize: 12,
+      color: colors.textMuted,
+      lineHeight: 18,
+    },
+    noticeBold: {
+      fontFamily: FONTS.bold,
+      color: colors.warning,
     },
     earningsCard: {
       backgroundColor: colors.teal,

@@ -98,13 +98,19 @@ export default function DocumentsScreen() {
   const load = useCallback(() => {
     documentsApi.getDocuments()
       .then(setDocuments)
-      .catch(() => setDocuments({ verification: [], trip: [], vir: [] }))
+      .catch(() => setDocuments({ verification: [], trip: [], vir: [], vehicle: [] }))
       .finally(() => setIsLoading(false));
   }, []);
 
   useFocusEffect(load);
 
   const handleView = (document) => {
+    // VIR reports have no external file (see services/inspectionsApi.js) -
+    // they open the in-app read-only report screen instead.
+    if (document.reportRoute) {
+      router.push(document.reportRoute);
+      return;
+    }
     Linking.openURL(document.signedUrl);
   };
 
@@ -147,6 +153,7 @@ export default function DocumentsScreen() {
 
   const tripByBooking = groupByBooking(documents.trip);
   const virByBooking = groupByBooking(documents.vir);
+  const vehicleByCar = groupByCar(documents.vehicle);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -215,12 +222,42 @@ export default function DocumentsScreen() {
           ))
         )}
       </Section>
+
+      {vehicleByCar.length > 0 && (
+        <Section title="Vehicle Documents" styles={styles}>
+          {vehicleByCar.map(({ carId, carName, docs }) => (
+            <View key={carId}>
+              <Text style={styles.groupHeading}>{carName || 'Your car'}</Text>
+              {docs.map((doc, index) => (
+                <TouchableOpacity
+                  key={doc.id}
+                  style={[styles.row, index === docs.length - 1 && styles.rowLast]}
+                  onPress={() => handleView(doc)}
+                >
+                  <View style={styles.rowIcon}>
+                    <Ionicons name="shield-checkmark" size={18} color={colors.teal} />
+                  </View>
+                  <View style={styles.rowInfo}>
+                    <Text style={styles.rowLabel}>{vehicleDocLabel(doc.type)}</Text>
+                    <Text style={styles.rowSubtitle}>Tap to view</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          ))}
+        </Section>
+      )}
     </ScrollView>
   );
 }
 
 function tripDocLabel(type) {
   return type === 'rental_agreement' ? 'Rental Agreement' : 'Insurance Certificate';
+}
+
+function vehicleDocLabel(type) {
+  return type === 'roadworthy' ? 'Roadworthy Certificate' : 'Insurance Policy';
 }
 
 function groupByBooking(docs) {
@@ -231,6 +268,16 @@ function groupByBooking(docs) {
     byBooking.get(key).push(doc);
   });
   return Array.from(byBooking.entries()).map(([bookingId, list]) => ({ bookingId, docs: list }));
+}
+
+function groupByCar(docs) {
+  const byCar = new Map();
+  docs.forEach((doc) => {
+    const key = doc.carId ?? null;
+    if (!byCar.has(key)) byCar.set(key, { carId: key, carName: doc.carName, docs: [] });
+    byCar.get(key).docs.push(doc);
+  });
+  return Array.from(byCar.values());
 }
 
 function createStyles(colors) {
@@ -334,6 +381,13 @@ function createStyles(colors) {
       fontFamily: FONTS.semiBold,
       fontSize: 13,
       color: colors.teal,
+    },
+    groupHeading: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 12,
+      color: colors.textSubtle,
+      marginTop: 12,
+      marginBottom: 2,
     },
   });
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Switch, Alert, Linking } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Switch, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
@@ -250,14 +250,13 @@ export default function RentalAgreementScreen() {
 
       await uploadRentalAgreementSignature(id, 'client', signatures.client);
       await uploadRentalAgreementSignature(id, 'representative', signatures.representative);
-      const result = await submitRentalAgreement(id);
+      await submitRentalAgreement(id);
 
-      const reportUrl = result.document?.signedUrl;
       Alert.alert(
         'Agreement Generated',
         'The rental agreement has been saved to Documents > Trip Documents.',
         [
-          ...(reportUrl ? [{ text: 'View Agreement', onPress: () => Linking.openURL(reportUrl) }] : []),
+          { text: 'View Agreement', onPress: () => router.push({ pathname: '/rental-agreement/report', params: { bookingId } }) },
           {
             text: 'Done',
             onPress: async () => {

@@ -1,14 +1,13 @@
 import { useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { FONTS } from '../../../constants/theme';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 import { useInspection } from '../../../contexts/InspectionContext';
-import { useVendor } from '../../../contexts/VendorContext';
+import { syncInspection, uploadInspectionSignature, submitInspection } from '../../../services/inspectionsApi';
 import InspectionHeader from '../../../components/InspectionHeader';
 import CheckoutFooterButton from '../../../components/CheckoutFooterButton';
 import SignaturePad from '../../../components/SignaturePad';
-import ConfirmModal from '../../../components/ConfirmModal';
 
 const MODES = [
   { key: 'draw', label: 'Signature' },
@@ -54,27 +53,27 @@ function SignatureSlot({ label, value, mode, onModeChange, padRef, onOK, onEmpty
   );
 }
 
-// Vendor Mode variant of app/inspection/signatures.js. The renter-side
-// version's final submit hits the real inspection API (generates a signed
-// PDF, emails it) - that endpoint is hard-restricted to the booking's
-// renter and Vendor Mode's bookings have no real server id to call it with
-// anyway (see mileage.js's header comment). Submitting here instead writes
-// the full checklist snapshot straight into VendorContext via
-// submitVendorInspection, matching how every other Vendor Mode action
-// (addCar, respondToBookingRequest, etc.) already persists locally.
+// Vendor Mode variant of app/inspection/signatures.js. Vendor Mode bookings
+// now have real server ids (see services/vendorBookingsApi.js), and the
+// vendor side of vehicle_inspections gained real write RLS (migration
+// vendor_inspection_write_access) - a vendor doing their own handover
+// (common for self-drive with no in-person WopeCar agent) submits into the
+// exact same real record a renter-submitted inspection would, rather than a
+// separate local-only copy. Mirrors app/inspection/signatures.js's submit
+// flow exactly, just without the report-generation deep link (that screen
+// is renter-facing only).
 export default function VendorInspectionSignaturesScreen() {
   const { bookingId, type } = useLocalSearchParams();
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { draft, updateDraft, resetInspection } = useInspection();
-  const { submitVendorInspection } = useVendor();
   const renterPadRef = useRef(null);
   const agentPadRef = useRef(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [renterMode, setRenterMode] = useState('draw');
   const [agentMode, setAgentMode] = useState('draw');
   const [scrollLocked, setScrollLocked] = useState(false);
-  const [showSubmitted, setShowSubmitted] = useState(false);
 
   const handleRenterOK = (dataUri) => updateDraft({ signatures: { ...draft.signatures, renter: dataUri } });
   const handleAgentOK = (dataUri) => updateDraft({ signatures: { ...draft.signatures, agent: dataUri } });
@@ -88,24 +87,58 @@ export default function VendorInspectionSignaturesScreen() {
     updateDraft({ signatures: { ...draft.signatures, agent: null } });
   };
 
-  const canSubmit = !!draft.signatures.renter && !!draft.signatures.agent;
-
-  const handleSubmit = () => {
-    submitVendorInspection(bookingId, type, {
-      mileage: draft.mileage,
-      fuelLevel: draft.fuelLevel,
-      checklist: draft.checklist,
-      damagePoints: draft.damagePoints,
-      photos: draft.photos,
-      photoMeta: draft.photoMeta ?? {},
-      signatures: draft.signatures,
-    });
-    setShowSubmitted(true);
+  const ensureServerId = async () => {
+    if (draft.serverId) return draft.serverId;
+    try {
+      const inspection = await syncInspection(bookingId, {
+        type,
+        mileage: draft.mileage,
+        fuelLevel: draft.fuelLevel,
+        checklist: draft.checklist,
+        damagePoints: draft.damagePoints,
+      });
+      updateDraft({ serverId: inspection.id, pendingSync: false });
+      return inspection.id;
+    } catch (e) {
+      return null;
+    }
   };
 
-  const handleDone = () => {
-    resetInspection();
-    router.dismissTo('/vendor/inspections');
+  const canSubmit = !!draft.signatures.renter && !!draft.signatures.agent;
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      const inspectionId = await ensureServerId();
+      if (!inspectionId) {
+        Alert.alert('You appear to be offline', 'Your signatures are saved on this device - reconnect and try Submit again.');
+        updateDraft({ pendingSync: true });
+        return;
+      }
+
+      await uploadInspectionSignature(inspectionId, 'renter', draft.signatures.renter);
+      await uploadInspectionSignature(inspectionId, 'agent', draft.signatures.agent);
+
+      await submitInspection(inspectionId);
+      updateDraft({ pendingSync: false });
+
+      Alert.alert(
+        'Inspection Submitted',
+        'The inspection report has been saved to this booking.',
+        [{
+          text: 'Done',
+          onPress: () => {
+            resetInspection();
+            router.dismissTo('/vendor/inspections');
+          },
+        }]
+      );
+    } catch (e) {
+      updateDraft({ pendingSync: true });
+      Alert.alert('Could not submit inspection', e?.message || 'Please check your connection and try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -144,16 +177,10 @@ export default function VendorInspectionSignaturesScreen() {
         />
       </ScrollView>
 
-      <CheckoutFooterButton label="Submit Inspection" onPress={handleSubmit} disabled={!canSubmit} />
-
-      <ConfirmModal
-        visible={showSubmitted}
-        title="Inspection Submitted"
-        message="The checklist has been saved to this booking's inspection record."
-        confirmLabel="Done"
-        cancelLabel={null}
-        onConfirm={handleDone}
-        onCancel={handleDone}
+      <CheckoutFooterButton
+        label={isSubmitting ? 'Submitting...' : 'Submit Inspection'}
+        onPress={handleSubmit}
+        disabled={!canSubmit || isSubmitting}
       />
     </View>
   );

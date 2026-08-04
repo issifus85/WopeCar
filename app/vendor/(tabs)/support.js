@@ -35,6 +35,7 @@ export default function VendorSupportScreen() {
         messages={messages}
         onSend={(text) => sendMessage(SUPPORT_CONVERSATION_ID, text)}
         emptyStateText="Message WopeCar Support about your listings, payouts, or bookings."
+        extraBottomInset={80}
       />
     </View>
   );

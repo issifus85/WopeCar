@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert, Linking } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
@@ -118,15 +118,14 @@ export default function InspectionSignaturesScreen() {
       await uploadInspectionSignature(inspectionId, 'renter', draft.signatures.renter);
       await uploadInspectionSignature(inspectionId, 'agent', draft.signatures.agent);
 
-      const result = await submitInspection(inspectionId);
+      await submitInspection(inspectionId);
       updateDraft({ pendingSync: false });
 
-      const reportUrl = result.document?.signedUrl;
       Alert.alert(
         'Inspection Submitted',
-        'The report has been generated and emailed to you.',
+        'The inspection report has been saved and is available in Documents.',
         [
-          ...(reportUrl ? [{ text: 'View Report', onPress: () => Linking.openURL(reportUrl) }] : []),
+          { text: 'View Report', onPress: () => router.push({ pathname: '/inspection/report', params: { bookingId, type } }) },
           {
             text: 'Done',
             onPress: () => {

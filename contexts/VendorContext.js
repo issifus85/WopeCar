@@ -1,26 +1,39 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import * as vendorStorage from '../services/vendorStorage';
-import {
-  buildMockFleet,
-  buildMockEarningsHistory,
-  buildMockBookingRequests,
-  buildMockBookingHistory,
-  DEFAULT_AVAILABILITY_SETTINGS,
-} from '../services/vendorMockData';
+import * as vendorCarsApi from '../services/vendorCarsApi';
+import * as vendorBookingsApi from '../services/vendorBookingsApi';
+import { DEFAULT_AVAILABILITY_SETTINGS } from '../services/vendorMockData';
 
 const EMPTY_VENDOR_DATA = {
   cars: [],
   earningsHistory: [],
   bookingRequests: [],
   bookingHistory: [],
-  availabilitySettings: {},
   blockedDates: {},
-  vendorSettings: {},
-  vendorInspections: {},
 };
 
 function monthKeyFor(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+// Real 6-month (trailing, current month last) earnings trend for the
+// dashboard's bar chart - replaces the old buildMockEarningsHistory() seed.
+// Same {key,label,total} shape, same Confirmed/Completed-only earned-income
+// rule as currentMonthEarnings below, just grouped by month instead of
+// filtered to one.
+function deriveEarningsHistory(bookingHistory) {
+  const now = new Date();
+  const months = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({ key: monthKeyFor(d), label: d.toLocaleDateString(undefined, { month: 'short' }), total: 0 });
+  }
+  const totalsByKey = Object.fromEntries(months.map((m) => [m.key, 0]));
+  bookingHistory.forEach((b) => {
+    if (!b.startDate || (b.status !== 'Confirmed' && b.status !== 'Completed')) return;
+    const key = monthKeyFor(new Date(b.startDate));
+    if (key in totalsByKey) totalsByKey[key] += (b.earnings ?? 0);
+  });
+  return months.map((m) => ({ ...m, total: totalsByKey[m.key] }));
 }
 
 const VendorContext = createContext(null);
@@ -28,164 +41,134 @@ const VendorContext = createContext(null);
 export function VendorProvider({ children }) {
   const [data, setData] = useState(EMPTY_VENDOR_DATA);
   const [isLoading, setIsLoading] = useState(true);
+  const [vendorProfile, setVendorProfile] = useState(null);
 
   useEffect(() => {
-    vendorStorage.getVendorData().then((loaded) => {
-      // First-ever load: seed the mock fleet/earnings/bookings so the
-      // dashboard and every other vendor screen have something real to
-      // show immediately, matching InboxContext's "seed once, persist
-      // after" pattern for its permanent Support conversation.
-      if (loaded.cars.length === 0) {
-        const seeded = {
-          cars: buildMockFleet(),
-          earningsHistory: buildMockEarningsHistory(),
-          bookingRequests: buildMockBookingRequests(),
-          bookingHistory: buildMockBookingHistory(),
-          availabilitySettings: {},
-          blockedDates: {},
-          vendorSettings: {},
-          vendorInspections: {},
-        };
-        vendorStorage.setVendorData(seeded);
-        setData(seeded);
-      } else {
-        setData(loaded);
-      }
+    async function load() {
+      const [cars, profile, bookingsSplit] = await Promise.all([
+        vendorCarsApi.getMyCars().catch(() => []),
+        vendorCarsApi.getVendorProfile().catch(() => null),
+        vendorBookingsApi.getVendorBookingsSplit().catch(() => ({ bookingRequests: [], bookingHistory: [] })),
+      ]);
+      const blockedDates = await vendorCarsApi.getBlockedDatesForCars(cars.map((c) => c.id)).catch(() => ({}));
+      const earningsHistory = deriveEarningsHistory(bookingsSplit.bookingHistory);
+      setData({ cars, blockedDates, earningsHistory, ...bookingsSplit });
+      setVendorProfile(profile);
       setIsLoading(false);
-    });
+    }
+    load();
   }, []);
 
-  const updateCar = useCallback((carId, patch) => {
-    setData((prev) => {
-      const cars = prev.cars.map((c) => (c.id === carId ? { ...c, ...patch } : c));
-      const next = { ...prev, cars };
-      vendorStorage.setVendorData(next);
-      return next;
-    });
+  // Re-fetches just the bookings split from Supabase - called after
+  // accept/decline (below) so the requests list, history, and earnings
+  // chart all reflect the real write immediately, without a full app reload.
+  const refreshBookings = useCallback(async () => {
+    const bookingsSplit = await vendorBookingsApi.getVendorBookingsSplit();
+    setData((prev) => ({ ...prev, ...bookingsSplit, earningsHistory: deriveEarningsHistory(bookingsSplit.bookingHistory) }));
+    return bookingsSplit;
   }, []);
 
+  // Called by app/vendor/apply.js right after a successful application -
+  // VendorProvider lives above the whole Stack and doesn't remount on
+  // navigation, so without this the Dashboard's own vendorProfile-null guard
+  // would immediately bounce the freshly-approved user back to the
+  // application screen in a loop.
+  const refreshVendorProfile = useCallback(async () => {
+    const profile = await vendorCarsApi.getVendorProfile().catch(() => null);
+    setVendorProfile(profile);
+    return profile;
+  }, []);
+
+  const updateCar = useCallback(async (carId, patch) => {
+    const updated = await vendorCarsApi.updateCarListing(carId, patch);
+    setData((prev) => ({
+      ...prev,
+      cars: prev.cars.map((c) => (c.id === carId ? updated : c)),
+    }));
+    return updated;
+  }, []);
+
+  // Real per-car columns (cars.min_booking_days/advance_notice/booking_window,
+  // added back in the original cars migration but never surfaced in any
+  // Vendor Mode UI until now) - falls back to DEFAULT_AVAILABILITY_SETTINGS
+  // only while `cars` is still loading, not as a per-car override store.
   const getAvailabilitySettings = useCallback((carId) => {
-    return data.availabilitySettings[carId] ?? DEFAULT_AVAILABILITY_SETTINGS;
-  }, [data.availabilitySettings]);
+    const car = data.cars.find((c) => c.id === carId);
+    if (!car) return DEFAULT_AVAILABILITY_SETTINGS;
+    return {
+      advanceNoticeDays: car.advanceNoticeDays ?? DEFAULT_AVAILABILITY_SETTINGS.advanceNoticeDays,
+      bookingWindowMonths: car.bookingWindowMonths ?? DEFAULT_AVAILABILITY_SETTINGS.bookingWindowMonths,
+      minBookingDays: car.minBookingDays ?? DEFAULT_AVAILABILITY_SETTINGS.minBookingDays,
+    };
+  }, [data.cars]);
 
-  const setAvailabilitySettings = useCallback((carId, settings) => {
-    setData((prev) => {
-      const availabilitySettings = { ...prev.availabilitySettings, [carId]: settings };
-      const next = { ...prev, availabilitySettings };
-      vendorStorage.setVendorData(next);
-      return next;
-    });
+  // Just a real Supabase write via the existing updateCar() - settings are
+  // plain columns on `cars`, not a separate settings store.
+  const setAvailabilitySettings = useCallback((carId, settings) => updateCar(carId, settings), [updateCar]);
+
+  // Real `availability` rows (status='blocked'), not local storage - see
+  // vendorCarsApi.setBlockedDates for the insert/delete diffing. Updates
+  // context state only after the write succeeds, so a failed save doesn't
+  // leave the UI showing a date as blocked that never actually persisted.
+  const setBlockedDates = useCallback(async (carId, dates) => {
+    await vendorCarsApi.setBlockedDates(carId, dates);
+    setData((prev) => ({ ...prev, blockedDates: { ...prev.blockedDates, [carId]: dates } }));
   }, []);
 
-  const setBlockedDates = useCallback((carId, dates) => {
-    setData((prev) => {
-      const blockedDates = { ...prev.blockedDates, [carId]: dates };
-      const next = { ...prev, blockedDates };
-      vendorStorage.setVendorData(next);
-      return next;
-    });
-  }, []);
-
-  const setVendorSettings = useCallback((patch) => {
-    setData((prev) => {
-      const vendorSettings = { ...prev.vendorSettings, ...patch };
-      const next = { ...prev, vendorSettings };
-      vendorStorage.setVendorData(next);
-      return next;
-    });
+  // Real vendors.business_info/payout_method write - replaces the old
+  // local-only vendorSettings.businessInfo/.payoutMethod. Updates the
+  // vendorProfile state directly (not `data`) since that's already where
+  // the rest of the vendor row lives.
+  const saveVendorProfile = useCallback(async (patch) => {
+    const updated = await vendorCarsApi.updateVendorProfile(patch);
+    setVendorProfile(updated);
+    return updated;
   }, []);
 
   // Every new listing starts Pending, with no bypass - it only goes live
   // once WopeCar support has completed the photo verification/vetting visit
-  // scheduled in the Add Car wizard and approved it. There is intentionally
-  // no in-app action that publishes a car automatically (see
+  // scheduled in the Add Car wizard and approved it (createCar() forces
+  // status='pending' server-side regardless of what's passed here). There is
+  // intentionally no in-app action that publishes a car automatically (see
   // app/vendor/add-car/review.js's submit notice); flipping Pending->Active
   // is the one thing the existing Car Management "Active Listing" toggle
   // still can't do (it's disabled while a car is Pending).
-  const addCar = useCallback((carData) => {
-    setData((prev) => {
-      const car = {
-        id: `vcar-${Date.now()}`,
-        name: carData.name,
-        make: carData.make,
-        model: carData.model,
-        year: carData.year,
-        // Same field name car.type is already read/displayed under on the
-        // renter side (CarListCard/CarTileCard/car/[id].js) - vehicleClass
-        // has no per-car display consumer yet (only used for search
-        // filtering today), but is stored the same way for when it does.
-        type: carData.type ?? null,
-        vehicleClass: carData.vehicleClass ?? null,
-        drivenBy: carData.drivenBy,
-        location: carData.location,
-        pricePerDay: carData.pricePerDay,
-        description: carData.description ?? '',
-        // Same field names app/car/[id].js already reads on the renter side
-        // (car.transmission/seats/doors/baggage/features), so a vendor-added
-        // car renders correctly there once listings are backend-connected.
-        transmission: carData.transmission ?? null,
-        seats: carData.seats ?? null,
-        doors: carData.doors ?? null,
-        baggage: carData.baggage ?? null,
-        features: carData.features ?? [],
-        regionalAddons: carData.regionalAddons ?? [],
-        vettingAppointment: carData.vettingAppointment ?? null,
-        image: null,
-        status: 'Pending',
-        submittedAt: new Date().toISOString(),
-      };
-      const cars = [...prev.cars, car];
-      const next = { ...prev, cars };
-      vendorStorage.setVendorData(next);
-      return next;
-    });
+  const addCar = useCallback(async (carData) => {
+    const car = await vendorCarsApi.createCar(carData);
+    setData((prev) => ({ ...prev, cars: [car, ...prev.cars] }));
+    return car;
   }, []);
 
-  // Vehicle Inspections done from Vendor Mode's own Menu entry point (not
-  // tied to the renter-side app) are local-only - Vendor Mode has no real
-  // backend booking ids to sync against yet, and the real inspection API is
-  // hard-restricted to the booking's renter anyway. Keyed by
-  // `${bookingId}:${type}` so pre/post live independently per booking,
-  // mirroring the renter side's one-record-per-type shape.
-  const getVendorInspection = useCallback((bookingId, type) => {
-    return data.vendorInspections[`${bookingId}:${type}`] ?? null;
-  }, [data.vendorInspections]);
-
-  const submitVendorInspection = useCallback((bookingId, type, snapshot) => {
-    setData((prev) => {
-      const vendorInspections = {
-        ...prev.vendorInspections,
-        [`${bookingId}:${type}`]: { ...snapshot, status: 'submitted', submittedAt: new Date().toISOString() },
-      };
-      const next = { ...prev, vendorInspections };
-      vendorStorage.setVendorData(next);
-      return next;
-    });
-  }, []);
-
-  const respondToBookingRequest = useCallback((requestId, { accept, reason = null }) => {
-    setData((prev) => {
-      const request = prev.bookingRequests.find((r) => r.id === requestId);
-      if (!request) return prev;
-      const bookingRequests = prev.bookingRequests.filter((r) => r.id !== requestId);
-      const resolved = {
-        ...request,
-        status: accept ? 'Confirmed' : 'Declined',
-        declineReason: accept ? null : reason,
-      };
-      const bookingHistory = [resolved, ...prev.bookingHistory];
-      const next = { ...prev, bookingRequests, bookingHistory };
-      vendorStorage.setVendorData(next);
-      return next;
-    });
-  }, []);
+  // Real Supabase write (bookings.status + vendor_accepted), not local
+  // state - see services/vendorBookingsApi.js. Optimistically moves the
+  // item from requests into history immediately using the server's own
+  // response, then does a background refresh in case anything else on the
+  // list changed concurrently (another device, admin action, etc.).
+  const respondToBookingRequest = useCallback(async (requestId, { accept, reason = null }) => {
+    const resolved = accept
+      ? await vendorBookingsApi.acceptBookingRequest(requestId)
+      : await vendorBookingsApi.declineBookingRequest(requestId, reason);
+    setData((prev) => ({
+      ...prev,
+      bookingRequests: prev.bookingRequests.filter((r) => r.id !== requestId),
+      bookingHistory: [resolved, ...prev.bookingHistory],
+    }));
+    refreshBookings().catch(() => {});
+    return resolved;
+  }, [refreshBookings]);
 
   const currentMonthKey = useMemo(() => monthKeyFor(new Date()), []);
 
+  // Only Confirmed/Completed counts as earned (a still-pending request
+  // isn't income yet), same rule as deriveEarningsHistory and
+  // carEarningsThisMonth below.
   const currentMonthEarnings = useMemo(() => {
-    const entry = data.earningsHistory.find((m) => m.key === currentMonthKey);
-    return entry?.total ?? 0;
-  }, [data.earningsHistory, currentMonthKey]);
+    return data.bookingHistory.reduce((sum, b) => {
+      if (!b.startDate || (b.status !== 'Confirmed' && b.status !== 'Completed')) return sum;
+      if (monthKeyFor(new Date(b.startDate)) !== currentMonthKey) return sum;
+      return sum + (b.earnings ?? 0);
+    }, 0);
+  }, [data.bookingHistory, currentMonthKey]);
 
   const bookingsThisMonthCount = useMemo(() => {
     return data.bookingHistory.filter((b) => {
@@ -210,6 +193,9 @@ export function VendorProvider({ children }) {
   const value = useMemo(() => ({
     ...data,
     isLoading,
+    vendorProfile,
+    isVendorApproved: !!vendorProfile?.isApproved,
+    refreshVendorProfile,
     fleetSize: data.cars.length,
     currentMonthEarnings,
     bookingsThisMonthCount,
@@ -219,14 +205,13 @@ export function VendorProvider({ children }) {
     addCar,
     setAvailabilitySettings,
     setBlockedDates,
-    setVendorSettings,
-    getVendorInspection,
-    submitVendorInspection,
+    saveVendorProfile,
     respondToBookingRequest,
+    refreshBookings,
   }), [
-    data, isLoading, currentMonthEarnings, bookingsThisMonthCount, carEarningsThisMonth, getAvailabilitySettings,
-    updateCar, addCar, setAvailabilitySettings, setBlockedDates, setVendorSettings,
-    getVendorInspection, submitVendorInspection, respondToBookingRequest,
+    data, isLoading, vendorProfile, refreshVendorProfile, currentMonthEarnings, bookingsThisMonthCount, carEarningsThisMonth, getAvailabilitySettings,
+    updateCar, addCar, setAvailabilitySettings, setBlockedDates, saveVendorProfile,
+    respondToBookingRequest, refreshBookings,
   ]);
 
   return <VendorContext.Provider value={value}>{children}</VendorContext.Provider>;

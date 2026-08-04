@@ -1,18 +1,22 @@
-import { request } from './api';
+import supabase from './supabase';
 
 /**
- * Adapts a raw conversation summary row (from GET /conversations or
- * /conversations/{id}) to what the app's UI expects, mirroring the
+ * Adapts a raw conversation summary row (from the list_conversations or
+ * get_conversation RPCs) to what the app's UI expects, mirroring the
  * camelCase-mapping convention used elsewhere in this services/ folder.
+ * Both RPCs already return pinnedSummary/lastMessage as pre-trimmed jsonb
+ * matching this shape, so this is mostly pass-through.
  */
 function normalizeConversation(raw) {
   return {
     id: raw.id,
-    bookingId: raw.bookingId,
-    createdAt: raw.createdAt,
-    pinnedSummary: raw.pinnedSummary ?? null,
-    lastMessage: raw.lastMessage ?? null,
-    unreadCount: raw.unreadCount ?? 0,
+    bookingId: raw.booking_id ?? raw.bookingId,
+    createdAt: raw.created_at ?? raw.createdAt,
+    pinnedSummary: raw.pinned_summary ?? raw.pinnedSummary ?? null,
+    lastMessage: raw.last_message ?? raw.lastMessage ?? null,
+    unreadCount: raw.unread_count ?? raw.unreadCount ?? 0,
+    isResolved: raw.is_resolved ?? raw.isResolved ?? false,
+    isUrgent: raw.is_urgent ?? raw.isUrgent ?? false,
     participants: (raw.participants ?? []).map(normalizeParticipant),
   };
 }
@@ -29,83 +33,94 @@ function normalizeParticipant(raw) {
 function normalizeMessage(raw) {
   return {
     id: raw.id,
-    conversationId: raw.conversationId,
-    senderId: raw.senderId,
-    senderName: raw.senderName,
-    senderIsSupport: !!raw.senderIsSupport,
-    isRead: !!raw.isRead,
+    conversationId: raw.conversation_id,
+    senderId: raw.sender_id,
+    senderName: raw.sender_name,
+    senderIsSupport: !!raw.sender_is_support,
+    isRead: !!raw.is_read,
     body: raw.body,
-    createdAt: raw.createdAt,
+    createdAt: raw.created_at,
   };
 }
 
 /**
- * GET /api/conversations - default: only conversations the caller
+ * list_conversations(p_scope) - default: only conversations the caller
  * participates in. scope:'all' (support-only) lists every conversation,
  * for the Staff Inbox.
  */
 export async function getConversations({ scope } = {}) {
-  const query = scope ? `?scope=${scope}` : '';
-  const json = await request(`/conversations${query}`, { auth: true });
-  return json.data.map(normalizeConversation);
+  const { data, error } = await supabase.rpc('list_conversations', { p_scope: scope ?? 'mine' });
+  if (error) throw error;
+  return (data ?? []).map(normalizeConversation);
 }
 
 /**
- * GET /api/conversations/{id} - metadata + pinned summary + participants,
- * no messages.
+ * get_conversation(p_conversation_id) - metadata + pinned summary +
+ * participants, no messages.
  */
 export async function getConversation(id) {
-  const json = await request(`/conversations/${id}`, { auth: true });
-  return normalizeConversation(json.data);
+  const { data, error } = await supabase.rpc('get_conversation', { p_conversation_id: id });
+  if (error) throw error;
+  return normalizeConversation(data);
 }
 
 /**
- * GET /api/conversations/{id}/messages?since_id=&limit=
+ * list_conversation_messages(p_conversation_id) - the sinceId param this
+ * function used to accept is dropped: no call site ever actually passed it
+ * (a delta fetch can't surface another participant's isRead flipping true,
+ * since that doesn't mint a new message id - see InboxContext.js's
+ * syncMessages comment), so the RPC always returns the full window.
  */
-export async function getMessages(id, { sinceId, limit } = {}) {
-  const params = new URLSearchParams();
-  if (sinceId) params.set('since_id', sinceId);
-  if (limit) params.set('limit', limit);
-  const query = params.toString() ? `?${params.toString()}` : '';
-  const json = await request(`/conversations/${id}/messages${query}`, { auth: true });
-  return json.data.map(normalizeMessage);
+export async function getMessages(id) {
+  const { data, error } = await supabase.rpc('list_conversation_messages', { p_conversation_id: id });
+  if (error) throw error;
+  return (data ?? []).map(normalizeMessage);
 }
 
 /**
- * POST /api/conversations/{id}/messages {body}
+ * send_conversation_message(p_conversation_id, p_body)
  */
 export async function sendMessage(id, body) {
-  const json = await request(`/conversations/${id}/messages`, {
-    method: 'POST',
-    auth: true,
-    body: { body },
-  });
-  return normalizeMessage(json.data);
+  const { data, error } = await supabase.rpc('send_conversation_message', { p_conversation_id: id, p_body: body });
+  if (error) throw error;
+  return normalizeMessage(data);
 }
 
 /**
- * POST /api/conversations/{id}/read
+ * mark_conversation_read(p_conversation_id)
  */
 export async function markConversationRead(id) {
-  return request(`/conversations/${id}/read`, { method: 'POST', auth: true });
+  const { error } = await supabase.rpc('mark_conversation_read', { p_conversation_id: id });
+  if (error) throw error;
 }
 
 /**
- * GET /api/conversations/{id}/participant-candidates?q= - support-only.
+ * set_conversation_flags(p_conversation_id, p_is_resolved, p_is_urgent) -
+ * support-only. Either flag may be omitted to leave it unchanged.
+ */
+export async function setConversationFlags(id, { isResolved, isUrgent } = {}) {
+  const { error } = await supabase.rpc('set_conversation_flags', {
+    p_conversation_id: id,
+    p_is_resolved: isResolved ?? null,
+    p_is_urgent: isUrgent ?? null,
+  });
+  if (error) throw error;
+}
+
+/**
+ * search_participant_candidates(p_conversation_id, p_query) - support-only.
  */
 export async function searchParticipantCandidates(id, q) {
-  const json = await request(`/conversations/${id}/participant-candidates?q=${encodeURIComponent(q)}`, { auth: true });
-  return json.data;
+  const { data, error } = await supabase.rpc('search_participant_candidates', { p_conversation_id: id, p_query: q });
+  if (error) throw error;
+  return (data ?? []).map((raw) => ({ id: raw.id, name: raw.name, avatar: raw.avatar ?? null, email: raw.email }));
 }
 
 /**
- * POST /api/conversations/{id}/participants {user_id} - support-only.
+ * invite_conversation_participant(p_conversation_id, p_user_id) -
+ * support-only.
  */
 export async function inviteParticipant(id, userId) {
-  const json = await request(`/conversations/${id}/participants`, {
-    method: 'POST',
-    auth: true,
-    body: { user_id: userId },
-  });
-  return normalizeParticipant(json.data);
+  const { error } = await supabase.rpc('invite_conversation_participant', { p_conversation_id: id, p_user_id: userId });
+  if (error) throw error;
 }

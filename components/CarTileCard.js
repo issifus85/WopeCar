@@ -4,19 +4,21 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { useCurrency } from '../contexts/CurrencyContext';
-import { formatCurrency } from '../constants/pricing';
+import { formatCurrency, isBlanketDiscountActive, applyBlanketDiscount } from '../constants/pricing';
 import ImageGallery from './ImageGallery';
 
 export default function CarTileCard({ car, onPress }) {
   const { colors } = useAppTheme();
   const { activeCurrency } = useCurrency();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const hasActiveDiscount = isBlanketDiscountActive(car.discount);
+  const discountedPricePerDay = hasActiveDiscount ? applyBlanketDiscount(car.pricePerDay, car.discount) : car.pricePerDay;
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.9}>
-      <ImageGallery images={car.gallery} height={190} borderRadius={0} />
+    <View style={styles.card}>
+      <ImageGallery images={car.gallery} height={190} borderRadius={0} onPress={onPress} />
 
-      <View style={styles.info}>
+      <TouchableOpacity style={styles.info} onPress={onPress} activeOpacity={0.9}>
         <View style={styles.nameRow}>
           <Text style={styles.name} numberOfLines={1}>{car.name}</Text>
           {car.type ? (
@@ -47,7 +49,12 @@ export default function CarTileCard({ car, onPress }) {
           </View>
         ) : null}
         <View style={styles.bottomRow}>
-          <Text style={styles.price}>{formatCurrency(car.pricePerDay, activeCurrency)}<Text style={styles.priceLabel}>/day</Text></Text>
+          <View style={styles.priceValueRow}>
+            {hasActiveDiscount && (
+              <Text style={styles.priceStrikethrough}>{formatCurrency(car.pricePerDay, activeCurrency)}</Text>
+            )}
+            <Text style={styles.price}>{formatCurrency(discountedPricePerDay, activeCurrency)}<Text style={styles.priceLabel}>/day</Text></Text>
+          </View>
           <View style={[
             styles.availabilityBadge,
             { backgroundColor: car.isAvailable ? colors.successBg : colors.errorBg }
@@ -60,8 +67,8 @@ export default function CarTileCard({ car, onPress }) {
             </Text>
           </View>
         </View>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -138,6 +145,18 @@ function createStyles(colors) {
       alignItems: 'center',
       justifyContent: 'space-between',
       marginTop: 10,
+    },
+    priceValueRow: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      gap: 6,
+      flexShrink: 1,
+    },
+    priceStrikethrough: {
+      fontFamily: FONTS.regular,
+      fontSize: 12,
+      color: colors.textSubtle,
+      textDecorationLine: 'line-through',
     },
     price: {
       fontFamily: FONTS.bold,

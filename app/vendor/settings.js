@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { useVendor } from '../../contexts/VendorContext';
 import VendorHeader from '../../components/VendorHeader';
-import ConfirmModal from '../../components/ConfirmModal';
+import VendorStatusBadge from '../../components/VendorStatusBadge';
 
 function Section({ title, children, styles }) {
   return (
@@ -32,11 +33,26 @@ function Row({ icon, label, subtitle, onPress, right, last, styles, colors }) {
   );
 }
 
+const DOC_STATUS_LABEL = {
+  not_submitted: 'Not Submitted',
+  under_review: 'Under Review',
+  verified: 'Verified',
+  rejected: 'Rejected',
+};
+
 export default function VendorSettingsScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const [comingSoon, setComingSoon] = useState(null);
+  const { vendorProfile } = useVendor();
+
+  const payoutStatus = vendorProfile?.payoutMethod?.type
+    ? (vendorProfile.payoutMethod.type === 'mobile_money' ? 'Mobile Money' : 'Bank Transfer')
+    : 'Not Set';
+  const businessStatus = vendorProfile?.businessInfo?.type
+    ? (vendorProfile.businessInfo.type === 'business' ? 'Registered Business' : 'Individual')
+    : 'Not Set';
+  const docStatus = DOC_STATUS_LABEL[vendorProfile?.idDocumentStatus] ?? 'Not Submitted';
 
   return (
     <View style={styles.container}>
@@ -48,7 +64,8 @@ export default function VendorSettingsScreen() {
             icon="card-outline"
             label="Payout Method"
             subtitle="How you get paid for completed bookings"
-            onPress={() => setComingSoon('Payout Method')}
+            onPress={() => router.push('/vendor/payout-method')}
+            right={<VendorStatusBadge status={payoutStatus} />}
             styles={styles}
             colors={colors}
           />
@@ -56,7 +73,8 @@ export default function VendorSettingsScreen() {
             icon="document-text-outline"
             label="Business & Tax Information"
             subtitle="Registration and tax details for payouts"
-            onPress={() => setComingSoon('Business & Tax Information')}
+            onPress={() => router.push('/vendor/business-info')}
+            right={<VendorStatusBadge status={businessStatus} />}
             styles={styles}
             colors={colors}
           />
@@ -65,22 +83,13 @@ export default function VendorSettingsScreen() {
             label="Document Verification"
             subtitle="Ownership and identity documents"
             last
-            onPress={() => setComingSoon('Document Verification')}
+            onPress={() => router.push('/vendor/document-verification')}
+            right={<VendorStatusBadge status={docStatus} />}
             styles={styles}
             colors={colors}
           />
         </Section>
       </ScrollView>
-
-      <ConfirmModal
-        visible={!!comingSoon}
-        title={comingSoon}
-        message="This feature isn't available yet - we're working on it."
-        confirmLabel="OK"
-        cancelLabel={null}
-        onConfirm={() => setComingSoon(null)}
-        onCancel={() => setComingSoon(null)}
-      />
     </View>
   );
 }

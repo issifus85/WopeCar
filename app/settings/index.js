@@ -3,6 +3,7 @@ import { Platform, StyleSheet, Text, View, TouchableOpacity, ScrollView, Switch,
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import * as LocalAuthentication from 'expo-local-authentication';
+import * as Updates from 'expo-updates';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
@@ -15,6 +16,10 @@ import * as accountApi from '../../services/accountApi';
 import { CATEGORIES } from '../../data/cars';
 import OptionPickerModal from '../../components/OptionPickerModal';
 import ConfirmModal from '../../components/ConfirmModal';
+
+// Taps on "App Version" needed to unlock Developer Mode - same iOS-style
+// hidden-unlock pattern as Settings > About in stock phone OSes.
+const DEV_MODE_UNLOCK_TAPS = 7;
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 const VEHICLE_CATEGORIES = CATEGORIES.filter((c) => c.value !== 'All').map((c) => c.label);
@@ -41,11 +46,12 @@ function Row({ label, subtitle, onPress, right, last, styles }) {
   );
 }
 
-function ToggleRow({ label, settingsKey, last, styles, colors, onToggle }) {
+function ToggleRow({ label, subtitle, settingsKey, last, styles, colors, onToggle, disabled }) {
   const { settings, updateSetting } = useSettings();
   return (
     <Row
       label={label}
+      subtitle={subtitle}
       last={last}
       styles={styles}
       right={
@@ -54,6 +60,7 @@ function ToggleRow({ label, settingsKey, last, styles, colors, onToggle }) {
           onValueChange={(value) => (onToggle ? onToggle(value) : updateSetting(settingsKey, value))}
           trackColor={{ false: colors.disabled, true: colors.teal }}
           thumbColor={colors.white}
+          disabled={disabled}
         />
       }
     />
@@ -91,8 +98,16 @@ function NavRow({ label, subtitle, last, onPress, styles, colors }) {
   );
 }
 
-function StaticRow({ label, value, last, styles }) {
-  return <Row label={label} last={last} styles={styles} right={<Text style={styles.rowValue}>{value}</Text>} />;
+function StaticRow({ label, value, last, onPress, styles }) {
+  return (
+    <Row
+      label={label}
+      last={last}
+      onPress={onPress}
+      styles={styles}
+      right={<Text style={styles.rowValue}>{value}</Text>}
+    />
+  );
 }
 
 // Unlike every other ToggleRow here, this one is backed by a real server
@@ -221,6 +236,8 @@ export default function SettingsScreen() {
   // null | 'confirm' | 'clearing' | 'done' - drives the shared Cache
   // Management / Clear Cache flow (both rows below call openClearCache).
   const [cacheStep, setCacheStep] = useState(null);
+  const [devTapCount, setDevTapCount] = useState(0);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
 
   const openPicker = (config) => setPicker(config);
   const closePicker = () => setPicker(null);
@@ -257,6 +274,56 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleAppVersionTap = () => {
+    const next = devTapCount + 1;
+    if (next >= DEV_MODE_UNLOCK_TAPS) {
+      setDevTapCount(0);
+      router.push('/settings/developer-mode');
+      return;
+    }
+    setDevTapCount(next);
+    if (next >= DEV_MODE_UNLOCK_TAPS - 3) {
+      Alert.alert('', `You are ${DEV_MODE_UNLOCK_TAPS - next} taps away from Developer Mode.`);
+    }
+  };
+
+  // expo-updates is only meaningfully "on" in a build published through EAS
+  // Update (Updates.isEnabled is false in Expo Go and regular dev/preview
+  // builds like this one) - rather than pretend to check, this says so
+  // honestly instead of always reporting "up to date".
+  const handleCheckForUpdates = async () => {
+    if (!Updates.isEnabled) {
+      Alert.alert('Updates Not Available', "This build isn't set up to receive over-the-air updates.");
+      return;
+    }
+    setIsCheckingUpdate(true);
+    try {
+      const result = await Updates.checkForUpdateAsync();
+      if (!result.isAvailable) {
+        Alert.alert('Up to Date', "You're running the latest version of WopeCar.");
+        return;
+      }
+      Alert.alert(
+        'Update Available',
+        'A new version of WopeCar is ready to install. Restart the app now?',
+        [
+          { text: 'Later', style: 'cancel' },
+          {
+            text: 'Restart Now',
+            onPress: async () => {
+              await Updates.fetchUpdateAsync();
+              await Updates.reloadAsync();
+            },
+          },
+        ]
+      );
+    } catch (e) {
+      Alert.alert('Error', "Couldn't check for updates. Please try again later.");
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -266,18 +333,18 @@ export default function SettingsScreen() {
           <NavRow label="Change Password" subtitle="Update password" onPress={() => router.push('/settings/change-password')} styles={styles} colors={colors} />
           <BiometricLoginRow styles={styles} colors={colors} />
           <NavRow label="Two-Factor Authentication" subtitle="Enable additional security" onPress={() => openComingSoon('Two-Factor Authentication')} styles={styles} colors={colors} />
-          <NavRow label="Active Devices" subtitle="View signed-in devices" last onPress={() => router.push('/settings/devices')} styles={styles} colors={colors} />
+          <NavRow label="Active Devices" subtitle="View signed-in devices" last onPress={() => openComingSoon('Active Devices')} styles={styles} colors={colors} />
         </Section>
 
         <Section title="Notifications" styles={styles}>
           <ToggleRow label="Push Notifications" settingsKey="pushNotifications" styles={styles} colors={colors} onToggle={handlePushToggle} />
           <ToggleRow label="Email Notifications" settingsKey="emailNotifications" styles={styles} colors={colors} />
-          <ToggleRow label="SMS Notifications" settingsKey="smsNotifications" styles={styles} colors={colors} />
+          <ToggleRow label="SMS Notifications" subtitle="Coming in a later update" settingsKey="smsNotifications" disabled styles={styles} colors={colors} />
           <ToggleRow label="Booking Updates" settingsKey="bookingUpdates" styles={styles} colors={colors} />
-          <ToggleRow label="Promotions & Offers" settingsKey="promotions" styles={styles} colors={colors} />
+          <ToggleRow label="Promotions & Offers" subtitle="Coming in a later update" settingsKey="promotions" disabled styles={styles} colors={colors} />
           <ToggleRow label="New Messages" settingsKey="newMessages" styles={styles} colors={colors} />
           <ToggleRow label="Trip Reminders" settingsKey="tripReminders" styles={styles} colors={colors} />
-          <ToggleRow label="Wishlist Alerts" settingsKey="wishlistAlerts" styles={styles} colors={colors} />
+          <ToggleRow label="Wishlist Alerts" subtitle="Coming in a later update" settingsKey="wishlistAlerts" disabled styles={styles} colors={colors} />
           <ToggleRow label="Price Drop Alerts" settingsKey="priceDropAlerts" last styles={styles} colors={colors} />
         </Section>
 
@@ -286,7 +353,7 @@ export default function SettingsScreen() {
           <ToggleRow label="Show Profile Photo" settingsKey="showProfilePhoto" styles={styles} colors={colors} />
           <ToggleRow label="Show Ratings" settingsKey="showRatings" styles={styles} colors={colors} />
           <PickerRow label="Marketing Preferences" settingsKey="marketingPreferences" options={['Opt In', 'Opt Out']} onOpen={openPicker} styles={styles} colors={colors} />
-          <NavRow label="Data Sharing Preferences" subtitle="Manage consent" onPress={() => openComingSoon('Data Sharing Preferences')} styles={styles} colors={colors} />
+          <NavRow label="Data Sharing Preferences" subtitle="Manage consent" onPress={() => router.push('/settings/data-sharing')} styles={styles} colors={colors} />
           <NavRow label="Download My Data" subtitle="Export account data" onPress={() => router.push('/settings/export-data')} styles={styles} colors={colors} />
           <NavRow label="Delete Account" subtitle="Permanently remove account" last onPress={() => router.push('/settings/delete-account')} styles={styles} colors={colors} />
         </Section>
@@ -308,26 +375,32 @@ export default function SettingsScreen() {
         </Section>
 
         <Section title="Payment" styles={styles}>
-          <NavRow label="Saved Payment Methods" subtitle="Manage cards" onPress={() => openComingSoon('Saved Payment Methods')} styles={styles} colors={colors} />
-          <NavRow label="Default Payment Method" subtitle="Select default card" onPress={() => openComingSoon('Default Payment Method')} styles={styles} colors={colors} />
+          <NavRow label="Saved Payment Methods" subtitle="Manage cards" onPress={() => router.push('/settings/payment-methods')} styles={styles} colors={colors} />
+          <NavRow label="Default Payment Method" subtitle="Select default card" onPress={() => router.push('/settings/payment-methods')} styles={styles} colors={colors} />
           <NavRow label="Billing Address" subtitle="Edit billing details" onPress={() => router.push('/settings/billing-address')} styles={styles} colors={colors} />
           <NavRow label="Payment History" subtitle="View transactions" onPress={() => router.push('/settings/payment-history')} styles={styles} colors={colors} />
           <NavRow label="Invoices & Receipts" subtitle="Download receipts" onPress={() => router.push('/settings/payment-history')} styles={styles} colors={colors} />
-          <NavRow label="Refund History" subtitle="View refunds" last onPress={() => openComingSoon('Refund History')} styles={styles} colors={colors} />
+          <NavRow label="Refund History" subtitle="Coming in a later update" last styles={styles} colors={colors} />
         </Section>
 
         <Section title="App Preferences" styles={styles}>
           <PickerRow label="Dark Mode" settingsKey="darkMode" options={['Light', 'Dark', 'Auto']} onOpen={openPicker} styles={styles} colors={colors} />
           <PickerRow label="Theme Colour" settingsKey="themeColour" options={['Default', 'Teal', 'Navy', 'Orange']} onOpen={openPicker} styles={styles} colors={colors} />
           <PickerRow label="Map Provider" settingsKey="mapProvider" options={['Google Maps', 'Apple Maps']} onOpen={openPicker} styles={styles} colors={colors} />
-          <NavRow label="Navigation Preference" subtitle="Open preferred navigation app" onPress={() => openComingSoon('Navigation Preference')} styles={styles} colors={colors} />
+          <ToggleRow
+            label="Auto-open Directions"
+            subtitle="Prompt directions to pickup on the day of your trip"
+            settingsKey="autoOpenDirections"
+            styles={styles}
+            colors={colors}
+          />
           <ToggleRow label="Auto-play Videos" settingsKey="autoPlayVideos" styles={styles} colors={colors} />
           <NavRow label="Cache Management" subtitle="Clear downloaded images/data" last onPress={openClearCache} styles={styles} colors={colors} />
         </Section>
 
         <Section title="Security" styles={styles}>
-          <NavRow label="Login Activity" subtitle="Recent login history" onPress={() => router.push('/settings/login-activity')} styles={styles} colors={colors} />
-          <NavRow label="Trusted Devices" subtitle="Manage remembered devices" onPress={() => router.push('/settings/trusted-devices')} styles={styles} colors={colors} />
+          <NavRow label="Login Activity" subtitle="Recent login history" onPress={() => openComingSoon('Login Activity')} styles={styles} colors={colors} />
+          <NavRow label="Trusted Devices" subtitle="Manage remembered devices" onPress={() => openComingSoon('Trusted Devices')} styles={styles} colors={colors} />
           <NavRow label="Change Email" subtitle="Requires verification" onPress={() => router.push('/account')} styles={styles} colors={colors} />
           <NavRow label="Change Mobile Number" subtitle="Requires OTP verification" onPress={() => router.push('/account')} styles={styles} colors={colors} />
           <SecurityAlertsRow last styles={styles} colors={colors} />
@@ -340,11 +413,16 @@ export default function SettingsScreen() {
         </Section>
 
         <Section title="Developer" styles={styles}>
-          <StaticRow label="App Version" value={APP_VERSION} styles={styles} />
-          <NavRow label="Check for Updates" subtitle="Verify latest release" onPress={() => openComingSoon('Check for Updates')} styles={styles} colors={colors} />
-          <NavRow label="Diagnostics" subtitle="Send anonymous crash reports" onPress={() => openComingSoon('Diagnostics')} styles={styles} colors={colors} />
-          <NavRow label="Clear Cache" subtitle="Free storage" onPress={openClearCache} styles={styles} colors={colors} />
-          <NavRow label="Developer Mode" subtitle="Internal/testing builds only" last onPress={() => openComingSoon('Developer Mode')} styles={styles} colors={colors} />
+          <StaticRow label="App Version" value={APP_VERSION} onPress={handleAppVersionTap} styles={styles} />
+          <NavRow
+            label="Check for Updates"
+            subtitle={isCheckingUpdate ? 'Checking...' : 'Verify latest release'}
+            onPress={handleCheckForUpdates}
+            styles={styles}
+            colors={colors}
+          />
+          <NavRow label="Diagnostics" subtitle="Device & app info for Support" onPress={() => router.push('/settings/diagnostics')} styles={styles} colors={colors} />
+          <NavRow label="Clear Cache" subtitle="Free storage" last onPress={openClearCache} styles={styles} colors={colors} />
         </Section>
 
       </ScrollView>

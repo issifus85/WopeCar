@@ -50,7 +50,41 @@ export function formatCurrency(amount, currency = DEFAULT_CURRENCY) {
 // a flat delivery/collection fee for self-drive rentals only, plus a refundable
 // security deposit (all rentals) of 25% of the rental+add-ons subtotal, or a
 // flat GHS 500 if that subtotal is under GHS 2,000.
+//
+// This is also the fallback default for getSelfDriveDeliveryFee() below -
+// kept as a real export (not inlined) so callers that genuinely can't await
+// (e.g. a synchronous render) still have a sane value.
 export const SELF_DRIVE_DELIVERY_FEE = 200;
+
+// Admin > Settings > Business Rules > "Self-Drive Delivery Fee" is real and
+// live-editable (app_settings.self_drive_delivery_fee), not just stored -
+// this is the read side. Stale-while-revalidate: every call returns
+// whatever's cached *right now* (the hardcoded constant until the first
+// fetch resolves) and kicks off exactly one background fetch to replace it
+// with the real configured value for every call after that. Avoids forcing
+// every synchronous price computation in the app to become async just to
+// read one admin-configurable number.
+let cachedSelfDriveDeliveryFee = SELF_DRIVE_DELIVERY_FEE;
+let hasFetchedSelfDriveDeliveryFee = false;
+
+export function getSelfDriveDeliveryFee() {
+  if (!hasFetchedSelfDriveDeliveryFee) {
+    hasFetchedSelfDriveDeliveryFee = true;
+    // Lazy import avoids a module-load-order/circular-import risk with
+    // services/supabase.js pulling in constants at startup.
+    import('../services/supabase')
+      .then(({ getAppSetting }) => getAppSetting('self_drive_delivery_fee'))
+      .then((value) => {
+        if (typeof value === 'number' && value >= 0) cachedSelfDriveDeliveryFee = value;
+      })
+      .catch(() => {
+        // Keep the hardcoded default - never let a settings-fetch failure
+        // block checkout.
+      });
+  }
+  return cachedSelfDriveDeliveryFee;
+}
+
 const SECURITY_DEPOSIT_THRESHOLD = 2000;
 const SECURITY_DEPOSIT_FLAT = 500;
 const SECURITY_DEPOSIT_PERCENT = 0.25;
@@ -88,13 +122,29 @@ export const CHAUFFEUR_CYCLE_HOURS = 12;
 export const DEFAULT_GRACE_PERIOD_MINUTES = 29;
 
 const TIME_SLOT_PATTERN = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i;
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-// Combines a date-only value (Date or ISO string) with a 12-hour time-slot
-// string (e.g. "8:00 AM", as produced by checkout's TimeSlotPicker) into a
-// single Date. Falls back to the date's own time component if no time
-// string is given.
+// A bare 'YYYY-MM-DD' string parses as UTC midnight in JS, which shifts to
+// the previous calendar day in any timezone behind UTC (e.g. renders Aug 1
+// as Jul 31 in America/New_York) - every other date shape here (a Date
+// object, or a full datetime string) already carries real local time and
+// doesn't have this problem. Only date-only strings need the special case:
+// split the literal Y/M/D and construct the Date from local components.
+function parseDateOnly(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function toISODate(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+// Combines a date-only value (Date, ISO date string, or datetime string)
+// with a 12-hour time-slot string (e.g. "8:00 AM", as produced by
+// checkout's TimeSlotPicker) into a single Date. Falls back to the date's
+// own time component if no time string is given.
 function combineDateAndTime(date, time) {
-  const base = new Date(date);
+  const base = typeof date === 'string' && DATE_ONLY_PATTERN.test(date) ? parseDateOnly(date) : new Date(date);
   const match = time ? TIME_SLOT_PATTERN.exec(String(time).trim()) : null;
   if (!match) return base;
   const [, hourStr, minuteStr, meridiem] = match;
@@ -105,10 +155,64 @@ function combineDateAndTime(date, time) {
   return combined;
 }
 
+// Picks the richest length-of-stay tier the trip qualifies for (highest
+// minDays that's still <= billableDays) - tiers don't stack, matching
+// Airbnb's own weekly/monthly discount behavior (a 30-night stay gets the
+// monthly rate, not weekly-on-top-of-monthly).
+function pickLengthOfStayTier(tiers, billableDays) {
+  if (!tiers?.length) return null;
+  const eligible = tiers.filter((t) => t?.minDays > 0 && billableDays >= t.minDays);
+  if (!eligible.length) return null;
+  return eligible.reduce((best, t) => (t.minDays > best.minDays ? t : best));
+}
+
+function discountAmount(base, discount) {
+  if (!discount || !(discount.value > 0)) return 0;
+  const amount = discount.type === 'percentage' ? base * (discount.value / 100) : discount.value;
+  return Math.min(base, Math.max(0, amount));
+}
+
+// Same enabled + active-window check calculateRentalPricing() uses for the
+// blanket discount, exposed for screens that want to show a strikethrough
+// price before a trip's actual pickup date is known (e.g. the car listing/
+// detail pages) - checked against `date` (defaults to today) instead of a
+// booking's pickup date.
+export function isBlanketDiscountActive(discount, date = new Date()) {
+  if (!discount?.enabled || !(discount.value > 0)) return false;
+  const dateOnly = stripTimeToDateOnly(date);
+  const startsAt = discount.startsAt ? parseDateOnly(discount.startsAt) : null;
+  const endsAt = discount.endsAt ? parseDateOnly(discount.endsAt) : null;
+  return (!startsAt || dateOnly >= startsAt) && (!endsAt || dateOnly <= endsAt);
+}
+
+// The discounted per-day price for display when isBlanketDiscountActive() is
+// true - e.g. the base pricePerDay shown (with strikethrough) on a listing
+// before any specific dates are picked.
+export function applyBlanketDiscount(base, discount) {
+  return base - discountAmount(base, discount);
+}
+
+function stripTimeToDateOnly(date) {
+  const d = typeof date === 'string' && DATE_ONLY_PATTERN.test(date) ? parseDateOnly(date) : new Date(date);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
 // Calculates billable rental days and cost from pickup/return date + time,
-// applying the correct billing cycle for the driven mode. dailyRate is the
-// per-billable-day price (car.pricePerDay for self-drive, the base chauffeur
-// daily fee for chauffeur-driven rentals).
+// applying the correct billing cycle for the driven mode, then layers on
+// per-date custom pricing and discounts:
+//   - getDatePrice(isoDate) - optional lookup for a vendor/admin-set custom
+//     price on a specific calendar date; falls back to `dailyRate` for any
+//     date it returns nothing for. Each billable day is priced against the
+//     calendar date it actually falls on (startDate + i days), not a flat
+//     per-booking rate, so a rental spanning a priced "surge" date and a
+//     normal date bills each day correctly.
+//   - lengthOfStayDiscounts - optional [{minDays, type, value}] tiers (like
+//     Airbnb's weekly/monthly discount), applied to the summed rental cost
+//     before the blanket discount.
+//   - discount - optional {enabled, type, value, startsAt, endsAt} blanket
+//     promotional discount, applied after the length-of-stay discount and
+//     only when enabled and the pickup date falls inside its window (an
+//     unset startsAt/endsAt means no bound on that side).
 export function calculateRentalPricing({
   startDate,
   endDate,
@@ -118,6 +222,9 @@ export function calculateRentalPricing({
   dailyRate = 0,
   useGracePeriod = true,
   gracePeriodMinutes = DEFAULT_GRACE_PERIOD_MINUTES,
+  getDatePrice,
+  lengthOfStayDiscounts,
+  discount,
 }) {
   const pickupAt = combineDateAndTime(startDate, pickupTime);
   const returnAt = combineDateAndTime(endDate, returnTime);
@@ -129,7 +236,33 @@ export function calculateRentalPricing({
   const graceMinutes = !isChauffeur && useGracePeriod ? gracePeriodMinutes : 0;
 
   const billableDays = Math.max(1, Math.ceil((durationMinutes - graceMinutes) / cycleMinutes));
-  const rentalCost = billableDays * dailyRate;
+
+  const pickupDateOnly = new Date(pickupAt.getFullYear(), pickupAt.getMonth(), pickupAt.getDate());
+  const dailyBreakdown = [];
+  let baseRentalCost = 0;
+  for (let i = 0; i < billableDays; i++) {
+    const date = new Date(pickupDateOnly.getFullYear(), pickupDateOnly.getMonth(), pickupDateOnly.getDate() + i);
+    const iso = toISODate(date);
+    const rate = getDatePrice?.(iso) ?? dailyRate;
+    dailyBreakdown.push({ date: iso, rate });
+    baseRentalCost += rate;
+  }
+
+  const appliedLengthOfStayTier = pickLengthOfStayTier(lengthOfStayDiscounts, billableDays);
+  const lengthOfStayDiscountAmount = appliedLengthOfStayTier
+    ? discountAmount(baseRentalCost, appliedLengthOfStayTier)
+    : 0;
+  const afterLengthOfStay = baseRentalCost - lengthOfStayDiscountAmount;
+
+  let blanketDiscountAmount = 0;
+  if (discount?.enabled) {
+    const startsAt = discount.startsAt ? parseDateOnly(discount.startsAt) : null;
+    const endsAt = discount.endsAt ? parseDateOnly(discount.endsAt) : null;
+    const withinWindow = (!startsAt || pickupDateOnly >= startsAt) && (!endsAt || pickupDateOnly <= endsAt);
+    if (withinWindow) blanketDiscountAmount = discountAmount(afterLengthOfStay, discount);
+  }
+
+  const rentalCost = afterLengthOfStay - blanketDiscountAmount;
 
   return {
     pickupAt,
@@ -139,6 +272,12 @@ export function calculateRentalPricing({
     cycleHours,
     billableDays,
     dailyRate,
+    dailyBreakdown,
+    baseRentalCost,
+    appliedLengthOfStayTier,
+    lengthOfStayDiscountAmount,
+    blanketDiscountAmount,
+    totalDiscount: lengthOfStayDiscountAmount + blanketDiscountAmount,
     rentalCost,
   };
 }

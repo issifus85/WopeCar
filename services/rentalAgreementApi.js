@@ -1,89 +1,128 @@
-import { request, ApiError } from './api';
-import { buildFilePart } from './mediaUpload';
+import supabase, { getCurrentUser } from './supabase';
 
-function normalizeAgreement(raw) {
+function normalizeAgreement(row) {
+  if (!row) return null;
   return {
-    id: raw.id,
-    bookingId: raw.bookingId,
-    status: raw.status,
-    lesseeName: raw.lesseeName ?? '',
-    vehicleRegistration: raw.vehicleRegistration ?? '',
-    vehicleMake: raw.vehicleMake ?? '',
-    vehicleColor: raw.vehicleColor ?? '',
-    vehicleYear: raw.vehicleYear ?? '',
-    dailyRate: raw.dailyRate ?? '',
-    securityDeposit: raw.securityDeposit ?? '',
-    durationStart: raw.durationStart ?? '',
-    durationEnd: raw.durationEnd ?? '',
-    pickupTime: raw.pickupTime ?? '',
-    returnTime: raw.returnTime ?? '',
-    ghanaOnlyUse: raw.ghanaOnlyUse ?? true,
-    hasClientSignature: !!raw.hasClientSignature,
-    hasRepresentativeSignature: !!raw.hasRepresentativeSignature,
-    submittedAt: raw.submittedAt,
-    document: raw.document ? { id: raw.document.id, signedUrl: raw.document.signedUrl } : null,
+    id: row.id,
+    bookingId: row.booking_id,
+    status: row.status,
+    lesseeName: row.lessee_name ?? '',
+    vehicleRegistration: row.vehicle_registration ?? '',
+    vehicleMake: row.vehicle_make ?? '',
+    vehicleColor: row.vehicle_color ?? '',
+    vehicleYear: row.vehicle_year ?? '',
+    dailyRate: row.daily_rate ?? '',
+    securityDeposit: row.security_deposit ?? '',
+    durationStart: row.duration_start ?? '',
+    durationEnd: row.duration_end ?? '',
+    pickupTime: row.pickup_time ?? '',
+    returnTime: row.return_time ?? '',
+    ghanaOnlyUse: row.ghana_only_use ?? true,
+    hasClientSignature: !!row.client_signature_path,
+    hasRepresentativeSignature: !!row.representative_signature_path,
+    submittedAt: row.submitted_at,
   };
 }
 
 /**
- * GET /api/bookings/{bookingId}/rental-agreement - null (not a thrown
- * error) when none exists yet, matching getInspection()'s "Not Started"
- * convention for Booking Detail's entry point.
+ * null (not a thrown error) when none exists yet, matching getInspection()'s
+ * "Not Started" convention for Booking Detail's entry point.
  */
 export async function getRentalAgreement(bookingId) {
-  try {
-    const json = await request(`/bookings/${bookingId}/rental-agreement`, { auth: true });
-    return normalizeAgreement(json.data);
-  } catch (e) {
-    if (e instanceof ApiError && e.status === 404) return null;
-    throw e;
-  }
+  const { data, error } = await supabase
+    .from('rental_agreements')
+    .select('*')
+    .eq('booking_id', bookingId)
+    .maybeSingle();
+  if (error) throw error;
+  return normalizeAgreement(data);
 }
 
 /**
- * POST /api/bookings/{bookingId}/rental-agreement - the autosave target,
- * called (debounced) on every field change. Only the fields present in
- * `fields` are sent - callers pass just what changed, not the whole draft,
- * since this form has no offline-resume-friendly "whole draft" requirement
- * the way the multi-step Inspection wizard does.
+ * The autosave target, called (debounced) on every field change. Only the
+ * fields present in `fields` are written - callers pass just what changed,
+ * not the whole draft. `.upsert(..., {onConflict: 'booking_id'})` translates
+ * to `ON CONFLICT (booking_id) DO UPDATE SET <only the columns given>`, so
+ * this preserves the original partial-update-per-keystroke contract exactly
+ * (unspecified columns are left untouched, not nulled out).
  */
 export async function saveRentalAgreementDraft(bookingId, fields) {
-  const body = {};
-  if ('lesseeName' in fields) body.lessee_name = fields.lesseeName || null;
-  if ('vehicleRegistration' in fields) body.vehicle_registration = fields.vehicleRegistration || null;
-  if ('vehicleMake' in fields) body.vehicle_make = fields.vehicleMake || null;
-  if ('vehicleColor' in fields) body.vehicle_color = fields.vehicleColor || null;
-  if ('vehicleYear' in fields) body.vehicle_year = fields.vehicleYear || null;
-  if ('dailyRate' in fields) body.daily_rate = fields.dailyRate === '' ? null : fields.dailyRate;
-  if ('securityDeposit' in fields) body.security_deposit = fields.securityDeposit === '' ? null : fields.securityDeposit;
-  if ('durationStart' in fields) body.duration_start = fields.durationStart || null;
-  if ('durationEnd' in fields) body.duration_end = fields.durationEnd || null;
-  if ('pickupTime' in fields) body.pickup_time = fields.pickupTime || null;
-  if ('returnTime' in fields) body.return_time = fields.returnTime || null;
-  if ('ghanaOnlyUse' in fields) body.ghana_only_use = fields.ghanaOnlyUse;
+  const row = { booking_id: bookingId };
+  if ('lesseeName' in fields) row.lessee_name = fields.lesseeName || null;
+  if ('vehicleRegistration' in fields) row.vehicle_registration = fields.vehicleRegistration || null;
+  if ('vehicleMake' in fields) row.vehicle_make = fields.vehicleMake || null;
+  if ('vehicleColor' in fields) row.vehicle_color = fields.vehicleColor || null;
+  if ('vehicleYear' in fields) row.vehicle_year = fields.vehicleYear || null;
+  if ('dailyRate' in fields) row.daily_rate = fields.dailyRate === '' ? null : fields.dailyRate;
+  if ('securityDeposit' in fields) row.security_deposit = fields.securityDeposit === '' ? null : fields.securityDeposit;
+  if ('durationStart' in fields) row.duration_start = fields.durationStart || null;
+  if ('durationEnd' in fields) row.duration_end = fields.durationEnd || null;
+  if ('pickupTime' in fields) row.pickup_time = fields.pickupTime || null;
+  if ('returnTime' in fields) row.return_time = fields.returnTime || null;
+  if ('ghanaOnlyUse' in fields) row.ghana_only_use = fields.ghanaOnlyUse;
 
-  const json = await request(`/bookings/${bookingId}/rental-agreement`, { method: 'POST', auth: true, body });
-  return normalizeAgreement(json.data);
+  const { data, error } = await supabase
+    .from('rental_agreements')
+    .upsert(row, { onConflict: 'booking_id' })
+    .select()
+    .single();
+  if (error) throw error;
+  return normalizeAgreement(data);
 }
 
-/**
- * POST /api/rental-agreements/{id}/signatures
- */
+// Signatures reuse the documents storage bucket (0003_storage_policies.sql)
+// - documents/<user_id>/agreements/<agreement_id>/... is already covered by
+// the existing owner-scoped policy, no new storage policy needed.
+async function uploadAgreementFile(agreementId, filename, uri, contentType) {
+  const user = await getCurrentUser();
+  const arrayBuffer = await fetch(uri).then((res) => res.arrayBuffer());
+  const path = `${user.id}/agreements/${agreementId}/${filename}`;
+  const { error } = await supabase.storage.from('documents').upload(path, arrayBuffer, { contentType, upsert: true });
+  if (error) throw error;
+  return path;
+}
+
 export async function uploadRentalAgreementSignature(agreementId, role, uri) {
-  const part = await buildFilePart(uri, `${role}-signature.png`);
-  const body = new FormData();
-  body.append('role', role);
-  if (part.blob) body.append('file', part.blob, part.filename);
-  else body.append('file', part.native);
+  const filePath = await uploadAgreementFile(agreementId, `${role}-signature.png`, uri, 'image/png');
 
-  const json = await request(`/rental-agreements/${agreementId}/signatures`, { method: 'POST', auth: true, body });
-  return normalizeAgreement(json.data);
+  const column = role === 'representative' ? 'representative_signature_path' : 'client_signature_path';
+  const { data, error } = await supabase
+    .from('rental_agreements')
+    .update({ [column]: filePath })
+    .eq('id', agreementId)
+    .select()
+    .single();
+  if (error) throw error;
+  return normalizeAgreement(data);
 }
 
+const REQUIRED_FIELDS = ['lessee_name', 'vehicle_registration', 'vehicle_make', 'daily_rate', 'duration_start', 'duration_end'];
+
 /**
- * POST /api/rental-agreements/{id}/submit
+ * Validates the same completeness requirements the form screen's own
+ * canSubmit already enforces client-side - kept here too so a draft can't
+ * be submitted incomplete via any other path.
  */
 export async function submitRentalAgreement(agreementId) {
-  const json = await request(`/rental-agreements/${agreementId}/submit`, { method: 'POST', auth: true });
-  return normalizeAgreement(json.data);
+  const { data: row, error: fetchError } = await supabase
+    .from('rental_agreements')
+    .select('*')
+    .eq('id', agreementId)
+    .single();
+  if (fetchError) throw fetchError;
+
+  const missingField = REQUIRED_FIELDS.some((key) => row[key] === null || row[key] === '');
+  if (missingField) throw new Error('Please fill in all required fields before submitting.');
+  if (!row.client_signature_path || !row.representative_signature_path) {
+    throw new Error('Both signatures are required before submitting.');
+  }
+
+  const { data, error } = await supabase
+    .from('rental_agreements')
+    .update({ status: 'submitted', submitted_at: new Date().toISOString() })
+    .eq('id', agreementId)
+    .select()
+    .single();
+  if (error) throw error;
+  return normalizeAgreement(data);
 }

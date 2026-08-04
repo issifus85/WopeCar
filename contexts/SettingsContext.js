@@ -16,7 +16,12 @@ import * as settingsStorage from '../services/settingsStorage';
 // InboxContext.notifyBookingEvent (see contexts/InboxContext.js); currency
 // drives CurrencyContext.activeCurrency; mapProvider drives the "Get
 // Directions" buttons on booking/[id].js (see services/mapsLauncher.js);
-// biometricLogin gates app launch (see components/BiometricGate.js).
+// biometricLogin gates app launch (see components/BiometricGate.js);
+// dataSharingAnalytics/dataSharingPersonalizedAds/dataSharingThirdParty are
+// saved-but-inert consent flags (app/settings/data-sharing.js) - nothing in
+// this app currently reads device analytics or serves ads, so there's
+// nothing yet to actually gate; autoOpenDirections drives the pickup-day
+// directions prompt on booking/[id].js.
 const DEFAULT_SETTINGS = {
   // Notification Setting
   pushNotifications: true,
@@ -33,6 +38,9 @@ const DEFAULT_SETTINGS = {
   showProfilePhoto: true,
   showRatings: true,
   marketingPreferences: 'Opt In',
+  dataSharingAnalytics: true,
+  dataSharingPersonalizedAds: false,
+  dataSharingThirdParty: false,
   // Preference Setting
   preferredVehicleType: 'SUVs/ 4x4s',
   preferredTransmission: 'Automatic',
@@ -44,6 +52,9 @@ const DEFAULT_SETTINGS = {
   darkMode: 'Auto', // 'Light' | 'Dark' | 'Auto' (time-of-day based, see contexts/ThemeContext.js)
   themeColour: 'Default',
   mapProvider: Platform.OS === 'ios' ? 'Apple Maps' : 'Google Maps',
+  // Prompts "Get Directions" on Booking Detail the day of pickup - see
+  // booking/[id].js's directions-prompt banner.
+  autoOpenDirections: false,
   autoPlayVideos: true,
   // Security Setting - gates app launch, see components/BiometricGate.js
   biometricLogin: false,

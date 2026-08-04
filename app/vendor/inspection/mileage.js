@@ -10,11 +10,11 @@ import CheckoutFooterButton from '../../../components/CheckoutFooterButton';
 const FUEL_LEVELS = ['Empty', '1/4', 'Half', '3/4', 'Full'];
 
 // Vendor Mode variant of app/inspection/mileage.js - same checklist model
-// and UI, but no backend sync: Vendor Mode bookings are local-only and the
-// real inspection API is restricted to the booking's renter anyway (see
-// contexts/VendorContext.js's submitVendorInspection comment). The shared
-// InspectionContext draft (mileage/fuelLevel/checklist/etc.) is reused
-// as-is since it was already 100% local storage to begin with.
+// and UI. This step (and interior.js/exterior.js) only ever touch the
+// shared local InspectionContext draft, same as the renter-side wizard -
+// the real backend sync happens lazily, starting at photos.js's first
+// upload (see that file and signatures.js for the real vehicle_inspections
+// writes now backing this wizard).
 export default function VendorInspectionMileageScreen() {
   const { bookingId, type } = useLocalSearchParams();
   const router = useRouter();

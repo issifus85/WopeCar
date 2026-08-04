@@ -39,3 +39,8 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Raw one-time Laravel->Supabase migration data dumps - real customer PII
+# and (in password-reset-links.json) live account-recovery tokens. Never
+# belongs in git history.
+supabase/scripts/data/

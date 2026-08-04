@@ -1,20 +1,17 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { FONTS } from '../../constants/theme';
-import { useAppTheme } from '../../contexts/ThemeContext';
+import FloatingTabBar from '../../components/FloatingTabBar';
 
+// FloatingTabBar (an Instagram-style floating pill) fully replaces React
+// Navigation's default tab bar rendering, so tabBarActiveTintColor/
+// tabBarStyle/tabBarLabelStyle no longer apply here - FloatingTabBar reads
+// colors straight from useAppTheme() itself. headerShown stays false; each
+// tab screen renders its own in-page content without a native header.
 export default function TabLayout() {
-  const { colors } = useAppTheme();
-
   return (
     <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.teal,
-        tabBarInactiveTintColor: colors.textSubtle,
-        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
-        tabBarLabelStyle: { fontFamily: FONTS.semiBold, fontSize: 11 },
-      }}
+      tabBar={(props) => <FloatingTabBar {...props} />}
+      screenOptions={{ headerShown: false }}
     >
       <Tabs.Screen
         name="index"

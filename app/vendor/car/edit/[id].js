@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, Switch, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, Switch, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../../../constants/theme';
@@ -20,6 +20,7 @@ import SearchableOptionModal from '../../../../components/SearchableOptionModal'
 import LocationSearchModal from '../../../../components/LocationSearchModal';
 
 const DRIVEN_BY_OPTIONS = ['Self-drive', 'Chauffeur'];
+const ENERGY_SOURCE_OPTIONS = ['Gasoline', 'Diesel', 'EV'];
 const TRANSMISSION_OPTIONS = ['Automatic', 'Manual'];
 const VEHICLE_TYPE_OPTIONS = VEHICLE_TYPES.map((t) => t.label);
 const VEHICLE_CLASS_OPTIONS = VEHICLE_CLASSES.map((c) => c.label);
@@ -73,6 +74,7 @@ export default function VendorEditListingScreen() {
   const [type, setType] = useState('');
   const [vehicleClass, setVehicleClass] = useState('');
   const [drivenBy, setDrivenBy] = useState('Self-drive');
+  const [energySource, setEnergySource] = useState('');
   const [transmission, setTransmission] = useState('Automatic');
   const [seats, setSeats] = useState('');
   const [doors, setDoors] = useState('');
@@ -84,6 +86,7 @@ export default function VendorEditListingScreen() {
   const [regionalAddons, setRegionalAddons] = useState([]);
   const [offersRegionalAddons, setOffersRegionalAddons] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (isInitialized || !car) return;
@@ -93,6 +96,7 @@ export default function VendorEditListingScreen() {
     setType(car.type ?? '');
     setVehicleClass(car.vehicleClass ?? '');
     setDrivenBy(car.drivenBy ?? 'Self-drive');
+    setEnergySource(car.energySource ?? '');
     setTransmission(car.transmission ?? 'Automatic');
     setSeats(car.seats != null ? String(car.seats) : '');
     setDoors(car.doors != null ? String(car.doors) : '');
@@ -159,36 +163,43 @@ export default function VendorEditListingScreen() {
   };
 
   const price = Number(pricePerDay);
-  const isValid = !!make && !!model && !!year && !!type && !!vehicleClass && !!drivenBy && !!location && pricePerDay.trim().length > 0 && price > 0;
+  const isValid = !!make && !!model && !!year && !!type && !!vehicleClass && !!drivenBy && !!energySource && !!location && pricePerDay.trim().length > 0 && price > 0;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const enabledRegions = offersRegionalAddons ? regionalAddons.filter((r) => Number(r.price) > 0) : [];
-    updateCar(car.id, {
-      name: `${make} ${model} ${year}`,
-      make,
-      model,
-      year,
-      type,
-      vehicleClass,
-      drivenBy,
-      transmission,
-      seats: seats ? Number(seats) : null,
-      doors: doors ? Number(doors) : null,
-      baggage: baggage ? Number(baggage) : null,
-      features,
-      description: description.trim(),
-      location,
-      pricePerDay: price,
-      regionalAddons: enabledRegions.map((r) => ({ name: r.name, price: Number(r.price), type: 'per_day' })),
-    });
-    router.back();
+    setIsSaving(true);
+    try {
+      await updateCar(car.id, {
+        name: `${make} ${model} ${year}`,
+        make,
+        model,
+        year,
+        type,
+        vehicleClass,
+        drivenBy,
+        energySource,
+        transmission,
+        seats: seats ? Number(seats) : null,
+        doors: doors ? Number(doors) : null,
+        baggage: baggage ? Number(baggage) : null,
+        features,
+        description: description.trim(),
+        location,
+        pricePerDay: price,
+        regionalAddons: enabledRegions.map((r) => ({ name: r.name, price: Number(r.price), type: 'per_day' })),
+      });
+      router.back();
+    } catch (e) {
+      Alert.alert('Could not save changes', e?.message || 'Please check your connection and try again.');
+      setIsSaving(false);
+    }
   };
 
   return (
     <View style={styles.container}>
       <VendorHeader title="Edit Listing" subtitle={car.name} onBack={() => router.back()} />
 
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <Text style={styles.sectionTitle}>Vehicle</Text>
           <PickerField
@@ -243,6 +254,24 @@ export default function VendorEditListingScreen() {
                     key={option}
                     style={[styles.pill, active && styles.pillActive]}
                     onPress={() => setDrivenBy(option)}
+                  >
+                    <Text style={[styles.pillText, active && styles.pillTextActive]}>{option}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Energy Source</Text>
+            <View style={styles.pillsRow}>
+              {ENERGY_SOURCE_OPTIONS.map((option) => {
+                const active = option === energySource;
+                return (
+                  <TouchableOpacity
+                    key={option}
+                    style={[styles.pill, active && styles.pillActive]}
+                    onPress={() => setEnergySource(option)}
                   >
                     <Text style={[styles.pillText, active && styles.pillTextActive]}>{option}</Text>
                   </TouchableOpacity>
@@ -418,7 +447,11 @@ export default function VendorEditListingScreen() {
           )}
         </ScrollView>
 
-        <CheckoutFooterButton label="Save Changes" onPress={handleSave} disabled={!isValid} />
+        <CheckoutFooterButton
+          label={isSaving ? 'Saving...' : 'Save Changes'}
+          onPress={handleSave}
+          disabled={!isValid || isSaving}
+        />
       </KeyboardAvoidingView>
 
       <SearchableOptionModal

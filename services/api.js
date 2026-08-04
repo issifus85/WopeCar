@@ -1,5 +1,9 @@
 import { getToken } from './tokenStorage';
 
+// Legacy - will be replaced by Supabase services in Phase 4. Still the live
+// backend for the app today (see services/supabaseApi.js for the parallel
+// Supabase-backed functions being built alongside this one).
+
 // Preprod for now - swap to the production host once these routes are
 // verified and deployed there too.
 export const API_BASE_URL = 'https://wopecarpreprod.com/api';

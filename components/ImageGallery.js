@@ -1,9 +1,19 @@
 import { useState, useMemo } from 'react';
-import { StyleSheet, View, FlatList, Text, Dimensions } from 'react-native';
+import { StyleSheet, View, FlatList, Text, Dimensions, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { useAppTheme } from '../contexts/ThemeContext';
 
-export default function ImageGallery({ images, height = 180, borderRadius = 16 }) {
+// `onPress`, when given, makes the gallery double as a tap target (e.g. a
+// card that opens the car's detail page) - each rendered image gets its own
+// small Touchable rather than one Touchable wrapping the whole horizontal
+// FlatList from outside. That distinction matters: a Touchable *enclosing*
+// a horizontal FlatList intercepts the drag before the list's own scroll
+// responder ever sees it (this is what broke swiping in the tile/compact
+// card view - CarTileCard used to wrap ImageGallery in a single card-wide
+// TouchableOpacity). A Touchable *inside* each FlatList item only reacts to
+// a tap within its own bounds, so the FlatList itself still owns the pan
+// gesture for the horizontal scroll.
+export default function ImageGallery({ images, height = 180, borderRadius = 16, onPress }) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -36,13 +46,14 @@ export default function ImageGallery({ images, height = 180, borderRadius = 16 }
         showsHorizontalScrollIndicator={false}
         onScroll={handleScroll}
         scrollEventThrottle={16}
-        renderItem={({ item }) => (
-          <Image
-            source={{ uri: item }}
-            style={{ width, height }}
-            contentFit="cover"
-          />
-        )}
+        renderItem={({ item }) => {
+          const image = <Image source={{ uri: item }} style={{ width, height }} contentFit="cover" />;
+          return onPress ? (
+            <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
+              {image}
+            </TouchableOpacity>
+          ) : image;
+        }}
       />
       {images.length > 1 && (
         <View style={styles.dots}>

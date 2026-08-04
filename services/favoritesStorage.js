@@ -31,3 +31,11 @@ export async function getFavoriteIds() {
 export async function setFavoriteIds(ids) {
   await writeRaw(JSON.stringify(ids));
 }
+
+export async function clearFavoriteIds() {
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined') window.localStorage.removeItem(FAVORITES_KEY);
+    return;
+  }
+  return SecureStore.deleteItemAsync(FAVORITES_KEY);
+}

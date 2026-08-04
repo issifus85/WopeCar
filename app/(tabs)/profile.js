@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { Image } from 'expo-image';
 import { useMemo } from 'react';
 import { useRouter } from 'expo-router';
@@ -9,6 +9,7 @@ import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useInbox } from '../../contexts/InboxContext';
 import { useSettings } from '../../contexts/SettingsContext';
+import { getVendorProfile } from '../../services/vendorCarsApi';
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 
@@ -29,21 +30,44 @@ export default function ProfileScreen() {
   const { totalUnreadCount } = useInbox();
   const { updateSetting } = useSettings();
 
-  const switchToHostMode = () => {
-    updateSetting('appMode', 'vendor');
-    router.push('/vendor');
+  // Gated - a user needs a real vendor row before Vendor Mode opens (see
+  // app/vendor/apply.js). appMode is deliberately not flipped here for a
+  // first-time applicant; apply.js's handleDone flips it once the row is
+  // confirmed created. Signed-out visitors go to /login first, matching the
+  // renter-side account row's own `user ? '/account' : '/login'` pattern.
+  const switchToHostMode = async () => {
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+    try {
+      const vendor = await getVendorProfile();
+      if (vendor) {
+        updateSetting('appMode', 'vendor');
+        router.push('/vendor');
+      } else {
+        router.push('/vendor/apply');
+      }
+    } catch (e) {
+      Alert.alert('Something went wrong', e?.message || 'Please try again.');
+    }
   };
 
   const MENU_ITEMS = useMemo(() => {
-    if (!user?.isSupport) return BASE_MENU_ITEMS;
-    const inboxIndex = BASE_MENU_ITEMS.findIndex((item) => item.route === '/inbox');
-    const staffInboxItem = { label: 'Express Desk', icon: 'chatbubble-ellipses-outline', route: '/staff-inbox' };
-    return [
-      ...BASE_MENU_ITEMS.slice(0, inboxIndex + 1),
-      staffInboxItem,
-      ...BASE_MENU_ITEMS.slice(inboxIndex + 1),
-    ];
-  }, [user?.isSupport]);
+    let items = BASE_MENU_ITEMS;
+    if (user?.isSupport) {
+      const inboxIndex = items.findIndex((item) => item.route === '/inbox');
+      const staffInboxItem = { label: 'Express Desk', icon: 'chatbubble-ellipses-outline', route: '/staff-inbox' };
+      items = [...items.slice(0, inboxIndex + 1), staffInboxItem, ...items.slice(inboxIndex + 1)];
+    }
+    // Admin Panel sits above every other row, including Express Desk - it's
+    // a separate, higher-privilege area (role='admin'), not a support-staff
+    // convenience like Express Desk (is_support).
+    if (user?.role === 'admin') {
+      items = [{ label: 'Admin Panel', icon: 'shield-checkmark-outline', route: '/admin' }, ...items];
+    }
+    return items;
+  }, [user?.isSupport, user?.role]);
 
   return (
     <View style={styles.container}>
@@ -130,7 +154,7 @@ function createStyles(colors) {
       paddingHorizontal: 20,
     },
     scrollContent: {
-      paddingBottom: 32,
+      paddingBottom: 140,
     },
     headerTitle: {
       fontFamily: FONTS.bold,

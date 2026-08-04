@@ -7,6 +7,13 @@
       "runtimeArgs": ["expo", "start", "--web"],
       "port": 8081,
       "autoPort": true
+    },
+    {
+      "name": "wopecar-admin",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "/Users/aljumah/wopecar-admin", "run", "dev"],
+      "port": 3000,
+      "autoPort": true
     }
   ]
 }

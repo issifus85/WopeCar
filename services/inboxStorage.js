@@ -63,3 +63,11 @@ export async function setInboxData(data) {
   };
   await writeRaw(JSON.stringify(trimmed));
 }
+
+export async function clearInboxData() {
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined') window.localStorage.removeItem(INBOX_KEY);
+    return;
+  }
+  return SecureStore.deleteItemAsync(INBOX_KEY);
+}

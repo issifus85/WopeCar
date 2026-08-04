@@ -1,8 +1,12 @@
-// Real email delivery needs a backend endpoint plus a third-party provider
-// (SendGrid, SES, Postmark, etc.) - neither exists in this project. This is
-// the single, clearly-marked seam where that integration plugs in later;
-// nothing above this function should need to change when it does.
-export async function sendEmail({ to, subject, body }) {
-  console.info(`[emailService] Would send email to ${to}: "${subject}" - ${body}`);
-  return Promise.resolve();
+import supabase from './supabase';
+
+// Real Resend delivery via the send-notification-email Edge Function -
+// self-service, always sends to the caller's own email (see that
+// function's header comment), so `to` is accepted for call-site parity
+// with the old stub's signature but isn't actually forwarded; every current
+// caller (contexts/InboxContext.js's notifyBookingEvent) already only ever
+// passes the signed-in user's own address anyway.
+export async function sendEmail({ subject, body }) {
+  const { error } = await supabase.functions.invoke('send-notification-email', { body: { subject, body } });
+  if (error) throw error;
 }

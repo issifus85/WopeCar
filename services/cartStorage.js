@@ -31,3 +31,11 @@ export async function getCartIds() {
 export async function setCartIds(ids) {
   await writeRaw(JSON.stringify(ids));
 }
+
+export async function clearCartIds() {
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined') window.localStorage.removeItem(CART_KEY);
+    return;
+  }
+  return SecureStore.deleteItemAsync(CART_KEY);
+}

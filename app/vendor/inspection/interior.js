@@ -69,7 +69,7 @@ function CheckItem({ label, checked, onToggle, styles, colors }) {
 }
 
 // Vendor Mode variant of app/inspection/interior.js - see mileage.js's
-// header comment for why this is a separate, backend-free copy.
+// header comment for the draft-vs-real-sync split.
 export default function VendorInspectionInteriorScreen() {
   const { bookingId, type } = useLocalSearchParams();
   const router = useRouter();

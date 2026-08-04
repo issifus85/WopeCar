@@ -1,26 +1,17 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { FONTS } from '../../../constants/theme';
-import { useAppTheme } from '../../../contexts/ThemeContext';
+import FloatingTabBar from '../../../components/FloatingTabBar';
 
 // Vendor/Host mode's own bottom tab bar - mirrors app/(tabs)/_layout.js
-// exactly (same tabBar styling conventions), just a separate 5-tab set for
-// the vendor-side screens. "My Fleet" and "Booking History" are
-// deliberately not tabs - they stay reachable via the Dashboard's Quick
-// Actions and Car Management, matching how e.g. Car Detail isn't a renter
-// tab either.
+// exactly (same FloatingTabBar), just a separate 5-tab set for the
+// vendor-side screens. "My Fleet" and "Booking History" are deliberately
+// not tabs - they stay reachable via the Dashboard's Quick Actions and Car
+// Management, matching how e.g. Car Detail isn't a renter tab either.
 export default function VendorTabLayout() {
-  const { colors } = useAppTheme();
-
   return (
     <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.teal,
-        tabBarInactiveTintColor: colors.textSubtle,
-        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
-        tabBarLabelStyle: { fontFamily: FONTS.semiBold, fontSize: 11 },
-      }}
+      tabBar={(props) => <FloatingTabBar {...props} />}
+      screenOptions={{ headerShown: false }}
     >
       <Tabs.Screen
         name="index"

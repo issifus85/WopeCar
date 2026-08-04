@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../../constants/theme';
@@ -8,6 +8,7 @@ import { useCurrency } from '../../../contexts/CurrencyContext';
 import { formatCurrency } from '../../../constants/pricing';
 import { useAddCar } from '../../../contexts/AddCarContext';
 import { useVendor } from '../../../contexts/VendorContext';
+import { uploadCarDocument } from '../../../services/documentsApi';
 import VendorWizardHeader from '../../../components/VendorWizardHeader';
 import CheckoutFooterButton from '../../../components/CheckoutFooterButton';
 import ConfirmModal from '../../../components/ConfirmModal';
@@ -34,32 +35,50 @@ export default function AddCarReviewScreen() {
   const { draft, resetAddCar } = useAddCar();
   const { addCar } = useVendor();
   const [showSubmitted, setShowSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const enabledRegions = draft.offersRegionalAddons
     ? draft.regionalAddons.filter((r) => Number(r.price) > 0)
     : [];
 
-  const handleSubmit = () => {
-    addCar({
-      name: `${draft.make} ${draft.model} ${draft.year}`,
-      make: draft.make,
-      model: draft.model,
-      year: draft.year,
-      drivenBy: draft.drivenBy,
-      location: draft.location,
-      pricePerDay: Number(draft.pricePerDay),
-      regionalAddons: enabledRegions.map((r) => ({ name: r.name, price: Number(r.price), type: 'per_day' })),
-      vettingAppointment: { date: draft.vettingDate, time: draft.vettingTime },
-      description: draft.description.trim(),
-      transmission: draft.transmission,
-      seats: draft.seats ? Number(draft.seats) : null,
-      doors: draft.doors ? Number(draft.doors) : null,
-      baggage: draft.baggage ? Number(draft.baggage) : null,
-      features: draft.features,
-      type: draft.type,
-      vehicleClass: draft.vehicleClass,
-    });
-    setShowSubmitted(true);
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      const car = await addCar({
+        name: `${draft.make} ${draft.model} ${draft.year}`,
+        make: draft.make,
+        model: draft.model,
+        year: draft.year,
+        drivenBy: draft.drivenBy,
+        energySource: draft.energySource,
+        location: draft.location,
+        pricePerDay: Number(draft.pricePerDay),
+        regionalAddons: enabledRegions.map((r) => ({ name: r.name, price: Number(r.price), type: 'per_day' })),
+        vettingAppointment: { date: draft.vettingDate, time: draft.vettingTime },
+        description: draft.description.trim(),
+        transmission: draft.transmission,
+        seats: draft.seats ? Number(draft.seats) : null,
+        doors: draft.doors ? Number(draft.doors) : null,
+        baggage: draft.baggage ? Number(draft.baggage) : null,
+        features: draft.features,
+        type: draft.type,
+        vehicleClass: draft.vehicleClass,
+        insurancePolicyNumber: draft.insurancePolicyNumber.trim(),
+      });
+
+      // Needs the car's own id, so these can only upload after addCar()
+      // above returns - not part of the same insert.
+      await Promise.all([
+        uploadCarDocument(car.id, 'roadworthy', draft.roadworthyDocUri),
+        uploadCarDocument(car.id, 'insurance', draft.insuranceDocUri),
+      ]);
+
+      setShowSubmitted(true);
+    } catch (e) {
+      Alert.alert('Could not submit listing', e?.message || 'Please check your connection and try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleDone = () => {
@@ -79,6 +98,7 @@ export default function AddCarReviewScreen() {
           <SummaryRow label="Type" value={draft.type} styles={styles} />
           <SummaryRow label="Vehicle Class" value={draft.vehicleClass} styles={styles} />
           <SummaryRow label="Driven By" value={draft.drivenBy} styles={styles} />
+          <SummaryRow label="Energy Source" value={draft.energySource} styles={styles} />
           <SummaryRow label="Transmission" value={draft.transmission} styles={styles} />
           <SummaryRow label="Seats" value={draft.seats || 'Not provided'} styles={styles} />
           <SummaryRow label="Doors" value={draft.doors || 'Not provided'} styles={styles} />
@@ -127,6 +147,13 @@ export default function AddCarReviewScreen() {
           <SummaryRow label="Time" value={draft.vettingTime} styles={styles} />
         </View>
 
+        <Text style={[styles.sectionTitle, styles.sectionSpaced]}>Compliance Documents</Text>
+        <View style={styles.card}>
+          <SummaryRow label="Insurance Policy #" value={draft.insurancePolicyNumber || 'Not provided'} styles={styles} />
+          <SummaryRow label="Roadworthy Cert." value={draft.roadworthyDocUri ? 'Attached' : 'Not attached'} styles={styles} />
+          <SummaryRow label="Insurance Document" value={draft.insuranceDocUri ? 'Attached' : 'Not attached'} styles={styles} />
+        </View>
+
         <View style={styles.noticeBox}>
           <Ionicons name="information-circle-outline" size={18} color={colors.warning} />
           <Text style={styles.noticeText}>
@@ -137,7 +164,11 @@ export default function AddCarReviewScreen() {
         </View>
       </ScrollView>
 
-      <CheckoutFooterButton label="Submit for Review" onPress={handleSubmit} />
+      <CheckoutFooterButton
+        label={isSubmitting ? 'Submitting...' : 'Submit for Review'}
+        onPress={handleSubmit}
+        disabled={isSubmitting}
+      />
 
       <ConfirmModal
         visible={showSubmitted}

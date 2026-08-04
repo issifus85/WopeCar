@@ -9,6 +9,7 @@ import { File, Directory, Paths } from 'expo-file-system';
 import { FONTS } from '../../../constants/theme';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 import { useInspection } from '../../../contexts/InspectionContext';
+import { syncInspection, uploadInspectionPhoto } from '../../../services/inspectionsApi';
 import InspectionHeader from '../../../components/InspectionHeader';
 import CheckoutFooterButton from '../../../components/CheckoutFooterButton';
 
@@ -32,10 +33,9 @@ async function persistPhoto(sourceUri, angle) {
   return destination.uri;
 }
 
-// Vendor Mode variant of app/inspection/photos.js - photos are captured and
-// persisted locally exactly the same way; the per-photo upload-as-you-go
-// call is dropped since there's no real backend inspection id to upload
-// against (see mileage.js's header comment).
+// Vendor Mode variant of app/inspection/photos.js - now shares the same
+// real backend as the renter-side wizard (see signatures.js's header
+// comment for why this stopped being a local-only copy).
 export default function VendorInspectionPhotosScreen() {
   const { bookingId, type } = useLocalSearchParams();
   const router = useRouter();
@@ -43,6 +43,27 @@ export default function VendorInspectionPhotosScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { draft, updateDraft } = useInspection();
   const [capturingAngle, setCapturingAngle] = useState(null);
+
+  // Photos upload one-by-one as they're captured (not batched at the end),
+  // matching the renter-side wizard exactly - a mid-wizard connection drop
+  // doesn't lose already-uploaded shots.
+  const ensureServerId = async () => {
+    if (draft.serverId) return draft.serverId;
+    try {
+      const inspection = await syncInspection(bookingId, {
+        type,
+        mileage: draft.mileage,
+        fuelLevel: draft.fuelLevel,
+        checklist: draft.checklist,
+        damagePoints: draft.damagePoints,
+      });
+      updateDraft({ serverId: inspection.id, pendingSync: false });
+      return inspection.id;
+    } catch (e) {
+      updateDraft({ pendingSync: true });
+      return null;
+    }
+  };
 
   const captureAngle = async (angle) => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
@@ -70,10 +91,12 @@ export default function VendorInspectionPhotosScreen() {
         // Ignored - see comment above.
       }
 
-      updateDraft({
-        photos: { ...draft.photos, [angle]: persistedUri },
-        photoMeta: { ...(draft.photoMeta ?? {}), [angle]: { ...coords, capturedAt: new Date().toISOString() } },
-      });
+      updateDraft({ photos: { ...draft.photos, [angle]: persistedUri } });
+
+      const inspectionId = await ensureServerId();
+      if (inspectionId) {
+        await uploadInspectionPhoto(inspectionId, angle, persistedUri, { ...coords, capturedAt: new Date().toISOString() });
+      }
     } finally {
       setCapturingAngle(null);
     }

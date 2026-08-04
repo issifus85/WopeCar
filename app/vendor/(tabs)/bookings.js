@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, FlatList, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../../constants/theme';
 import { useAppTheme } from '../../../contexts/ThemeContext';
@@ -20,24 +20,42 @@ export default function VendorBookingsScreen() {
   const { bookingRequests, respondToBookingRequest, isLoading } = useVendor();
   const [acceptTarget, setAcceptTarget] = useState(null);
   const [declineTarget, setDeclineTarget] = useState(null);
+  const [isResponding, setIsResponding] = useState(false);
 
-  const handleAcceptConfirm = () => {
+  const handleAcceptConfirm = async () => {
+    if (isResponding) return;
     const request = acceptTarget;
-    respondToBookingRequest(request.id, { accept: true });
-    // "Trigger a local notification to admin/support" - this app has no
-    // cross-account push (see PROJECT.md's Known Gaps: push is local-only
-    // everywhere), so a real on-device notification is the closest honest
-    // stand-in within Vendor Mode's current mock-data scope.
-    sendLocalPushNotification({
-      title: 'Booking Accepted',
-      body: `${request.carName} (${request.reference}) was accepted by the vendor.`,
-    });
-    setAcceptTarget(null);
+    setIsResponding(true);
+    try {
+      await respondToBookingRequest(request.id, { accept: true });
+      // Real cross-account notification now happens server-side (the
+      // vendor, client, and admin all get emailed - see
+      // send-booking-confirmation/send-booking-cancelled). This local
+      // notification is just an immediate on-device confirmation cue.
+      sendLocalPushNotification({
+        title: 'Booking Accepted',
+        body: `${request.carName} (${request.reference}) was accepted.`,
+      });
+      setAcceptTarget(null);
+    } catch (e) {
+      Alert.alert('Could not accept booking', e.message || 'Please try again.');
+    } finally {
+      setIsResponding(false);
+    }
   };
 
-  const handleDeclineConfirm = (reason) => {
-    respondToBookingRequest(declineTarget.id, { accept: false, reason });
-    setDeclineTarget(null);
+  const handleDeclineConfirm = async (reason) => {
+    if (isResponding) return;
+    const request = declineTarget;
+    setIsResponding(true);
+    try {
+      await respondToBookingRequest(request.id, { accept: false, reason });
+      setDeclineTarget(null);
+    } catch (e) {
+      Alert.alert('Could not decline booking', e.message || 'Please try again.');
+    } finally {
+      setIsResponding(false);
+    }
   };
 
   if (isLoading) {
@@ -133,6 +151,7 @@ function createStyles(colors) {
     },
     list: {
       padding: 20,
+      paddingBottom: 140,
     },
     card: {
       backgroundColor: colors.surface,

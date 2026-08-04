@@ -31,3 +31,11 @@ export async function getBookings() {
 export async function setBookings(bookings) {
   await writeRaw(JSON.stringify(bookings));
 }
+
+export async function clearBookings() {
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined') window.localStorage.removeItem(BOOKINGS_KEY);
+    return;
+  }
+  return SecureStore.deleteItemAsync(BOOKINGS_KEY);
+}

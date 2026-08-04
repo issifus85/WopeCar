@@ -12,10 +12,10 @@ const EMPTY_VENDOR_DATA = {
   earningsHistory: [],
   bookingRequests: [],
   bookingHistory: [],
-  availabilitySettings: {},
-  blockedDates: {},
-  vendorSettings: {},
-  vendorInspections: {},
+  // Cars are Supabase-native now (see services/vendorCarsApi.js) and never
+  // land in this local blob, so `cars.length === 0` can no longer signal
+  // "first ever load" for the other mock domains below - this flag does.
+  mockDataSeeded: false,
 };
 
 async function readRaw() {
@@ -43,10 +43,7 @@ export async function getVendorData() {
       earningsHistory: Array.isArray(parsed.earningsHistory) ? parsed.earningsHistory : [],
       bookingRequests: Array.isArray(parsed.bookingRequests) ? parsed.bookingRequests : [],
       bookingHistory: Array.isArray(parsed.bookingHistory) ? parsed.bookingHistory : [],
-      availabilitySettings: parsed.availabilitySettings && typeof parsed.availabilitySettings === 'object' ? parsed.availabilitySettings : {},
-      blockedDates: parsed.blockedDates && typeof parsed.blockedDates === 'object' ? parsed.blockedDates : {},
-      vendorSettings: parsed.vendorSettings && typeof parsed.vendorSettings === 'object' ? parsed.vendorSettings : {},
-      vendorInspections: parsed.vendorInspections && typeof parsed.vendorInspections === 'object' ? parsed.vendorInspections : {},
+      mockDataSeeded: !!parsed.mockDataSeeded,
     };
   } catch {
     return { ...EMPTY_VENDOR_DATA };
@@ -55,4 +52,12 @@ export async function getVendorData() {
 
 export async function setVendorData(data) {
   await writeRaw(JSON.stringify(data));
+}
+
+export async function clearVendorData() {
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined') window.localStorage.removeItem(VENDOR_KEY);
+    return;
+  }
+  return SecureStore.deleteItemAsync(VENDOR_KEY);
 }
