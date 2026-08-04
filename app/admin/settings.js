@@ -34,6 +34,15 @@ const CANCELLATION_KEYS = [
   { key: 'cancellation_partial_refund_percentage', label: 'Partial Refund — Percentage (0–1)' },
 ];
 
+// Feeds constants/currencies.js's CURRENCY_META (via services/currencyApi.js)
+// everywhere formatCurrency() converts a GHS price for display - real and
+// live, not just stored. GHS itself has no rate row here since it's the
+// base currency everything is stored in; its rate is always exactly 1.
+const CURRENCY_KEYS = [
+  { key: 'currency_rate_usd', label: 'USD Exchange Rate (GHS per $1)' },
+  { key: 'currency_rate_eur', label: 'EUR Exchange Rate (GHS per €1)' },
+];
+
 const CONTACT_KEYS = [
   { key: 'support_phone_1', label: 'Primary Support Phone' },
   { key: 'support_phone_2', label: 'Secondary Support Phone' },
@@ -122,7 +131,7 @@ export default function AdminSettingsScreen() {
   };
 
   const saveEdit = async () => {
-    const isNumeric = [...BUSINESS_KEYS, ...CANCELLATION_KEYS].some((k) => k.key === editingKey);
+    const isNumeric = [...BUSINESS_KEYS, ...CANCELLATION_KEYS, ...CURRENCY_KEYS].some((k) => k.key === editingKey);
     const value = isNumeric ? Number(editValue) : editValue;
     setIsSaving(true);
     try {
@@ -267,6 +276,26 @@ export default function AdminSettingsScreen() {
         <View style={styles.section}>
           <SectionHeading>Cancellation Policy</SectionHeading>
           {CANCELLATION_KEYS.map((meta) => (
+            <SettingRow
+              key={meta.key}
+              label={meta.label}
+              value={settingsByKey[meta.key] ?? '—'}
+              onEdit={() => startEdit(meta.key)}
+              styles={styles}
+              colors={colors}
+            />
+          ))}
+        </View>
+
+        <View style={styles.section}>
+          <SectionHeading>Currency Rates</SectionHeading>
+          <View style={styles.row}>
+            <View style={styles.rowTextWrap}>
+              <Text style={styles.rowLabel}>Ghana Cedis (GHS)</Text>
+              <Text style={styles.rowValue}>Base currency — always 1, not editable</Text>
+            </View>
+          </View>
+          {CURRENCY_KEYS.map((meta) => (
             <SettingRow
               key={meta.key}
               label={meta.label}
@@ -436,10 +465,10 @@ export default function AdminSettingsScreen() {
 
       <EditFieldModal
         visible={!!editingKey}
-        label={[...BUSINESS_KEYS, ...CONTACT_KEYS, ...CANCELLATION_KEYS].find((k) => k.key === editingKey)?.label}
+        label={[...BUSINESS_KEYS, ...CONTACT_KEYS, ...CANCELLATION_KEYS, ...CURRENCY_KEYS].find((k) => k.key === editingKey)?.label}
         value={editValue}
         onChangeValue={setEditValue}
-        numeric={[...BUSINESS_KEYS, ...CANCELLATION_KEYS].some((k) => k.key === editingKey)}
+        numeric={[...BUSINESS_KEYS, ...CANCELLATION_KEYS, ...CURRENCY_KEYS].some((k) => k.key === editingKey)}
         isSaving={isSaving}
         onCancel={() => setEditingKey(null)}
         onSave={saveEdit}

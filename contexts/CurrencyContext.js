@@ -1,20 +1,12 @@
 import { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { getCurrencies } from '../services/currencyApi';
+import { CURRENCY_META } from '../constants/currencies';
 import { useSettings } from './SettingsContext';
 
-// Matches constants/pricing.js's old hardcoded "GHS 1,234" output exactly,
-// so the app looks identical while the backend endpoint hasn't been
-// deployed yet (new controller, no migration - but still requires the
-// user's usual cPanel re-upload) or if the request fails for any reason.
-const FALLBACK_CURRENCY = {
-  code: 'GHS',
-  name: 'Ghana Cedis',
-  symbol: 'GHS',
-  rate: 1,
-  isMain: true,
-  format: 'left_space',
-  decimals: 0,
-};
+// Used only until the real Supabase fetch below resolves, or if it fails -
+// GHS at rate 1 is always correct since it's the base currency every stored
+// price is already in.
+const FALLBACK_CURRENCY = { ...CURRENCY_META.GHS, rate: 1 };
 
 const CurrencyContext = createContext(null);
 
