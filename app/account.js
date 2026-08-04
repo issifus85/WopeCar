@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   StyleSheet, Text, View, TextInput, TouchableOpacity, ActivityIndicator,
-  ScrollView, Alert, Share, Pressable,
+  ScrollView, Alert, Share, Pressable, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -222,6 +222,7 @@ export default function AccountScreen() {
 
   return (
     <View style={styles.container}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.headerCard}>
           <TouchableOpacity onPress={handlePickAvatar} disabled={isUploadingAvatar} style={styles.avatarWrap}>
@@ -363,6 +364,7 @@ export default function AccountScreen() {
           <Text style={styles.signOutButtonText}>Log Out</Text>
         </TouchableOpacity>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {showPhotoSourceModal && (
         // Deliberately not RN's <Modal> - that mounts its content in a
@@ -403,6 +405,9 @@ function createStyles(colors) {
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  flex: {
+    flex: 1,
   },
   scrollContent: {
     padding: 16,

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
@@ -146,6 +146,7 @@ export default function CheckoutSummaryScreen() {
     <View style={styles.container}>
       <CheckoutHeader title="Cost Breakdown" step={4} />
 
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.carName}>{car.name}</Text>
 
@@ -262,6 +263,7 @@ export default function CheckoutSummaryScreen() {
       </ScrollView>
 
       <CheckoutFooterButton label="Proceed" onPress={handleContinue} />
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -271,6 +273,9 @@ function createStyles(colors) {
   container: {
     flex: 1,
     backgroundColor: colors.surface,
+  },
+  flex: {
+    flex: 1,
   },
   scrollContent: {
     padding: 20,

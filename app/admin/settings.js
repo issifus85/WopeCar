@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Switch, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Switch, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
@@ -242,6 +242,7 @@ export default function AdminSettingsScreen() {
 
   return (
     <View style={styles.container}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {!!error && <Text style={styles.errorText}>{error}</Text>}
 
@@ -462,6 +463,7 @@ export default function AdminSettingsScreen() {
           {isSaving && <ActivityIndicator color={colors.teal} style={{ marginTop: 8 }} />}
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       <EditFieldModal
         visible={!!editingKey}
@@ -502,7 +504,7 @@ function EditFieldModal({ visible, label, value, onChangeValue, numeric, isSavin
   if (!visible) return null;
 
   return (
-    <View style={styles.modalBackdrop}>
+    <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onCancel} />
       <View style={styles.modalSheet}>
         <Text style={styles.modalTitle}>{label}</Text>
@@ -522,7 +524,7 @@ function EditFieldModal({ visible, label, value, onChangeValue, numeric, isSavin
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -531,6 +533,9 @@ function createStyles(colors) {
     container: {
       flex: 1,
       backgroundColor: colors.background,
+    },
+    flex: {
+      flex: 1,
     },
     loadingWrap: {
       flex: 1,

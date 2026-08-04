@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Image, Alert } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Image, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -84,6 +84,7 @@ export default function CheckoutFormScreen() {
     <View style={styles.container}>
       <CheckoutHeader title="Booking Details" step={5} />
 
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.sectionTitle}>Your Information</Text>
 
@@ -122,6 +123,7 @@ export default function CheckoutFormScreen() {
       </ScrollView>
 
       <CheckoutFooterButton label="Continue" onPress={handleContinue} disabled={!isValid} />
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -131,6 +133,9 @@ function createStyles(colors) {
     container: {
       flex: 1,
       backgroundColor: colors.surface,
+    },
+    flex: {
+      flex: 1,
     },
     scrollContent: {
       padding: 20,

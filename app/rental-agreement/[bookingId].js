@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Switch, Alert } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Switch, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
@@ -290,6 +290,7 @@ export default function RentalAgreementScreen() {
         <Text style={styles.headerTitle}>Rental Agreement</Text>
       </View>
 
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} scrollEnabled={!scrollLocked}>
         <TouchableOpacity style={styles.obligationsLink} onPress={() => setIsObligationsVisible(true)}>
           <Ionicons name="document-text-outline" size={18} color={colors.teal} />
@@ -434,6 +435,7 @@ export default function RentalAgreementScreen() {
         onPress={handleSubmit}
         disabled={!canSubmit || isSubmitting}
       />
+      </KeyboardAvoidingView>
 
       <ObligationsModal
         visible={isObligationsVisible}
@@ -449,6 +451,9 @@ function createStyles(colors) {
     container: {
       flex: 1,
       backgroundColor: colors.surface,
+    },
+    flex: {
+      flex: 1,
     },
     header: {
       flexDirection: 'row',

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
@@ -77,6 +77,7 @@ export default function AddCarVettingScreen() {
     <View style={styles.container}>
       <VendorWizardHeader title="Schedule Photos & Vetting" step={4} />
 
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.infoBox}>
           <Ionicons name="camera-outline" size={18} color={colors.teal} />
@@ -193,6 +194,7 @@ export default function AddCarVettingScreen() {
       </ScrollView>
 
       <CheckoutFooterButton label="Continue" onPress={handleContinue} disabled={!isValid} />
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -202,6 +204,9 @@ function createStyles(colors) {
     container: {
       flex: 1,
       backgroundColor: colors.background,
+    },
+    flex: {
+      flex: 1,
     },
     scrollContent: {
       padding: 20,

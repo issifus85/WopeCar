@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, FlatList, RefreshControl, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, FlatList, RefreshControl, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
@@ -104,6 +104,7 @@ export default function AdminUsersScreen() {
 
   return (
     <View style={styles.container}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={styles.searchWrap}>
         <Ionicons name="search" size={18} color={colors.textSubtle} />
         <TextInput
@@ -138,6 +139,7 @@ export default function AdminUsersScreen() {
           ListFooterComponent={isLoadingMore ? <ActivityIndicator color={colors.teal} style={styles.footerLoading} /> : null}
         />
       )}
+      </KeyboardAvoidingView>
 
       <UserDetailModal
         visible={!!selectedUserId}
@@ -154,6 +156,9 @@ function createStyles(colors) {
     container: {
       flex: 1,
       backgroundColor: colors.background,
+    },
+    flex: {
+      flex: 1,
     },
     searchWrap: {
       flexDirection: 'row',

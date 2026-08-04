@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../../constants/theme';
@@ -95,6 +95,7 @@ export default function VendorInspectionInteriorScreen() {
     <View style={styles.container}>
       <InspectionHeader title="Vehicle Checklist" step={3} />
 
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {SECTIONS.map((section) => (
           <View key={section.title}>
@@ -125,6 +126,7 @@ export default function VendorInspectionInteriorScreen() {
       </ScrollView>
 
       <CheckoutFooterButton label="Continue" onPress={handleContinue} />
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -134,6 +136,9 @@ function createStyles(colors) {
     container: {
       flex: 1,
       backgroundColor: colors.surface,
+    },
+    flex: {
+      flex: 1,
     },
     scrollContent: {
       padding: 20,

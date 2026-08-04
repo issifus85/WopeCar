@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
@@ -62,6 +62,7 @@ export default function InspectionMileageScreen() {
     <View style={styles.container}>
       <InspectionHeader title={type === 'post' ? 'Post-Rental Inspection' : 'Pre-Rental Inspection'} step={1} />
 
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.sectionTitle}>Mileage</Text>
         <View style={styles.field}>
@@ -91,6 +92,7 @@ export default function InspectionMileageScreen() {
       </ScrollView>
 
       <CheckoutFooterButton label="Continue" onPress={handleContinue} disabled={!isValid} />
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -100,6 +102,9 @@ function createStyles(colors) {
     container: {
       flex: 1,
       backgroundColor: colors.surface,
+    },
+    flex: {
+      flex: 1,
     },
     scrollContent: {
       padding: 20,
