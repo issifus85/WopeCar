@@ -26,13 +26,13 @@ export default function HomeScreen() {
   const [error, setError] = useState(null);
   const [searchText, setSearchText] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [viewMode, setViewMode] = useState('list');
+  const [viewMode, setViewMode] = useState('tile');
   const [isDateModalVisible, setIsDateModalVisible] = useState(false);
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const searchScale = useRef(new Animated.Value(1)).current;
-  const [sortBy, setSortBy] = useState('special');
+  const [sortBy, setSortBy] = useState('recommended');
   const [isSortModalVisible, setIsSortModalVisible] = useState(false);
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
   const [drivenBy, setDrivenBy] = useState([]);
@@ -66,7 +66,9 @@ export default function HomeScreen() {
     // No list-level date-availability filter yet against Supabase (see
     // services/carsApi.js's fetchCars doc comment) - startDate/endDate stay
     // selected for display and for the checkout flow, just not sent here.
-    if (sortBy && sortBy !== 'special') {
+    // 'recommended' is real now (cars.is_recommended), so it's sent like
+    // every other sort rather than treated as a no-op default.
+    if (sortBy) {
       params.orderBy = sortBy;
     }
     if (drivenBy.length) {

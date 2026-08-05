@@ -54,7 +54,8 @@ function normalizeCar(raw) {
     doors: raw.doors ?? undefined,
     baggage: raw.baggage ?? undefined,
     vehicleClass: raw.vehicle_class ?? undefined,
-    isFeatured: undefined, // no equivalent column - not read by any current screen
+    isRecommended: !!raw.is_recommended,
+    createdAt: raw.created_at,
     isAvailable: raw.status === 'active',
     image: raw.images?.[0] ?? null,
     bannerImage: raw.images?.[0] ?? null,
@@ -138,9 +139,16 @@ async function attachRatingsAndSortByRating(cars) {
 /**
  * Supported filters: type (string or string[]), driveType (string or
  * string[]), vehicleClass (string or string[]), minPrice, maxPrice, orderBy
- * ('price_low_high' | 'price_high_low' | 'rate_high_low' - the last one
- * sorts by real review data now, see attachRatingsAndSortByRating; 'featured'
- * still has no backing column and stays a no-op), limit, page.
+ * ('price_low_high' | 'price_high_low' | 'rate_high_low' - sorts by real
+ * review data, see attachRatingsAndSortByRating; 'recommended' - admin-
+ * curated via cars.is_recommended, see app/admin/car/edit/[id].js, tagged
+ * cars first, newest-first tiebreak; 'latest' - newest first by
+ * created_at, real column, no tagging needed), limit, page.
+ *
+ * 'recommended' and 'latest' both order the *whole* list rather than
+ * filtering down to just the tagged/recent subset - a "sort" that could
+ * return an empty or tiny list whenever nothing currently qualifies would
+ * be a worse experience than just deprioritizing the rest.
  *
  * No list-level date-availability filter (Laravel's start/end params) -
  * no Supabase equivalent exists yet; ships without it, same as noted in the
@@ -164,6 +172,8 @@ export async function fetchCars(params = {}) {
 
   if (params.orderBy === 'price_low_high') query = query.order('price_per_day', { ascending: true });
   else if (params.orderBy === 'price_high_low') query = query.order('price_per_day', { ascending: false });
+  else if (params.orderBy === 'recommended') query = query.order('is_recommended', { ascending: false }).order('created_at', { ascending: false });
+  else if (params.orderBy === 'latest') query = query.order('created_at', { ascending: false });
 
   if (params.limit) query = query.limit(params.limit);
 

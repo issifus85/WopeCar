@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { useCurrency } from '../contexts/CurrencyContext';
-import { formatCurrency, isBlanketDiscountActive, applyBlanketDiscount } from '../constants/pricing';
+import { formatCurrency, isBlanketDiscountActive, applyBlanketDiscount, isCarNew } from '../constants/pricing';
 
 export default function CarListCard({ car, onPress }) {
   const { colors } = useAppTheme();
@@ -16,13 +16,20 @@ export default function CarListCard({ car, onPress }) {
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress}>
-      {car.image ? (
-        <Image source={{ uri: car.image }} style={styles.image} contentFit="cover" />
-      ) : (
-        <View style={[styles.image, styles.imagePlaceholder]}>
-          <Text style={styles.imagePlaceholderText}>🚗</Text>
-        </View>
-      )}
+      <View>
+        {car.image ? (
+          <Image source={{ uri: car.image }} style={styles.image} contentFit="cover" />
+        ) : (
+          <View style={[styles.image, styles.imagePlaceholder]}>
+            <Text style={styles.imagePlaceholderText}>🚗</Text>
+          </View>
+        )}
+        {isCarNew(car.createdAt) && (
+          <View style={styles.newBadge}>
+            <Text style={styles.newBadgeText}>New</Text>
+          </View>
+        )}
+      </View>
 
       <View style={styles.info}>
         <View style={styles.nameRow}>
@@ -102,6 +109,22 @@ function createStyles(colors) {
     },
     imagePlaceholderText: {
       fontSize: 32,
+    },
+    newBadge: {
+      position: 'absolute',
+      top: 8,
+      left: 8,
+      backgroundColor: colors.teal,
+      paddingHorizontal: 7,
+      paddingVertical: 3,
+      borderRadius: 6,
+    },
+    newBadgeText: {
+      fontFamily: FONTS.bold,
+      fontSize: 9,
+      color: colors.white,
+      textTransform: 'uppercase',
+      letterSpacing: 0.3,
     },
     info: {
       flex: 1,

@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { useCurrency } from '../contexts/CurrencyContext';
-import { formatCurrency, isBlanketDiscountActive, applyBlanketDiscount } from '../constants/pricing';
+import { formatCurrency, isBlanketDiscountActive, applyBlanketDiscount, isCarNew } from '../constants/pricing';
 import ImageGallery from './ImageGallery';
 
 export default function CarTileCard({ car, onPress }) {
@@ -16,7 +16,14 @@ export default function CarTileCard({ car, onPress }) {
 
   return (
     <View style={styles.card}>
-      <ImageGallery images={car.gallery} height={190} borderRadius={0} onPress={onPress} />
+      <View style={styles.imageWrap}>
+        <ImageGallery images={car.gallery} height={190} borderRadius={0} onPress={onPress} />
+        {isCarNew(car.createdAt) && (
+          <View style={styles.newBadge} pointerEvents="none">
+            <Text style={styles.newBadgeText}>New</Text>
+          </View>
+        )}
+      </View>
 
       <TouchableOpacity style={styles.info} onPress={onPress} activeOpacity={0.9}>
         <View style={styles.nameRow}>
@@ -86,6 +93,25 @@ function createStyles(colors) {
     },
     info: {
       padding: 14,
+    },
+    imageWrap: {
+      position: 'relative',
+    },
+    newBadge: {
+      position: 'absolute',
+      top: 10,
+      left: 10,
+      backgroundColor: colors.teal,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+    },
+    newBadgeText: {
+      fontFamily: FONTS.bold,
+      fontSize: 10,
+      color: colors.white,
+      textTransform: 'uppercase',
+      letterSpacing: 0.3,
     },
     nameRow: {
       flexDirection: 'row',

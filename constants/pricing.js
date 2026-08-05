@@ -85,6 +85,40 @@ export function getSelfDriveDeliveryFee() {
   return cachedSelfDriveDeliveryFee;
 }
 
+// Admin > Settings > Business Rules > "Latest Badge Window" - how many days
+// after a car is added it still shows the "New" badge and gets prioritized
+// by the Home screen's "Latest" sort. Same stale-while-revalidate pattern as
+// getSelfDriveDeliveryFee() above - see that function's comment.
+export const LATEST_BADGE_DAYS = 14;
+
+let cachedLatestBadgeDays = LATEST_BADGE_DAYS;
+let hasFetchedLatestBadgeDays = false;
+
+export function getLatestBadgeDays() {
+  if (!hasFetchedLatestBadgeDays) {
+    hasFetchedLatestBadgeDays = true;
+    import('../services/supabase')
+      .then(({ getAppSetting }) => getAppSetting('latest_badge_days'))
+      .then((value) => {
+        if (typeof value === 'number' && value >= 0) cachedLatestBadgeDays = value;
+      })
+      .catch(() => {
+        // Keep the hardcoded default - never let a settings-fetch failure
+        // hide/show the badge incorrectly.
+      });
+  }
+  return cachedLatestBadgeDays;
+}
+
+// True if `createdAt` (a car's created_at) is still within the configured
+// "New" badge window - shared by CarListCard/CarTileCard's badge and
+// nothing else, so it lives here next to the setting it reads.
+export function isCarNew(createdAt) {
+  if (!createdAt) return false;
+  const ageMs = Date.now() - new Date(createdAt).getTime();
+  return ageMs >= 0 && ageMs <= getLatestBadgeDays() * 24 * 60 * 60 * 1000;
+}
+
 const SECURITY_DEPOSIT_THRESHOLD = 2000;
 const SECURITY_DEPOSIT_FLAT = 500;
 const SECURITY_DEPOSIT_PERCENT = 0.25;

@@ -22,6 +22,7 @@ const BUSINESS_KEYS = [
   { key: 'min_booking_days_self_drive', label: 'Min Booking Days — Self-Drive' },
   { key: 'min_booking_days_chauffeur', label: 'Min Booking Days — Chauffeur' },
   { key: 'booking_window_months', label: 'Booking Window (months)' },
+  { key: 'latest_badge_days', label: 'Latest Badge Window (days)' },
 ];
 
 // Enforced for real by the cancel-booking Edge Function (used by this

@@ -83,6 +83,7 @@ export default function AdminEditCarScreen() {
   const [pricePerDay, setPricePerDay] = useState('');
   const [regionalAddons, setRegionalAddons] = useState([]);
   const [offersRegionalAddons, setOffersRegionalAddons] = useState(false);
+  const [isRecommended, setIsRecommended] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -109,6 +110,7 @@ export default function AdminEditCarScreen() {
         const addons = (row.regional_addons ?? []).map((a) => ({ name: a.name, price: String(a.price ?? ''), type: a.type }));
         setRegionalAddons(addons);
         setOffersRegionalAddons(addons.length > 0);
+        setIsRecommended(!!row.is_recommended);
       })
       .catch((e) => !cancelled && setLoadError(e.message || 'Could not load this car.'))
       .finally(() => !cancelled && setIsLoading(false));
@@ -186,6 +188,7 @@ export default function AdminEditCarScreen() {
         location,
         pricePerDay: price,
         regionalAddons: enabledRegions.map((r) => ({ name: r.name, price: Number(r.price), type: 'per_day' })),
+        isRecommended,
       });
       router.back();
     } catch (e) {
@@ -404,6 +407,19 @@ export default function AdminEditCarScreen() {
               placeholder="e.g. 400"
               placeholderTextColor={colors.textSubtle}
               keyboardType="numeric"
+            />
+          </View>
+
+          <View style={[styles.masterRow, styles.sectionSpaced]}>
+            <View style={styles.masterLabelWrap}>
+              <Text style={styles.masterLabel}>Recommended</Text>
+              <Text style={styles.masterSubtitle}>Prioritizes this car when renters sort Home by "Recommended". Admin-only - vendors can't set this themselves.</Text>
+            </View>
+            <Switch
+              value={isRecommended}
+              onValueChange={setIsRecommended}
+              trackColor={{ false: colors.disabled, true: colors.teal }}
+              thumbColor={colors.white}
             />
           </View>
 

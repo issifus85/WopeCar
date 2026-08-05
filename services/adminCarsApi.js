@@ -10,7 +10,7 @@ const CAR_SELECT = `
   energy_source, price_per_day, location, region_id, description, features, images, status,
   vehicle_class, doors, baggage, cancellation_policy, created_at, insurance_policy_number,
   discount_enabled, discount_type, discount_value, discount_starts_at, discount_ends_at,
-  length_of_stay_discounts,
+  length_of_stay_discounts, is_recommended,
   vendors ( id, business_name, user_id, users ( full_name, email, phone ) ),
   regions ( name )
 `;
@@ -103,6 +103,7 @@ function carFieldsToRow(fields) {
   if ('discountStartsAt' in fields) row.discount_starts_at = fields.discountStartsAt;
   if ('discountEndsAt' in fields) row.discount_ends_at = fields.discountEndsAt;
   if ('lengthOfStayDiscounts' in fields) row.length_of_stay_discounts = fields.lengthOfStayDiscounts ?? [];
+  if ('isRecommended' in fields) row.is_recommended = fields.isRecommended;
   return row;
 }
 
