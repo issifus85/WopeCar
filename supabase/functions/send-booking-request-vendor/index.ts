@@ -68,7 +68,7 @@ function buildEmailHtml({ booking, car, renterFirstName }: any) {
         </table>
 
         <div style="text-align:center;">
-          <span style="display:inline-block;background:#154B59;color:#ffffff;font-weight:bold;font-size:14px;padding:12px 28px;border-radius:10px;">Review in the WopeCar Vendor app</span>
+          <a href="wopecar://vendor/bookings" style="display:inline-block;background:#154B59;color:#ffffff;font-weight:bold;font-size:14px;padding:12px 28px;border-radius:10px;text-decoration:none;">Review in the WopeCar Vendor app</a>
         </div>
       </div>
       <div style="background:#f5f5f5;padding:16px 24px;text-align:center;">

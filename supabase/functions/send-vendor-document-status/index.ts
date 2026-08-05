@@ -51,7 +51,7 @@ function buildEmailHtml({ firstName, docLabel, verified, reason, supportEmail }:
         ${reason ? `<div style="background:#f5f5f5;border-radius:12px;padding:14px 16px;font-size:13px;color:#5b6b6c;"><strong style="color:#154B59;">Reason:</strong> ${escapeHtml(reason)}</div>` : ''}
         ${!verified ? `
         <div style="text-align:center;margin-top:24px;">
-          <span style="display:inline-block;background:#154B59;color:#ffffff;font-weight:bold;font-size:14px;padding:12px 28px;border-radius:10px;">Re-upload in the app</span>
+          <a href="wopecar://vendor/document-verification" style="display:inline-block;background:#154B59;color:#ffffff;font-weight:bold;font-size:14px;padding:12px 28px;border-radius:10px;text-decoration:none;">Re-upload in the app</a>
         </div>` : ''}
       </div>
       <div style="background:#f5f5f5;padding:16px 24px;text-align:center;">

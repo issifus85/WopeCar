@@ -26,7 +26,18 @@ function escapeHtml(value: unknown) {
   return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
 }
 
-function buildEmailHtml({ firstName, carName }: { firstName: string; carName: string }) {
+// wopecar:// is this app's registered custom scheme (app.json's "scheme")
+// - Expo Router maps it straight to app/review/[bookingId].js with no extra
+// linking config needed. Only resolves if WopeCar is actually installed on
+// the device the link is tapped from (true for every real tester so far,
+// same devices used to book the trip in the first place) - there's no
+// https:// fallback/App-Store-redirect page yet for someone without the
+// app installed, unlike the Paystack callback bridge (which exists only
+// because Paystack's own hosted checkout requires a real http(s) redirect
+// URL, a different constraint). Worth revisiting once this ships to the
+// App Store/Play Store and a real universal link can be set up.
+function buildEmailHtml({ firstName, carName, bookingId }: { firstName: string; carName: string; bookingId: string }) {
+  const reviewUrl = `wopecar://review/${bookingId}`;
   return `
   <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#f5f5f5;padding:32px 16px;">
     <div style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;">
@@ -40,7 +51,7 @@ function buildEmailHtml({ firstName, carName }: { firstName: string; carName: st
           <p style="font-size:14px;color:#666666;margin:0;">Hi ${escapeHtml(firstName)}, your trip with ${escapeHtml(carName)} is complete. Your review helps other renters choose with confidence.</p>
         </div>
         <div style="text-align:center;margin-top:8px;">
-          <span style="display:inline-block;background:#154B59;color:#ffffff;font-weight:bold;font-size:14px;padding:12px 28px;border-radius:10px;">Rate your trip in the app</span>
+          <a href="${reviewUrl}" style="display:inline-block;background:#154B59;color:#ffffff;font-weight:bold;font-size:14px;padding:12px 28px;border-radius:10px;text-decoration:none;">Rate your trip in the app</a>
         </div>
         <p style="font-size:12px;color:#999999;text-align:center;margin-top:16px;">Find this trip under Bookings &rarr; Completed to leave your review.</p>
       </div>
@@ -102,7 +113,7 @@ Deno.serve(async (req) => {
     }
 
     const firstName = (renterUser.full_name || '').trim().split(/\s+/)[0] || 'there';
-    const html = buildEmailHtml({ firstName, carName: booking.cars?.name ?? 'your car' });
+    const html = buildEmailHtml({ firstName, carName: booking.cars?.name ?? 'your car', bookingId });
 
     const resendRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
