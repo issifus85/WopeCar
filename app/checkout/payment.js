@@ -10,7 +10,7 @@ import { formatCurrency, calculateRentalPricing, calculateSecurityDeposit, getSe
 import { fetchCarById } from '../../services/carsApi';
 import { getDatePriceMap } from '../../services/carPricingApi';
 import { redeemPromoCode } from '../../services/promoApi';
-import { createBooking, updateBooking as confirmSupabaseBooking, uploadBookingDocument, markDatesBooked, sendBookingConfirmationEmail, sendBookingRequestVendorEmail } from '../../services/supabaseApi';
+import { createBooking, updateBooking as confirmSupabaseBooking, uploadBookingDocument, linkExistingBookingDocument, markDatesBooked, sendBookingConfirmationEmail, sendBookingRequestVendorEmail } from '../../services/supabaseApi';
 import { payWithPaystack } from '../../services/paystackCheckout';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCheckout } from '../../contexts/CheckoutContext';
@@ -150,7 +150,12 @@ export default function CheckoutPaymentScreen() {
       // Best-effort, in parallel: a failed upload shouldn't block the
       // booking itself - same "local state/booking always wins, best-effort
       // sync" spirit as the rest of this app. Uploaded under the booking's
-      // own id now that one exists.
+      // own id now that one exists. Each value is either a fresh local
+      // picker URI (string - genuinely new, needs uploadBookingDocument) or
+      // { existing: true, filePath } (already on file from a previous
+      // booking/the Documents Hub - checkout/form.js's auto-populate, just
+      // links this booking to the existing file via linkExistingBookingDocument
+      // rather than re-uploading the same bytes).
       await Promise.all(
         [
           draft.licenseFront && ['license_front', draft.licenseFront],
@@ -158,7 +163,11 @@ export default function CheckoutPaymentScreen() {
           draft.proofOfAddress && ['proof_of_address', draft.proofOfAddress],
         ]
           .filter(Boolean)
-          .map(([type, uri]) => uploadBookingDocument(user.id, reserved.id, type, uri).catch(() => {}))
+          .map(([type, value]) => (
+            typeof value === 'string'
+              ? uploadBookingDocument(user.id, reserved.id, type, value).catch(() => {})
+              : linkExistingBookingDocument(user.id, reserved.id, type, value.filePath).catch(() => {})
+          ))
       );
 
       const reference = await payWithPaystack(draft.totalCost);

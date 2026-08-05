@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Modal, Pressable, ScrollView, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Modal, Pressable, ScrollView, ActivityIndicator, Image, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
@@ -7,9 +7,15 @@ import BadgeStatus from './BadgeStatus';
 import ConfirmModal from '../ConfirmModal';
 import OptionPickerModal from '../OptionPickerModal';
 import { getUserDetail, verifyUser, suspendUser, changeUserRole } from '../../services/adminUsersApi';
+import { getUserVerificationDocuments } from '../../services/adminDocumentsApi';
 
 const ROLE_TONE = { admin: 'success', vendor: 'warning', renter: 'neutral', suspended: 'error' };
 const ROLE_OPTIONS = ['renter', 'vendor', 'admin'];
+const VERIFICATION_DOC_LABELS = [
+  { type: 'license_front', label: "License - Front" },
+  { type: 'license_back', label: "License - Back" },
+  { type: 'proof_of_address', label: 'Proof of Address' },
+];
 
 function Field({ label, value, styles }) {
   if (!value) return null;
@@ -31,6 +37,8 @@ export default function UserDetailModal({ visible, userId, onClose, onChanged })
   const [pendingAction, setPendingAction] = useState(null); // 'verify' | 'suspend' | null
   const [isRolePickerVisible, setIsRolePickerVisible] = useState(false);
   const [error, setError] = useState(null);
+  const [docs, setDocs] = useState(null);
+  const [isLoadingDocs, setIsLoadingDocs] = useState(true);
 
   useEffect(() => {
     if (!visible || !userId) return;
@@ -40,6 +48,12 @@ export default function UserDetailModal({ visible, userId, onClose, onChanged })
       .then(setDetail)
       .catch((e) => setError(e.message || 'Could not load user.'))
       .finally(() => setIsLoading(false));
+
+    setIsLoadingDocs(true);
+    getUserVerificationDocuments(userId)
+      .then(setDocs)
+      .catch(() => setDocs({}))
+      .finally(() => setIsLoadingDocs(false));
   }, [visible, userId]);
 
   const runAction = async (action) => {
@@ -103,8 +117,38 @@ export default function UserDetailModal({ visible, userId, onClose, onChanged })
               <Field label="Phone" value={detail.phone} styles={styles} />
               <Field label="Address" value={[detail.address, detail.city, detail.country].filter(Boolean).join(', ')} styles={styles} />
               <Field label="Driver's License" value={detail.driver_license_number} styles={styles} />
+              <Field label="License Expiry" value={detail.driver_license_expiry} styles={styles} />
+              <Field label="License Country" value={detail.driver_license_country} styles={styles} />
               <Field label="License Verification" value={detail.license_verification_status} styles={styles} />
               <Field label="Joined" value={detail.created_at ? new Date(detail.created_at).toLocaleDateString() : null} styles={styles} />
+
+              <Text style={styles.docsSectionTitle}>Verification Documents</Text>
+              {isLoadingDocs ? (
+                <ActivityIndicator color={colors.teal} style={{ marginVertical: 8 }} />
+              ) : (
+                <View style={styles.docRow}>
+                  {VERIFICATION_DOC_LABELS.map(({ type, label }) => {
+                    const doc = docs?.[type];
+                    return (
+                      <TouchableOpacity
+                        key={type}
+                        style={styles.docTile}
+                        disabled={!doc}
+                        onPress={() => doc && Linking.openURL(doc.signedUrl)}
+                      >
+                        {doc ? (
+                          <Image source={{ uri: doc.signedUrl }} style={styles.docThumbnail} />
+                        ) : (
+                          <View style={[styles.docThumbnail, styles.docThumbnailEmpty]}>
+                            <Ionicons name="document-outline" size={18} color={colors.textSubtle} />
+                          </View>
+                        )}
+                        <Text style={styles.docTileLabel} numberOfLines={1}>{label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
 
               {!!error && <Text style={styles.errorText}>{error}</Text>}
 
@@ -228,6 +272,42 @@ function createStyles(colors) {
     },
     field: {
       marginBottom: 12,
+    },
+    docsSectionTitle: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 13,
+      color: colors.textPrimary,
+      marginTop: 4,
+      marginBottom: 10,
+    },
+    docRow: {
+      flexDirection: 'row',
+      gap: 10,
+      marginBottom: 12,
+    },
+    docTile: {
+      flex: 1,
+      alignItems: 'center',
+      gap: 6,
+    },
+    docThumbnail: {
+      width: '100%',
+      aspectRatio: 1.4,
+      borderRadius: 10,
+      backgroundColor: colors.background,
+    },
+    docThumbnailEmpty: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderStyle: 'dashed',
+    },
+    docTileLabel: {
+      fontFamily: FONTS.medium,
+      fontSize: 10,
+      color: colors.textSubtle,
+      textAlign: 'center',
     },
     fieldLabel: {
       fontFamily: FONTS.regular,

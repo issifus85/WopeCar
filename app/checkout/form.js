@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Image, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -7,6 +7,7 @@ import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCheckout } from '../../contexts/CheckoutContext';
+import { getMyVerificationDocumentsByType } from '../../services/documentsApi';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 
@@ -16,11 +17,18 @@ function splitName(fullName) {
   return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
 }
 
+// `value` is either a plain local picker URI (string - a fresh upload) or
+// { existing: true, filePath, signedUrl } (already on file from a previous
+// booking or the Documents Hub - see getMyVerificationDocumentsByType).
+// Tapping either state calls onPick, which always hands back a fresh local
+// URI - so replacing an on-file document is just "tap it and pick again".
 function DocumentUploadTile({ label, value, onPick, styles, colors }) {
+  const isExisting = value && typeof value === 'object';
+  const previewUri = isExisting ? value.signedUrl : value;
   return (
     <TouchableOpacity style={styles.uploadTile} onPress={onPick}>
-      {value ? (
-        <Image source={{ uri: value }} style={styles.uploadPreview} />
+      {previewUri ? (
+        <Image source={{ uri: previewUri }} style={styles.uploadPreview} />
       ) : (
         <View style={styles.uploadPlaceholder}>
           <Ionicons name="camera-outline" size={24} color={colors.textSubtle} />
@@ -28,9 +36,9 @@ function DocumentUploadTile({ label, value, onPick, styles, colors }) {
       )}
       <View style={styles.uploadInfo}>
         <Text style={styles.uploadLabel}>{label}</Text>
-        <Text style={styles.uploadHint}>{value ? 'Tap to change' : 'Tap to upload'}</Text>
+        <Text style={styles.uploadHint}>{isExisting ? 'On file · tap to replace' : value ? 'Tap to change' : 'Tap to upload'}</Text>
       </View>
-      {value && <Ionicons name="checkmark-circle" size={20} color={colors.teal} />}
+      {!!value && <Ionicons name="checkmark-circle" size={20} color={colors.teal} />}
     </TouchableOpacity>
   );
 }
@@ -54,6 +62,23 @@ export default function CheckoutFormScreen() {
   const [licenseFront, setLicenseFront] = useState(draft.licenseFront);
   const [licenseBack, setLicenseBack] = useState(draft.licenseBack);
   const [proofOfAddress, setProofOfAddress] = useState(draft.proofOfAddress);
+
+  // One-time seed from whatever this renter already has on file (a prior
+  // booking, or a direct Documents Hub upload) - so a returning renter
+  // doesn't have to re-upload the same ID every time. Only fills fields
+  // that are still empty, so it can never clobber a pick already made
+  // earlier in this same checkout session (e.g. navigating back here from
+  // Payment).
+  useEffect(() => {
+    getMyVerificationDocumentsByType()
+      .then((docs) => {
+        setLicenseFront((prev) => prev || docs.license_front);
+        setLicenseBack((prev) => prev || docs.license_back);
+        setProofOfAddress((prev) => prev || docs.proof_of_address);
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const pickImage = async (setter) => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();

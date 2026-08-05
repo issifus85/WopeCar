@@ -135,6 +135,23 @@ export async function uploadBookingDocument(userId, bookingId, type, uri) {
 }
 
 /**
+ * Attaches this booking to a document the renter already has on file
+ * (from a previous booking, or uploaded directly via the Documents Hub)
+ * instead of re-uploading the same file bytes - see
+ * documentsApi.js's getMyVerificationDocumentsByType, which is what
+ * checkout/form.js calls to find the existing filePath passed in here.
+ * Still inserts a real per-booking `documents` row (same as
+ * uploadBookingDocument) so admin's per-booking document view has a real
+ * row to find for every booking, reused file or not.
+ */
+export async function linkExistingBookingDocument(userId, bookingId, type, filePath) {
+  const { error } = await supabase
+    .from('documents')
+    .insert({ user_id: userId, booking_id: bookingId, type, file_path: filePath });
+  if (error) throw error;
+}
+
+/**
  * Marks every date in [startDate, endDate] as booked for a car, so
  * carsApi.js's fetchCarAvailability() (which reads this same table) greys
  * them out for future bookings. Best-effort by design: called after a

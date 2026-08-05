@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Image, Linking, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../../constants/theme';
@@ -14,6 +14,62 @@ import {
   getBooking, confirmBooking, cancelBooking, markBookingPaid, markBookingCompleted,
   modifyBooking, recomputeBookingCost,
 } from '../../../services/adminBookingsApi';
+import { getUserVerificationDocuments } from '../../../services/adminDocumentsApi';
+
+const VERIFICATION_DOC_LABELS = [
+  { type: 'license_front', label: "License - Front" },
+  { type: 'license_back', label: "License - Back" },
+  { type: 'proof_of_address', label: 'Proof of Address' },
+];
+
+function VerificationDocsSection({ renterId, styles, colors }) {
+  const [docs, setDocs] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!renterId) return;
+    setIsLoading(true);
+    getUserVerificationDocuments(renterId)
+      .then(setDocs)
+      .catch(() => setDocs({}))
+      .finally(() => setIsLoading(false));
+  }, [renterId]);
+
+  if (!renterId) return null;
+
+  return (
+    <View style={styles.section}>
+      <SectionHeading>Verification Documents</SectionHeading>
+      {isLoading ? (
+        <ActivityIndicator color={colors.teal} style={{ marginVertical: 8 }} />
+      ) : (
+        <View style={styles.docRow}>
+          {VERIFICATION_DOC_LABELS.map(({ type, label }) => {
+            const doc = docs?.[type];
+            return (
+              <TouchableOpacity
+                key={type}
+                style={styles.docTile}
+                disabled={!doc}
+                onPress={() => doc && Linking.openURL(doc.signedUrl)}
+              >
+                {doc ? (
+                  <Image source={{ uri: doc.signedUrl }} style={styles.docThumbnail} />
+                ) : (
+                  <View style={[styles.docThumbnail, styles.docThumbnailEmpty]}>
+                    <Ionicons name="document-outline" size={20} color={colors.textSubtle} />
+                  </View>
+                )}
+                <Text style={styles.docTileLabel} numberOfLines={1}>{label}</Text>
+                <Text style={styles.docTileHint}>{doc ? 'Tap to view' : 'Not on file'}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+}
 
 const STATUS_TONE = { pending: 'warning', confirmed: 'success', cancelled: 'error', completed: 'muted' };
 const TIME_SLOTS = [
@@ -189,6 +245,8 @@ export default function AdminBookingDetailScreen() {
               <Row label="Email" value={booking.renter?.email} styles={styles} />
               <Row label="Phone" value={booking.renter?.phone} styles={styles} />
             </View>
+
+            <VerificationDocsSection renterId={booking.renter?.id} styles={styles} colors={colors} />
 
             <View style={styles.section}>
               <SectionHeading>Car</SectionHeading>
@@ -429,6 +487,40 @@ function createStyles(colors) {
       borderRadius: 14,
       padding: 16,
       marginTop: 14,
+    },
+    docRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    docTile: {
+      flex: 1,
+      alignItems: 'center',
+      gap: 6,
+    },
+    docThumbnail: {
+      width: '100%',
+      aspectRatio: 1.4,
+      borderRadius: 10,
+      backgroundColor: colors.background,
+    },
+    docThumbnailEmpty: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderStyle: 'dashed',
+    },
+    docTileLabel: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 11,
+      color: colors.textPrimary,
+      textAlign: 'center',
+    },
+    docTileHint: {
+      fontFamily: FONTS.regular,
+      fontSize: 10,
+      color: colors.textSubtle,
+      textAlign: 'center',
     },
     row: {
       flexDirection: 'row',

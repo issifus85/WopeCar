@@ -112,6 +112,40 @@ async function getVehicleDocs() {
 }
 
 /**
+ * The current renter's own latest license_front/license_back/proof_of_address
+ * - one row per type max, whichever was uploaded most recently regardless of
+ * which booking (or no booking) it was uploaded through. Used by checkout
+ * (app/checkout/form.js) to auto-populate document fields on a second+
+ * booking instead of forcing a re-upload every time; exposes filePath (not
+ * just signedUrl) so checkout can reuse the existing file - see
+ * supabaseApi.js's linkExistingBookingDocument.
+ */
+export async function getMyVerificationDocumentsByType() {
+  const user = await getCurrentUser();
+  const { data, error } = await supabase
+    .from('documents')
+    .select('type, file_path, created_at')
+    .eq('user_id', user.id)
+    .in('type', VERIFICATION_TYPES)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+
+  const latestByType = {};
+  (data ?? []).forEach((row) => {
+    if (!latestByType[row.type]) latestByType[row.type] = row;
+  });
+
+  const entries = await Promise.all(
+    VERIFICATION_TYPES.map(async (type) => {
+      const row = latestByType[type];
+      if (!row) return [type, null];
+      return [type, { filePath: row.file_path, signedUrl: await signedUrlFor(row.file_path) }];
+    })
+  );
+  return Object.fromEntries(entries);
+}
+
+/**
  * Grouped for the Documents Hub's sections. Fully Supabase-native -
  * closes a gap left since Phase 2, where checkout's own uploadBookingDocument()
  * already wrote verification docs to Supabase but this function still read
