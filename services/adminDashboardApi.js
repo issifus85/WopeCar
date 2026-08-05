@@ -44,11 +44,13 @@ export async function getDashboardStats() {
 }
 
 /**
- * Badge counts for the 3 quick-action buttons. "Pending Approvals" combines
- * unapproved vendors and unapproved (pending) car listings - both are
- * "things an admin needs to review before they go live" - since Screen 2
- * has one combined button rather than two, unlike vendors.js/cars.js which
- * each get their own dedicated Pending tab.
+ * Badge counts for the dashboard's quick-action buttons. Pending vendors
+ * and pending (unapproved) car listings are kept separate here - each
+ * links to its own dedicated Pending tab (vendors.js/cars.js), same as
+ * every other count on this screen. They used to be combined into one
+ * "Pending Approvals" number with a single tap target that could only ever
+ * go to one of the two screens, so tapping it showed nothing whenever the
+ * pending items were actually all on the other screen.
  */
 export async function getPendingCounts() {
   const [pendingVendors, pendingCars, pendingBookings, conversations] = await Promise.all([
@@ -65,7 +67,8 @@ export async function getPendingCounts() {
   const unreadMessages = (conversations ?? []).reduce((sum, c) => sum + (c.unreadCount || 0), 0);
 
   return {
-    pendingApprovals: (pendingVendors.count ?? 0) + (pendingCars.count ?? 0),
+    pendingVendors: pendingVendors.count ?? 0,
+    pendingCars: pendingCars.count ?? 0,
     pendingBookings: pendingBookings.count ?? 0,
     unreadSupportMessages: unreadMessages,
   };

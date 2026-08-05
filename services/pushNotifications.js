@@ -1,6 +1,8 @@
 import { Platform } from 'react-native';
 import { router } from 'expo-router';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
+import supabase from './supabase';
 
 // Local, on-device notifications only - no push token, no EAS project, no
 // backend. Native uses expo-notifications; web (the only platform this
@@ -64,6 +66,42 @@ export async function sendLocalPushNotification({ title, body, data = {} }) {
     content: { title, body, data },
     trigger: null,
   });
+}
+
+// Web has no Expo push token concept - the browser Notification API used
+// above is the whole story there, no server-side registration needed.
+// Native: gets this device's real Expo push token and upserts it into
+// push_tokens (RLS: push_tokens_owner_insert/_update, both scoped to
+// auth.uid() = user_id), keyed by the token itself so a device that's had
+// multiple different accounts signed in on it just gets reassigned to
+// whoever's logged in now rather than accumulating stale rows. Best-effort
+// throughout - a simulator (no real APNs/FCM credentials), a denied
+// permission, or a token-fetch failure should never block sign-in.
+export async function registerPushToken() {
+  if (Platform.OS === 'web') return;
+
+  try {
+    const granted = await requestPushPermission();
+    if (!granted) return;
+
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    if (!projectId) return;
+
+    const { data: authData } = await supabase.auth.getUser();
+    const userId = authData?.user?.id;
+    if (!userId) return;
+
+    const { data: tokenData } = await Notifications.getExpoPushTokenAsync({ projectId });
+    if (!tokenData?.data) return;
+
+    await supabase
+      .from('push_tokens')
+      .upsert({ user_id: userId, token: tokenData.data, platform: Platform.OS, updated_at: new Date().toISOString() }, { onConflict: 'token' });
+  } catch (e) {
+    // Simulators/emulators without real push credentials throw here -
+    // silently keep the app usable without a token, same as every other
+    // best-effort sync in this app.
+  }
 }
 
 export function registerNotificationResponseHandler() {

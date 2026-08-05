@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import * as authApi from '../services/supabaseAuthApi';
 import supabase from '../services/supabase';
 import { clearLocalUserData } from '../services/clearLocalUserData';
+import { registerPushToken } from '../services/pushNotifications';
 
 const AuthContext = createContext(null);
 
@@ -21,6 +22,16 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Registers this device's real Expo push token so notifyUser()/
+  // broadcastNotification() (services/adminNotify.js, adminSettingsApi.js)
+  // can actually reach it, not just write a `notifications` row the user
+  // only sees if they happen to reopen the app - see pushNotifications.js.
+  // Fires once per login (and once on cold start for an already-signed-in
+  // session), not on every render - best-effort, never blocks anything.
+  useEffect(() => {
+    if (user?.id) registerPushToken();
+  }, [user?.id]);
 
   // Keeps the context in sync with the Supabase session automatically -
   // e.g. the token silently expiring/being revoked, or the session

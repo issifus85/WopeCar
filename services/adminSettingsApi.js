@@ -76,5 +76,15 @@ export async function broadcastNotification({ title, body, target }) {
   const rows = users.map((u) => ({ user_id: u.id, type: 'broadcast', title, body }));
   const { error } = await supabase.from('notifications').insert(rows);
   if (error) throw error;
+
+  // Real push, same as adminNotify.js's notifyUser() - best-effort, chunked
+  // server-side by send-push-notification itself for large targets (e.g.
+  // "All Users").
+  supabase.functions
+    .invoke('send-push-notification', {
+      body: { notifications: users.map((u) => ({ userId: u.id, title, body })) },
+    })
+    .catch(() => {});
+
   return rows.length;
 }

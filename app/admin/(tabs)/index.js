@@ -107,10 +107,18 @@ export default function AdminDashboardScreen() {
       <Text style={styles.sectionTitle}>Quick Actions</Text>
       <View style={styles.quickActionsGrid}>
         <QuickAction
-          icon="checkmark-done-outline"
-          label="Pending Approvals"
-          count={pending?.pendingApprovals ?? 0}
+          icon="briefcase-outline"
+          label="Pending Vendors"
+          count={pending?.pendingVendors ?? 0}
           onPress={() => router.push('/admin/vendors')}
+          styles={styles}
+          colors={colors}
+        />
+        <QuickAction
+          icon="car-sport-outline"
+          label="Pending Listings"
+          count={pending?.pendingCars ?? 0}
+          onPress={() => router.push('/admin/cars')}
           styles={styles}
           colors={colors}
         />
