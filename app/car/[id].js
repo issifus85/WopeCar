@@ -263,7 +263,6 @@ export default function CarDetailScreen() {
             <View style={styles.section}>
               <SectionHeading>Cancellation Policy</SectionHeading>
               <View style={styles.cancellationRow}>
-                <Ionicons name="calendar-outline" size={16} color={colors.teal} />
                 <Text style={styles.cancellationText}>{car.cancellationPolicy}</Text>
               </View>
             </View>
@@ -514,6 +513,7 @@ function createStyles(colors) {
     gap: 8,
   },
   cancellationText: {
+    flex: 1,
     fontFamily: FONTS.medium,
     fontSize: 14,
     color: colors.textPrimary,
