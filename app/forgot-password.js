@@ -51,7 +51,10 @@ export default function ForgotPasswordScreen() {
             If an account exists for {email.trim()}, we've sent a link to reset your password. It may take a
             few minutes to arrive - check your spam folder too.
           </Text>
-          <TouchableOpacity style={styles.submitButton} onPress={() => router.back()}>
+          <TouchableOpacity
+            style={[styles.submitButton, styles.sentButton]}
+            onPress={() => router.back()}
+          >
             <Text style={styles.submitButtonText}>Back to Sign In</Text>
           </TouchableOpacity>
         </View>
@@ -187,6 +190,13 @@ function createStyles(colors) {
       textAlign: 'center',
       lineHeight: 21,
       marginBottom: 28,
+    },
+    // sentWrap centers its children (icon/title/text), which also shrinks a
+    // plain TouchableOpacity down to hug its label - fine for the icon and
+    // text above, wrong for a primary CTA. This stretches just the button
+    // back to full width, matching every other primary button in the app.
+    sentButton: {
+      alignSelf: 'stretch',
     },
   });
 }

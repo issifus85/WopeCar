@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, TextInput, FlatList, TouchableOpacity, ScrollView, ActivityIndicator, Image, Animated } from 'react-native';
+import { StyleSheet, Text, View, TextInput, FlatList, TouchableOpacity, ScrollView, ActivityIndicator, Animated } from 'react-native';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,6 +31,8 @@ export default function HomeScreen() {
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const searchInputRef = useRef(null);
   const searchScale = useRef(new Animated.Value(1)).current;
   const [sortBy, setSortBy] = useState('recommended');
   const [isSortModalVisible, setIsSortModalVisible] = useState(false);
@@ -101,6 +103,24 @@ export default function HomeScreen() {
     setEndDate(null);
   };
 
+  // Collapsed by default - the reference layout combines the date pill and
+  // a search *toggle* into one compact row instead of always showing a full
+  // text-input row underneath it (that was costing a whole extra row of
+  // vertical space just to search, something most visits to Home don't need
+  // since browsing/filtering by category covers the common case).
+  const toggleSearch = () => {
+    setIsSearchExpanded((prev) => {
+      const next = !prev;
+      if (next) {
+        requestAnimationFrame(() => searchInputRef.current?.focus());
+      } else {
+        setSearchText('');
+        searchInputRef.current?.blur();
+      }
+      return next;
+    });
+  };
+
   const filteredCars = cars.filter(car => {
     const matchesSearch =
       car.location.toLowerCase().includes(searchText.toLowerCase()) ||
@@ -121,45 +141,15 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Image
-          source={require('../../assets/logo-mark-navy.png')}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-      </View>
+      <View style={styles.header} />
 
-      <Animated.View
-        style={[
-          styles.searchWrapper,
-          isSearchFocused && styles.searchWrapperFocused,
-          { transform: [{ scale: searchScale }] },
-        ]}
-      >
-        <Ionicons name="search" size={19} color={isSearchFocused ? colors.teal : colors.textSubtle} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search by location, model or type..."
-          placeholderTextColor={colors.textSubtle}
-          value={searchText}
-          onChangeText={setSearchText}
-          onFocus={handleSearchFocus}
-          onBlur={handleSearchBlur}
-        />
-        {searchText.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchText('')} hitSlop={8}>
-            <Ionicons name="close-circle" size={18} color={colors.disabled} />
-          </TouchableOpacity>
-        )}
-      </Animated.View>
-
-      <View style={styles.dateRow}>
+      <View style={styles.combinedBar}>
         <TouchableOpacity
-          style={styles.datePill}
+          style={styles.dateSegment}
           onPress={() => setIsDateModalVisible(true)}
         >
           <Ionicons name="calendar-outline" size={18} color={colors.teal} />
-          <Text style={styles.datePillText}>
+          <Text style={styles.datePillText} numberOfLines={1}>
             {startDate && endDate
               ? `${formatDateShort(startDate)} - ${formatDateShort(endDate)}`
               : 'Select dates to check availability'}
@@ -167,10 +157,44 @@ export default function HomeScreen() {
         </TouchableOpacity>
         {startDate && endDate && (
           <TouchableOpacity onPress={handleClearDates} style={styles.clearDateButton} hitSlop={10}>
-            <Ionicons name="close-circle" size={20} color={colors.textSubtle} />
+            <Ionicons name="close-circle" size={18} color={colors.textSubtle} />
           </TouchableOpacity>
         )}
+        <View style={styles.combinedDivider} />
+        <TouchableOpacity
+          style={[styles.searchToggle, isSearchExpanded && styles.searchToggleActive]}
+          onPress={toggleSearch}
+        >
+          <Ionicons
+            name={isSearchExpanded ? 'close' : 'search'}
+            size={18}
+            color={isSearchExpanded ? colors.white : colors.textPrimary}
+          />
+        </TouchableOpacity>
       </View>
+
+      {isSearchExpanded && (
+        <Animated.View
+          style={[styles.searchWrapper, { transform: [{ scale: searchScale }] }]}
+        >
+          <Ionicons name="search" size={18} color={isSearchFocused ? colors.teal : colors.textSubtle} />
+          <TextInput
+            ref={searchInputRef}
+            style={styles.searchInput}
+            placeholder="Search by location, model or type..."
+            placeholderTextColor={colors.textSubtle}
+            value={searchText}
+            onChangeText={setSearchText}
+            onFocus={handleSearchFocus}
+            onBlur={handleSearchBlur}
+          />
+          {searchText.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchText('')} hitSlop={8}>
+              <Ionicons name="close-circle" size={18} color={colors.disabled} />
+            </TouchableOpacity>
+          )}
+        </Animated.View>
+      )}
 
       <View style={styles.categoriesWrap}>
         <TouchableOpacity
@@ -231,7 +255,7 @@ export default function HomeScreen() {
           <View style={styles.section}>
             <View>
               <Text style={styles.sectionTitle}>
-                {total} {total === 1 ? 'Car' : 'Cars'} Found
+                {total} {total === 1 ? 'Car' : 'Cars'} Available
               </Text>
               {startDate && endDate && (
                 <Text style={styles.sectionSubtitle}>
@@ -255,28 +279,16 @@ export default function HomeScreen() {
                 <Text style={styles.currencyButtonText} numberOfLines={1}>{activeCurrency.code}</Text>
               </TouchableOpacity>
 
-              <View style={styles.viewToggle}>
-                <TouchableOpacity
-                  style={[styles.viewToggleButton, viewMode === 'list' && styles.viewToggleButtonActive]}
-                  onPress={() => setViewMode('list')}
-                >
-                  <Ionicons
-                    name="list"
-                    size={18}
-                    color={viewMode === 'list' ? colors.white : colors.textPrimary}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.viewToggleButton, viewMode === 'tile' && styles.viewToggleButtonActive]}
-                  onPress={() => setViewMode('tile')}
-                >
-                  <Ionicons
-                    name="grid"
-                    size={16}
-                    color={viewMode === 'tile' ? colors.white : colors.textPrimary}
-                  />
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                style={styles.viewToggle}
+                onPress={() => setViewMode(viewMode === 'tile' ? 'list' : 'tile')}
+              >
+                <Ionicons
+                  name={viewMode === 'tile' ? 'list' : 'grid'}
+                  size={17}
+                  color={colors.textPrimary}
+                />
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -354,65 +366,36 @@ function createStyles(colors) {
     },
     header: {
       backgroundColor: colors.teal,
-      paddingTop: 50,
-      paddingBottom: 44,
-      paddingHorizontal: 20,
-      alignItems: 'center',
+      paddingTop: 44,
+      paddingBottom: 12,
       borderBottomLeftRadius: 28,
       borderBottomRightRadius: 28,
     },
-    logo: {
-      width: 56,
-      height: 64,
-    },
-    searchWrapper: {
+    combinedBar: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 10,
       backgroundColor: colors.surface,
-      borderRadius: 16,
+      borderRadius: 14,
       marginHorizontal: 20,
-      marginTop: -30,
-      paddingHorizontal: 16,
-      paddingVertical: 14,
-      borderWidth: 1.5,
-      borderColor: 'transparent',
+      marginTop: -22,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
       shadowColor: colors.shadow,
       shadowOpacity: 0.14,
       shadowRadius: 14,
       shadowOffset: { width: 0, height: 6 },
       elevation: 6,
     },
-    searchWrapperFocused: {
-      borderColor: colors.teal,
-    },
-    searchInput: {
-      flex: 1,
-      fontFamily: FONTS.regular,
-      fontSize: 15,
-      color: colors.textPrimary,
-    },
-    dateRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginHorizontal: 16,
-      marginTop: 18,
-      marginBottom: 4,
-      gap: 8,
-    },
-    datePill: {
+    dateSegment: {
       flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
-      backgroundColor: colors.surface,
-      borderRadius: 10,
-      paddingVertical: 12,
-      paddingHorizontal: 14,
-      borderWidth: 1,
-      borderColor: colors.border,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
     },
     datePillText: {
+      flexShrink: 1,
       fontFamily: FONTS.medium,
       fontSize: 13,
       color: colors.textPrimary,
@@ -420,14 +403,49 @@ function createStyles(colors) {
     clearDateButton: {
       padding: 2,
     },
+    combinedDivider: {
+      width: 1,
+      height: 20,
+      backgroundColor: colors.divider,
+      marginHorizontal: 4,
+    },
+    searchToggle: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.highlight,
+    },
+    searchToggleActive: {
+      backgroundColor: colors.teal,
+    },
+    searchWrapper: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: colors.surface,
+      borderRadius: 10,
+      marginHorizontal: 20,
+      marginTop: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+    },
+    searchInput: {
+      flex: 1,
+      fontFamily: FONTS.regular,
+      fontSize: 14,
+      color: colors.textPrimary,
+      outlineStyle: 'none',
+    },
     categoriesWrap: {
       flexDirection: 'row',
       alignItems: 'center',
     },
     filtersButton: {
-      width: 40,
-      height: 40,
-      borderRadius: 10,
+      width: 34,
+      height: 34,
+      borderRadius: 9,
       backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
@@ -453,12 +471,12 @@ function createStyles(colors) {
       color: colors.white,
     },
     categoriesRow: {
-      height: 56,
+      height: 44,
       flex: 1,
     },
     categoriesContent: {
       paddingHorizontal: 16,
-      paddingVertical: 10,
+      paddingVertical: 4,
       alignItems: 'center',
     },
     categoryButton: {
@@ -488,12 +506,12 @@ function createStyles(colors) {
       alignItems: 'center',
       justifyContent: 'space-between',
       paddingHorizontal: 16,
-      marginBottom: 8,
-      marginTop: 4,
+      marginBottom: 6,
+      marginTop: 2,
     },
     sectionTitle: {
-      fontFamily: FONTS.bold,
-      fontSize: 18,
+      fontFamily: FONTS.regular,
+      fontSize: 14,
       color: colors.textPrimary,
     },
     sectionSubtitle: {
@@ -538,19 +556,12 @@ function createStyles(colors) {
       color: colors.textPrimary,
     },
     viewToggle: {
-      flexDirection: 'row',
+      width: 34,
+      height: 34,
+      alignItems: 'center',
+      justifyContent: 'center',
       backgroundColor: colors.divider,
       borderRadius: 8,
-      padding: 3,
-      gap: 2,
-    },
-    viewToggleButton: {
-      paddingHorizontal: 10,
-      paddingVertical: 7,
-      borderRadius: 6,
-    },
-    viewToggleButtonActive: {
-      backgroundColor: colors.teal,
     },
     list: {
       paddingHorizontal: 16,

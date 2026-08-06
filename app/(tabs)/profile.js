@@ -134,6 +134,11 @@ export default function ProfileScreen() {
       </View>
 
       <View style={styles.footer}>
+        <Image
+          source={require('../../assets/logo-mark-navy.png')}
+          style={styles.footerLogo}
+          contentFit="contain"
+        />
         <Text style={styles.footerVersion}>WopeCar App v{APP_VERSION}</Text>
         <Text style={styles.footerSubsidiary}>A subsidiary of ACRE Logistics GH.</Text>
       </View>
@@ -284,6 +289,11 @@ function createStyles(colors) {
       alignItems: 'center',
       marginTop: 28,
       paddingHorizontal: 20,
+    },
+    footerLogo: {
+      width: 40,
+      height: 46,
+      marginBottom: 10,
     },
     footerVersion: {
       fontFamily: FONTS.medium,

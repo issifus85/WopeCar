@@ -1,16 +1,18 @@
 import { useMemo } from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../contexts/ThemeContext';
+import { FONTS } from '../constants/theme';
 
 // Instagram-style floating pill nav, shared by every bottom tab bar in the
 // app (renter, vendor, admin) via <Tabs tabBar={(props) => <FloatingTabBar
-// {...props} />}>. Icon-only by design (no labels) - the pill floats above
-// content with margin on all sides rather than the default flush-to-edge
-// bar, so screens need extra bottom padding to avoid content sitting under
-// it. Reuses each Tabs.Screen's existing tabBarIcon option, so per-tab icon
-// definitions don't need to change to adopt this.
+// {...props} />}>. Shows each tab's existing `title` option as a small label
+// under the icon - the pill floats above content with margin on all sides
+// rather than the default flush-to-edge bar, so screens need extra bottom
+// padding to avoid content sitting under it. Reuses each Tabs.Screen's
+// existing tabBarIcon option, so per-tab icon definitions don't need to
+// change to adopt this.
 //
 // The horizontal inset MUST live on `wrap` (as padding), not on `bar` (as
 // margin combined with width:'100%') - a percentage width is resolved
@@ -29,7 +31,7 @@ export default function FloatingTabBar({ state, descriptors, navigation }) {
           const { options } = descriptors[route.key];
           const isFocused = state.index === index;
           const color = isFocused ? colors.teal : colors.textSubtle;
-          const icon = options.tabBarIcon?.({ focused: isFocused, color, size: 22 });
+          const icon = options.tabBarIcon?.({ focused: isFocused, color, size: 20 });
 
           const onPress = () => {
             const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
@@ -51,6 +53,9 @@ export default function FloatingTabBar({ state, descriptors, navigation }) {
               <View style={[styles.iconWrap, isFocused && styles.iconWrapActive]}>
                 {icon}
               </View>
+              <Text style={[styles.label, { color }]} numberOfLines={1}>
+                {options.title ?? route.name}
+              </Text>
             </TouchableOpacity>
           );
         })}
@@ -74,8 +79,8 @@ function createStyles(colors) {
       alignItems: 'center',
       width: '100%',
       maxWidth: 420,
-      paddingVertical: 14,
-      borderRadius: 34,
+      paddingVertical: 10,
+      borderRadius: 28,
       overflow: 'hidden',
       shadowColor: colors.shadow,
       shadowOffset: { width: 0, height: 6 },
@@ -93,14 +98,19 @@ function createStyles(colors) {
     // width/height so it stays centered on the icon regardless of exactly
     // how wide/tall a given tab's icon glyph renders.
     iconWrap: {
-      paddingHorizontal: 18,
-      paddingVertical: 10,
-      borderRadius: 22,
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+      borderRadius: 18,
       alignItems: 'center',
       justifyContent: 'center',
     },
     iconWrapActive: {
       backgroundColor: colors.highlight,
+    },
+    label: {
+      fontFamily: FONTS.medium,
+      fontSize: 10,
+      marginTop: 3,
     },
   });
 }
