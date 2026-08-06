@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
-import { StyleSheet, View, FlatList, Text, Dimensions, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, FlatList, Text, Dimensions, TouchableOpacity, PixelRatio } from 'react-native';
 import { Image } from 'expo-image';
 import { useAppTheme } from '../contexts/ThemeContext';
+import { resizeImageUrl } from '../utils/imageUrl';
 
 // `onPress`, when given, makes the gallery double as a tap target (e.g. a
 // card that opens the car's detail page) - each rendered image gets its own
@@ -46,8 +47,17 @@ export default function ImageGallery({ images, height = 180, borderRadius = 16, 
         showsHorizontalScrollIndicator={false}
         onScroll={handleScroll}
         scrollEventThrottle={16}
-        renderItem={({ item }) => {
-          const image = <Image source={{ uri: item }} style={{ width, height }} contentFit="cover" />;
+        renderItem={({ item, index }) => {
+          const image = (
+            <Image
+              source={{ uri: resizeImageUrl(item, { width: width * PixelRatio.get(), height: height * PixelRatio.get() }) }}
+              style={{ width, height }}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={200}
+              priority={index === 0 ? 'high' : 'low'}
+            />
+          );
           return onPress ? (
             <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
               {image}

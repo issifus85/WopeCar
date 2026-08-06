@@ -287,6 +287,16 @@ export default function HomeScreen() {
             renderItem={renderCar}
             contentContainerStyle={styles.list}
             showsVerticalScrollIndicator={false}
+            // On a cold cache, an unthrottled first batch fires one network
+            // request per card (each card's ImageGallery has its own too) -
+            // dozens of simultaneous multi-hundred-KB fetches all competing
+            // for bandwidth is what read as "lag" on first launch. Rendering
+            // fewer cards up front, then a couple more per scroll tick, caps
+            // how many image requests start at once without changing what's
+            // visible in the initial viewport.
+            initialNumToRender={4}
+            maxToRenderPerBatch={4}
+            windowSize={5}
           />
         </>
       )}

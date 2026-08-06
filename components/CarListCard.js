@@ -1,11 +1,15 @@
 import { useMemo } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, PixelRatio } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { formatCurrency, isBlanketDiscountActive, applyBlanketDiscount, isCarNew } from '../constants/pricing';
+import { resizeImageUrl } from '../utils/imageUrl';
+
+const CARD_IMAGE_WIDTH = 110;
+const CARD_IMAGE_HEIGHT = 130;
 
 export default function CarListCard({ car, onPress }) {
   const { colors } = useAppTheme();
@@ -18,7 +22,18 @@ export default function CarListCard({ car, onPress }) {
     <TouchableOpacity style={styles.card} onPress={onPress}>
       <View>
         {car.image ? (
-          <Image source={{ uri: car.image }} style={styles.image} contentFit="cover" />
+          <Image
+            source={{
+              uri: resizeImageUrl(car.image, {
+                width: CARD_IMAGE_WIDTH * PixelRatio.get(),
+                height: CARD_IMAGE_HEIGHT * PixelRatio.get(),
+              }),
+            }}
+            style={styles.image}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={200}
+          />
         ) : (
           <View style={[styles.image, styles.imagePlaceholder]}>
             <Text style={styles.imagePlaceholderText}>🚗</Text>
