@@ -1,8 +1,28 @@
 import { Platform } from 'react-native';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
+import Constants from 'expo-constants';
 import { createClient } from '@supabase/supabase-js';
 import supabase, { SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase';
+
+/**
+ * Native builds - even an installed Development-Client build connected to a
+ * live Metro server, not just Expo Go - must always redirect auth emails to
+ * the app's OWN custom scheme (wopecar://...), never wherever
+ * Linking.createURL() happens to resolve at that moment. createURL() is
+ * dev-server-aware by design (useful for Expo's own hot-reload deep
+ * linking), which is exactly wrong here: these links can be opened days
+ * later, on a device nowhere near a dev server. Confirmed live - a real
+ * tester on a real installed dev-client APK got redirected to
+ * http://localhost:8081 (the developer's own machine, unreachable to
+ * anyone else) when requesting a password reset. Web keeps using
+ * createURL() since there's no custom scheme to fall back to there.
+ */
+function getAuthRedirectUrl(path) {
+  if (Platform.OS === 'web') return Linking.createURL(path);
+  const scheme = Constants.expoConfig?.scheme || 'wopecar';
+  return `${scheme}://${path}`;
+}
 
 // Mirrors services/authApi.js's exact function signatures so
 // contexts/AuthContext.js needs (almost) zero changes - see that file for
@@ -85,7 +105,7 @@ function normalizeUser(profile) {
  * here inserts or updates that row directly.
  */
 export async function register({ name, email, password, phone, role }) {
-  // Same Linking.createURL() pattern as requestPasswordReset()'s
+  // Same getAuthRedirectUrl() pattern as requestPasswordReset()'s
   // reset-password-callback below - without an explicit emailRedirectTo,
   // Supabase falls back to the project's dashboard-configured Site URL
   // (often an unrelated placeholder), which is what was landing real users
@@ -93,7 +113,7 @@ export async function register({ name, email, password, phone, role }) {
   // link redirect straight back into the app instead: app/_layout.js's
   // email-confirmed handling (mirroring its existing reset-password-callback
   // handling) picks it up on both web and native.
-  const emailRedirectTo = Linking.createURL('email-confirmed');
+  const emailRedirectTo = getAuthRedirectUrl('email-confirmed');
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -179,7 +199,7 @@ export function parseAuthErrorFromUrl(url) {
 }
 
 async function performOAuthFlow(provider) {
-  const redirectTo = Linking.createURL('social-callback');
+  const redirectTo = getAuthRedirectUrl('social-callback');
 
   let webPopup = null;
   if (Platform.OS === 'web') {
@@ -238,7 +258,7 @@ export const loginWithFacebook = () => performOAuthFlow('facebook');
  * app/reset-password.js instead of just silently signing them in.
  */
 export async function requestPasswordReset(email) {
-  const redirectTo = Linking.createURL('reset-password-callback');
+  const redirectTo = getAuthRedirectUrl('reset-password-callback');
   const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
   if (error) throw error;
 }
