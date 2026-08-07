@@ -48,7 +48,7 @@ export default function CheckoutFormScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { user } = useAuth();
+  const { user, updateProfile } = useAuth();
   const { draft, updateForm, updateDraft } = useCheckout();
 
   const initialName = splitName(user?.name);
@@ -57,7 +57,7 @@ export default function CheckoutFormScreen() {
   const [lastName, setLastName] = useState(draft.form.lastName || initialName.lastName);
   const [email, setEmail] = useState(draft.form.email || user?.email || '');
   const [phone, setPhone] = useState(draft.form.phone || user?.phone || '');
-  const [address, setAddress] = useState(draft.form.address || '');
+  const [address, setAddress] = useState(draft.form.address || user?.address || '');
 
   const [licenseFront, setLicenseFront] = useState(draft.licenseFront);
   const [licenseBack, setLicenseBack] = useState(draft.licenseBack);
@@ -102,6 +102,13 @@ export default function CheckoutFormScreen() {
   const handleContinue = () => {
     updateForm({ firstName, lastName, email, phone, address });
     updateDraft({ licenseFront, licenseBack, proofOfAddress });
+    // Best-effort sync back to the profile - so an address typed on a first
+    // booking prefills every booking after it (and the Account screen) too,
+    // not just this checkout session's own draft. Never blocks checkout.
+    const trimmedAddress = address.trim();
+    if (trimmedAddress && trimmedAddress !== (user?.address ?? '').trim()) {
+      updateProfile({ address: trimmedAddress }).catch(() => {});
+    }
     router.push({ pathname: '/checkout/payment', params: { carId } });
   };
 
