@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 export const CURRENCY_CODE = 'GHS';
 
 // Matches the old hardcoded "GHS 1,234" output when no active currency is
@@ -108,6 +110,75 @@ export function getLatestBadgeDays() {
       });
   }
   return cachedLatestBadgeDays;
+}
+
+// Admin > Settings > Discounts > "App-Wide Discount" - a site-wide
+// promotional discount, distinct from a car's own discount_enabled/type/
+// value/dates. Only applies to a car that does NOT already have its own
+// active discount (see calculateRentalPricing / isAnyDiscountActive /
+// applyAnyDiscount below - a car's own discount always wins). Stored as 5
+// separate app_settings rows rather than one jsonb object (matches every
+// other setting's flat shape), assembled here into the same {enabled, type,
+// value, startsAt, endsAt} shape a car's own `discount` already uses, so
+// the exact same discountAmount()/window-check logic works for both. Same
+// stale-while-revalidate pattern as getSelfDriveDeliveryFee() above.
+const DEFAULT_APP_WIDE_DISCOUNT = { enabled: false, type: 'percentage', value: null, startsAt: null, endsAt: null };
+
+let cachedAppWideDiscount = DEFAULT_APP_WIDE_DISCOUNT;
+let hasFetchedAppWideDiscount = false;
+
+// Unlike getSelfDriveDeliveryFee()/getLatestBadgeDays() (read once, well
+// before the value matters, deep into checkout), this is read on the very
+// first paint of the Home screen's car cards - nothing else guarantees a
+// re-render once the background fetch resolves, which without this would
+// mean a freshly-enabled promo silently not appearing until some unrelated
+// state change (e.g. tapping a filter) happened to re-render the cards.
+// Listeners let useAppWideDiscount() (below) force that re-render itself.
+const appWideDiscountListeners = new Set();
+
+export function subscribeAppWideDiscount(listener) {
+  appWideDiscountListeners.add(listener);
+  return () => appWideDiscountListeners.delete(listener);
+}
+
+// Reactive counterpart to getAppWideDiscount() - re-renders the calling
+// component once the background fetch resolves, instead of silently
+// keeping whatever value was cached at the component's first render.
+export function useAppWideDiscount() {
+  const [discount, setDiscount] = useState(getAppWideDiscount());
+  useEffect(() => subscribeAppWideDiscount(setDiscount), []);
+  return discount;
+}
+
+export function getAppWideDiscount() {
+  if (!hasFetchedAppWideDiscount) {
+    hasFetchedAppWideDiscount = true;
+    import('../services/supabase')
+      .then(({ getAppSetting }) =>
+        Promise.all([
+          getAppSetting('app_wide_discount_enabled'),
+          getAppSetting('app_wide_discount_type'),
+          getAppSetting('app_wide_discount_value'),
+          getAppSetting('app_wide_discount_starts_at'),
+          getAppSetting('app_wide_discount_ends_at'),
+        ])
+      )
+      .then(([enabled, type, value, startsAt, endsAt]) => {
+        cachedAppWideDiscount = {
+          enabled: !!enabled,
+          type: type === 'flat' ? 'flat' : 'percentage',
+          value: typeof value === 'number' ? value : null,
+          startsAt: startsAt ?? null,
+          endsAt: endsAt ?? null,
+        };
+        appWideDiscountListeners.forEach((listener) => listener(cachedAppWideDiscount));
+      })
+      .catch(() => {
+        // Keep the disabled default - never let a settings-fetch failure
+        // surface a discount that isn't actually configured.
+      });
+  }
+  return cachedAppWideDiscount;
 }
 
 // True if `createdAt` (a car's created_at) is still within the configured
@@ -226,6 +297,23 @@ export function applyBlanketDiscount(base, discount) {
   return base - discountAmount(base, discount);
 }
 
+// Same "a car's own discount wins" rule calculateRentalPricing() applies -
+// true if EITHER the car's own discount or the app-wide discount is active,
+// checking the car's own first. Lets listing/detail screens show the same
+// strikethrough price they'd actually get at checkout without duplicating
+// the fallback logic themselves.
+export function isAnyDiscountActive(discount, appWideDiscount = getAppWideDiscount(), date = new Date()) {
+  return isBlanketDiscountActive(discount, date) || isBlanketDiscountActive(appWideDiscount, date);
+}
+
+// Discounted price using whichever discount isAnyDiscountActive() picked -
+// the car's own if active, else the app-wide one, else `base` unchanged.
+export function applyAnyDiscount(base, discount, appWideDiscount = getAppWideDiscount(), date = new Date()) {
+  if (isBlanketDiscountActive(discount, date)) return applyBlanketDiscount(base, discount);
+  if (isBlanketDiscountActive(appWideDiscount, date)) return applyBlanketDiscount(base, appWideDiscount);
+  return base;
+}
+
 function stripTimeToDateOnly(date) {
   const d = typeof date === 'string' && DATE_ONLY_PATTERN.test(date) ? parseDateOnly(date) : new Date(date);
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -247,6 +335,11 @@ function stripTimeToDateOnly(date) {
 //     promotional discount, applied after the length-of-stay discount and
 //     only when enabled and the pickup date falls inside its window (an
 //     unset startsAt/endsAt means no bound on that side).
+//   - appWideDiscount - the admin-only, site-wide discount (same shape as
+//     `discount`, read live via getAppWideDiscount() unless overridden).
+//     Only applied when the car's own `discount` is NOT active for this
+//     pickup date - a car's own discount always takes priority, so this
+//     never stacks on top of or overrides a vendor/admin's per-car choice.
 export function calculateRentalPricing({
   startDate,
   endDate,
@@ -259,6 +352,7 @@ export function calculateRentalPricing({
   getDatePrice,
   lengthOfStayDiscounts,
   discount,
+  appWideDiscount = getAppWideDiscount(),
 }) {
   const pickupAt = combineDateAndTime(startDate, pickupTime);
   const returnAt = combineDateAndTime(endDate, returnTime);
@@ -288,12 +382,21 @@ export function calculateRentalPricing({
     : 0;
   const afterLengthOfStay = baseRentalCost - lengthOfStayDiscountAmount;
 
+  const isDiscountActiveOn = (d) => {
+    if (!d?.enabled) return false;
+    const startsAt = d.startsAt ? parseDateOnly(d.startsAt) : null;
+    const endsAt = d.endsAt ? parseDateOnly(d.endsAt) : null;
+    return (!startsAt || pickupDateOnly >= startsAt) && (!endsAt || pickupDateOnly <= endsAt);
+  };
+
   let blanketDiscountAmount = 0;
-  if (discount?.enabled) {
-    const startsAt = discount.startsAt ? parseDateOnly(discount.startsAt) : null;
-    const endsAt = discount.endsAt ? parseDateOnly(discount.endsAt) : null;
-    const withinWindow = (!startsAt || pickupDateOnly >= startsAt) && (!endsAt || pickupDateOnly <= endsAt);
-    if (withinWindow) blanketDiscountAmount = discountAmount(afterLengthOfStay, discount);
+  let appliedDiscountSource = null;
+  if (isDiscountActiveOn(discount)) {
+    blanketDiscountAmount = discountAmount(afterLengthOfStay, discount);
+    appliedDiscountSource = 'car';
+  } else if (isDiscountActiveOn(appWideDiscount)) {
+    blanketDiscountAmount = discountAmount(afterLengthOfStay, appWideDiscount);
+    appliedDiscountSource = 'app_wide';
   }
 
   const rentalCost = afterLengthOfStay - blanketDiscountAmount;
@@ -311,6 +414,7 @@ export function calculateRentalPricing({
     appliedLengthOfStayTier,
     lengthOfStayDiscountAmount,
     blanketDiscountAmount,
+    appliedDiscountSource,
     totalDiscount: lengthOfStayDiscountAmount + blanketDiscountAmount,
     rentalCost,
   };

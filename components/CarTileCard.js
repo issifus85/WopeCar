@@ -4,15 +4,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { useCurrency } from '../contexts/CurrencyContext';
-import { formatCurrency, isBlanketDiscountActive, applyBlanketDiscount, isCarNew } from '../constants/pricing';
+import { formatCurrency, isAnyDiscountActive, applyAnyDiscount, isCarNew, useAppWideDiscount } from '../constants/pricing';
 import ImageGallery from './ImageGallery';
 
 export default function CarTileCard({ car, onPress }) {
   const { colors } = useAppTheme();
   const { activeCurrency } = useCurrency();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const hasActiveDiscount = isBlanketDiscountActive(car.discount);
-  const discountedPricePerDay = hasActiveDiscount ? applyBlanketDiscount(car.pricePerDay, car.discount) : car.pricePerDay;
+  const appWideDiscount = useAppWideDiscount();
+  const hasActiveDiscount = isAnyDiscountActive(car.discount, appWideDiscount);
+  const discountedPricePerDay = hasActiveDiscount ? applyAnyDiscount(car.pricePerDay, car.discount, appWideDiscount) : car.pricePerDay;
 
   return (
     <View style={styles.card}>

@@ -7,12 +7,27 @@ import SectionHeading from '../../components/SectionHeading';
 import BadgeStatus from '../../components/admin/BadgeStatus';
 import ConfirmModal from '../../components/ConfirmModal';
 import FilterTabs from '../../components/admin/FilterTabs';
+import DateRangeModal, { formatDateShort } from '../../components/DateRangeModal';
 import {
   listAppSettings, updateAppSetting,
   listRegions, setRegionActive, addRegion,
   listPromoCodes, createPromoCode, setPromoActive, deletePromoCode,
   broadcastNotification,
 } from '../../services/adminSettingsApi';
+
+// Admin-only, site-wide promotional discount - see constants/pricing.js's
+// calculateRentalPricing/isAnyDiscountActive/applyAnyDiscount for how this
+// interacts with a car's own discount (the car's own always wins; this only
+// fills in for cars that don't have one of their own active). Stored as 5
+// flat app_settings rows rather than one jsonb object, same shape as every
+// other setting on this screen.
+const APP_WIDE_DISCOUNT_KEYS = {
+  enabled: 'app_wide_discount_enabled',
+  type: 'app_wide_discount_type',
+  value: 'app_wide_discount_value',
+  startsAt: 'app_wide_discount_starts_at',
+  endsAt: 'app_wide_discount_ends_at',
+};
 
 const BUSINESS_KEYS = [
   { key: 'self_drive_delivery_fee', label: 'Self-Drive Delivery Fee (GHS)' },
@@ -101,6 +116,11 @@ export default function AdminSettingsScreen() {
   const [isBroadcastConfirmVisible, setIsBroadcastConfirmVisible] = useState(false);
   const [broadcastResult, setBroadcastResult] = useState(null);
 
+  const [appWideDiscount, setAppWideDiscount] = useState({ enabled: false, type: 'percentage', value: '', startsAt: null, endsAt: null });
+  const [isDiscountDateModalVisible, setIsDiscountDateModalVisible] = useState(false);
+  const [isSavingDiscount, setIsSavingDiscount] = useState(false);
+  const [hasLoadedDiscount, setHasLoadedDiscount] = useState(false);
+
   const [isSaving, setIsSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -125,6 +145,42 @@ export default function AdminSettingsScreen() {
     settings.forEach((s) => { map[s.key] = s.value; });
     return map;
   }, [settings]);
+
+  // One-time seed from whatever's saved - after this, local edits are the
+  // source of truth until "Save Discount Settings" is pressed, so a
+  // background settings refetch (e.g. after editing an unrelated key)
+  // doesn't clobber an in-progress edit here.
+  useEffect(() => {
+    if (hasLoadedDiscount || settings.length === 0) return;
+    setHasLoadedDiscount(true);
+    setAppWideDiscount({
+      enabled: !!settingsByKey[APP_WIDE_DISCOUNT_KEYS.enabled],
+      type: settingsByKey[APP_WIDE_DISCOUNT_KEYS.type] === 'flat' ? 'flat' : 'percentage',
+      value: settingsByKey[APP_WIDE_DISCOUNT_KEYS.value] != null ? String(settingsByKey[APP_WIDE_DISCOUNT_KEYS.value]) : '',
+      startsAt: settingsByKey[APP_WIDE_DISCOUNT_KEYS.startsAt] ?? null,
+      endsAt: settingsByKey[APP_WIDE_DISCOUNT_KEYS.endsAt] ?? null,
+    });
+  }, [settings, settingsByKey, hasLoadedDiscount]);
+
+  const patchAppWideDiscount = (patch) => setAppWideDiscount((prev) => ({ ...prev, ...patch }));
+
+  const saveAppWideDiscount = async () => {
+    setIsSavingDiscount(true);
+    try {
+      await Promise.all([
+        updateAppSetting(APP_WIDE_DISCOUNT_KEYS.enabled, appWideDiscount.enabled),
+        updateAppSetting(APP_WIDE_DISCOUNT_KEYS.type, appWideDiscount.type),
+        updateAppSetting(APP_WIDE_DISCOUNT_KEYS.value, appWideDiscount.value ? Number(appWideDiscount.value) : null),
+        updateAppSetting(APP_WIDE_DISCOUNT_KEYS.startsAt, appWideDiscount.startsAt),
+        updateAppSetting(APP_WIDE_DISCOUNT_KEYS.endsAt, appWideDiscount.endsAt),
+      ]);
+      await load();
+    } catch (e) {
+      setError(e.message || 'Could not save the app-wide discount.');
+    } finally {
+      setIsSavingDiscount(false);
+    }
+  };
 
   const startEdit = (key) => {
     setEditingKey(key);
@@ -346,6 +402,72 @@ export default function AdminSettingsScreen() {
               <Text style={styles.addLinkText}>Add Region</Text>
             </TouchableOpacity>
           )}
+        </View>
+
+        <View style={styles.section}>
+          <SectionHeading>App-Wide Discount</SectionHeading>
+          <View style={styles.row}>
+            <View style={styles.rowTextWrap}>
+              <Text style={styles.rowLabel}>Site-wide promotional discount</Text>
+              <Text style={styles.rowValue}>Shown as strikethrough pricing on any car that doesn't already have its own discount</Text>
+            </View>
+            <Switch
+              value={appWideDiscount.enabled}
+              onValueChange={(value) => patchAppWideDiscount({ enabled: value })}
+              trackColor={{ false: colors.disabled, true: colors.teal }}
+              thumbColor={colors.white}
+            />
+          </View>
+
+          {appWideDiscount.enabled && (
+            <View style={styles.inlineForm}>
+              <FilterTabs
+                tabs={[{ key: 'percentage', label: 'Percentage' }, { key: 'flat', label: 'Flat (GHS)' }]}
+                activeKey={appWideDiscount.type}
+                onChange={(type) => patchAppWideDiscount({ type })}
+              />
+              <TextInput
+                style={styles.input}
+                value={appWideDiscount.value}
+                onChangeText={(value) => patchAppWideDiscount({ value })}
+                placeholder={appWideDiscount.type === 'percentage' ? 'Discount %  (e.g. 10)' : 'Discount amount (GHS)'}
+                placeholderTextColor={colors.textSubtle}
+                keyboardType="numeric"
+              />
+              <TouchableOpacity style={styles.dateButton} onPress={() => setIsDiscountDateModalVisible(true)}>
+                <Ionicons name="calendar-outline" size={16} color={colors.teal} />
+                <Text style={styles.dateButtonText}>
+                  {appWideDiscount.startsAt && appWideDiscount.endsAt
+                    ? `${formatDateShort(new Date(appWideDiscount.startsAt))} — ${formatDateShort(new Date(appWideDiscount.endsAt))}`
+                    : 'No date limit (runs indefinitely while on)'}
+                </Text>
+                {!!(appWideDiscount.startsAt || appWideDiscount.endsAt) && (
+                  <TouchableOpacity onPress={() => patchAppWideDiscount({ startsAt: null, endsAt: null })} hitSlop={10}>
+                    <Ionicons name="close-circle" size={16} color={colors.textSubtle} />
+                  </TouchableOpacity>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={[styles.primaryButton, isSavingDiscount && styles.primaryButtonDisabled]}
+            disabled={isSavingDiscount}
+            onPress={saveAppWideDiscount}
+          >
+            <Text style={styles.primaryButtonText}>{isSavingDiscount ? 'Saving...' : 'Save Discount Settings'}</Text>
+          </TouchableOpacity>
+
+          <DateRangeModal
+            visible={isDiscountDateModalVisible}
+            onClose={() => setIsDiscountDateModalVisible(false)}
+            startDate={appWideDiscount.startsAt ? new Date(appWideDiscount.startsAt) : null}
+            endDate={appWideDiscount.endsAt ? new Date(appWideDiscount.endsAt) : null}
+            onApply={(start, end) => {
+              const toISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+              patchAppWideDiscount({ startsAt: start ? toISO(start) : null, endsAt: end ? toISO(end) : null });
+            }}
+          />
         </View>
 
         <View style={styles.section}>
@@ -649,6 +771,23 @@ function createStyles(colors) {
       minHeight: 80,
       textAlignVertical: 'top',
       marginTop: 10,
+    },
+    dateButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: colors.background,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    dateButtonText: {
+      flex: 1,
+      fontFamily: FONTS.medium,
+      fontSize: 13,
+      color: colors.textPrimary,
     },
     broadcastResult: {
       fontFamily: FONTS.medium,

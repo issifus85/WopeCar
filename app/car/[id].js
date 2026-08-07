@@ -8,7 +8,7 @@ import { getCarReviews, getCarReviewScore } from '../../services/reviewsApi';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { formatCurrency, getMinBookingDays, isBlanketDiscountActive, applyBlanketDiscount } from '../../constants/pricing';
+import { formatCurrency, getMinBookingDays, isAnyDiscountActive, applyAnyDiscount, useAppWideDiscount } from '../../constants/pricing';
 import ImageGallery from '../../components/ImageGallery';
 import SectionHeading from '../../components/SectionHeading';
 import FeaturesSection from '../../components/FeaturesSection';
@@ -81,8 +81,9 @@ export default function CarDetailScreen() {
   const rating = reviewScore?.score_total ?? 0;
   const totalReviews = reviewScore?.total_review ?? 0;
 
-  const hasActiveDiscount = isBlanketDiscountActive(car.discount);
-  const discountedPricePerDay = hasActiveDiscount ? applyBlanketDiscount(car.pricePerDay, car.discount) : car.pricePerDay;
+  const appWideDiscount = useAppWideDiscount();
+  const hasActiveDiscount = isAnyDiscountActive(car.discount, appWideDiscount);
+  const discountedPricePerDay = hasActiveDiscount ? applyAnyDiscount(car.pricePerDay, car.discount, appWideDiscount) : car.pricePerDay;
 
   const specs = [
     { icon: 'people-outline', value: car.seats, label: 'Seats' },
