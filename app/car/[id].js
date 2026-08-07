@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import { fetchCarById } from '../../services/carsApi';
 import { getCarReviews, getCarReviewScore } from '../../services/reviewsApi';
+import { getCarDetailFaqs } from '../../services/faqsApi';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -39,6 +40,8 @@ export default function CarDetailScreen() {
   const [isBookingModalVisible, setIsBookingModalVisible] = useState(false);
   const [reviewScore, setReviewScore] = useState(null);
   const [reviews, setReviews] = useState([]);
+  const [faqs, setFaqs] = useState([]);
+  const appWideDiscount = useAppWideDiscount();
 
   useEffect(() => {
     setIsLoading(true);
@@ -48,10 +51,12 @@ export default function CarDetailScreen() {
       .catch(() => setError('Could not load this car. Please try again.'))
       .finally(() => setIsLoading(false));
 
-    // Independent of the car fetch above/its loading state - reviews are a
-    // secondary section, no reason to hold up the rest of the page for them.
+    // Independent of the car fetch above/its loading state - reviews and
+    // FAQs are secondary sections, no reason to hold up the rest of the
+    // page for them.
     getCarReviewScore(id).then(setReviewScore).catch(() => setReviewScore(null));
     getCarReviews(id).then(setReviews).catch(() => setReviews([]));
+    getCarDetailFaqs().then(setFaqs).catch(() => setFaqs([]));
   }, [id]);
 
   if (isLoading) {
@@ -81,7 +86,6 @@ export default function CarDetailScreen() {
   const rating = reviewScore?.score_total ?? 0;
   const totalReviews = reviewScore?.total_review ?? 0;
 
-  const appWideDiscount = useAppWideDiscount();
   const hasActiveDiscount = isAnyDiscountActive(car.discount, appWideDiscount);
   const discountedPricePerDay = hasActiveDiscount ? applyAnyDiscount(car.pricePerDay, car.discount, appWideDiscount) : car.pricePerDay;
 
@@ -275,9 +279,9 @@ export default function CarDetailScreen() {
             </View>
           )}
 
-          {!!car.faqs?.length && (
+          {!!faqs.length && (
             <View style={styles.section}>
-              <FaqSection faqs={car.faqs} />
+              <FaqSection faqs={faqs} />
             </View>
           )}
 
