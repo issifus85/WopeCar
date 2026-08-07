@@ -523,7 +523,7 @@ function createStyles(colors) {
     sectionSubtitle: {
       fontFamily: FONTS.regular,
       fontSize: 12,
-      color: colors.teal,
+      color: colors.textMuted,
       marginTop: 2,
     },
     controlsRow: {

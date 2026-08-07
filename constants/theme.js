@@ -7,6 +7,11 @@ export const COLORS = {
   teal: '#3EB6BA',
   orange: '#D07E5A',
   mauve: '#B8826F',
+  // Secondary structural/brand-surface color - headers, nav bars, and other
+  // "this is WopeCar" backdrops that aren't themselves an action. Keeps teal
+  // reserved for things you can actually tap, so it isn't drowned out by
+  // being reused as plain background fill everywhere.
+  charcoal: '#2E2E2E',
   // Legacy aliases kept for any call site still reading these directly.
   background: '#f5f5f5',
   white: '#ffffff',

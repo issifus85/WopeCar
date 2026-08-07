@@ -101,7 +101,7 @@ function createStyles(colors) {
       position: 'absolute',
       top: 10,
       left: 10,
-      backgroundColor: colors.teal,
+      backgroundColor: colors.orange,
       paddingHorizontal: 8,
       paddingVertical: 4,
       borderRadius: 6,
@@ -134,7 +134,7 @@ function createStyles(colors) {
     typeText: {
       fontFamily: FONTS.semiBold,
       fontSize: 10,
-      color: colors.teal,
+      color: colors.textMuted,
     },
     driveBadgeRow: {
       flexDirection: 'row',
@@ -187,7 +187,7 @@ function createStyles(colors) {
     price: {
       fontFamily: FONTS.bold,
       fontSize: 20,
-      color: colors.teal,
+      color: colors.textPrimary,
     },
     priceLabel: {
       fontFamily: FONTS.regular,
