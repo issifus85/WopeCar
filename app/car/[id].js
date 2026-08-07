@@ -403,7 +403,7 @@ function createStyles(colors) {
   typeText: {
     fontFamily: FONTS.semiBold,
     fontSize: 12,
-    color: colors.teal,
+    color: colors.textMuted,
   },
   minDaysBadge: {
     flexDirection: 'row',
@@ -552,7 +552,7 @@ function createStyles(colors) {
   price: {
     fontFamily: FONTS.bold,
     fontSize: 22,
-    color: colors.teal,
+    color: colors.textPrimary,
   },
   bookButton: {
     backgroundColor: colors.teal,

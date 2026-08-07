@@ -955,7 +955,7 @@ function createStyles(colors) {
   totalValue: {
     fontFamily: FONTS.bold,
     fontSize: 16,
-    color: colors.teal,
+    color: colors.textPrimary,
   },
   totalLabel: {
     fontFamily: FONTS.bold,
@@ -1120,7 +1120,7 @@ function createStyles(colors) {
   recomputedValue: {
     fontFamily: FONTS.bold,
     fontSize: 16,
-    color: colors.teal,
+    color: colors.textPrimary,
   },
   actions: {
     flexDirection: 'row',

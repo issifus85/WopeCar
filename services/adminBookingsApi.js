@@ -81,11 +81,11 @@ export async function cancelBooking(booking, reason) {
   if (result?.error) throw new Error(result.error);
 
   if (result.refunded) {
-    Alert.alert('Booking cancelled', `GH₵${result.refundAmount.toFixed(2)} was refunded automatically.`);
+    Alert.alert('Booking cancelled', `GH₵${Math.round(result.refundAmount)} was refunded automatically.`);
   } else if (result.refundAmount > 0) {
     Alert.alert(
       'Booking cancelled',
-      `A refund of GH₵${result.refundAmount.toFixed(2)} is owed but could not be processed automatically. ${result.refundError || ''} Please process it manually in Paystack.`
+      `A refund of GH₵${Math.round(result.refundAmount)} is owed but could not be processed automatically. ${result.refundError || ''} Please process it manually in Paystack.`
     );
   }
 

@@ -315,7 +315,7 @@ function createStyles(colors) {
       color: colors.textPrimary,
     },
     dayTextPriced: {
-      color: colors.teal,
+      color: colors.textPrimary,
       fontFamily: FONTS.semiBold,
     },
     dayTextSelected: {
@@ -327,7 +327,7 @@ function createStyles(colors) {
     dayPrice: {
       fontFamily: FONTS.medium,
       fontSize: 8.5,
-      color: colors.teal,
+      color: colors.textPrimary,
     },
     legendRow: {
       flexDirection: 'row',

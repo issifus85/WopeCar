@@ -361,7 +361,7 @@ function createStyles(colors) {
     totalValue: {
       fontFamily: FONTS.bold,
       fontSize: 20,
-      color: colors.teal,
+      color: colors.textPrimary,
     },
     infoBox: {
       flexDirection: 'row',

@@ -182,7 +182,7 @@ function createStyles(colors) {
     carPrice: {
       fontFamily: FONTS.semiBold,
       fontSize: 12,
-      color: colors.teal,
+      color: colors.textPrimary,
     },
     carRegion: {
       fontFamily: FONTS.regular,

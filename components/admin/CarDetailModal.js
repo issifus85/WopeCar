@@ -298,7 +298,7 @@ function createStyles(colors) {
     price: {
       fontFamily: FONTS.semiBold,
       fontSize: 14,
-      color: colors.teal,
+      color: colors.textPrimary,
       marginTop: 4,
     },
     specsGrid: {
@@ -407,7 +407,7 @@ function createStyles(colors) {
     featureChipText: {
       fontFamily: FONTS.medium,
       fontSize: 11,
-      color: colors.teal,
+      color: colors.textMuted,
     },
     actions: {
       flexDirection: 'row',

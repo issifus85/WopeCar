@@ -254,7 +254,7 @@ function createStyles(colors) {
     total: {
       fontFamily: FONTS.bold,
       fontSize: 15,
-      color: colors.teal,
+      color: colors.textPrimary,
       marginTop: 2,
     },
     chevron: {

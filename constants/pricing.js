@@ -4,11 +4,11 @@ export const CURRENCY_CODE = 'GHS';
 // passed in (e.g. a call site not yet wired to CurrencyContext, or the
 // context still loading).
 const DEFAULT_CURRENCY = {
-  symbol: CURRENCY_CODE,
+  symbol: 'GH₵',
   rate: 1,
-  format: 'left_space',
+  format: 'left',
   decimals: 0,
-  thousandSeparator: ',',
+  thousandSeparator: '',
   decimalSeparator: '.',
 };
 

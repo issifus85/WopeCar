@@ -90,7 +90,7 @@ function createStyles(colors) {
     price: {
       fontFamily: FONTS.bold,
       fontSize: 15,
-      color: colors.teal,
+      color: colors.textPrimary,
     },
     priceLabel: {
       fontFamily: FONTS.regular,

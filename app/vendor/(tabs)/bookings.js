@@ -172,7 +172,7 @@ function createStyles(colors) {
     reference: {
       fontFamily: FONTS.medium,
       fontSize: 12,
-      color: colors.teal,
+      color: colors.textMuted,
       marginBottom: 4,
     },
     detailRow: {

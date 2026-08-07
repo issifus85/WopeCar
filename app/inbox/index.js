@@ -327,7 +327,7 @@ function createStyles(colors) {
     rolePill: {
       fontFamily: FONTS.semiBold,
       fontSize: 10,
-      color: colors.teal,
+      color: colors.textMuted,
       backgroundColor: colors.highlight,
       paddingHorizontal: 6,
       paddingVertical: 2,

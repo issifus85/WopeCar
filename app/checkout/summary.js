@@ -377,7 +377,7 @@ function createStyles(colors) {
   totalValue: {
     fontFamily: FONTS.bold,
     fontSize: 17,
-    color: colors.teal,
+    color: colors.textPrimary,
   },
   promoCard: {
     backgroundColor: colors.background,

@@ -276,7 +276,7 @@ function createStyles(colors) {
     addonPrice: {
       fontFamily: FONTS.bold,
       fontSize: 14,
-      color: colors.teal,
+      color: colors.textPrimary,
     },
   });
 }

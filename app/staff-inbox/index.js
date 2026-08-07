@@ -206,7 +206,7 @@ function createStyles(colors) {
     rowSubtitle: {
       fontFamily: FONTS.medium,
       fontSize: 11,
-      color: colors.teal,
+      color: colors.textMuted,
     },
     rowPreview: {
       fontFamily: FONTS.regular,

@@ -451,7 +451,7 @@ function createStyles(colors) {
     total: {
       fontFamily: FONTS.bold,
       fontSize: 13,
-      color: colors.teal,
+      color: colors.textPrimary,
     },
 
     compactRow: {
@@ -490,7 +490,7 @@ function createStyles(colors) {
     compactTotal: {
       fontFamily: FONTS.bold,
       fontSize: 12,
-      color: colors.teal,
+      color: colors.textPrimary,
     },
 
     backdrop: {

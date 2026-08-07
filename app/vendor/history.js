@@ -241,7 +241,7 @@ function createStyles(colors) {
     reference: {
       fontFamily: FONTS.medium,
       fontSize: 12,
-      color: colors.teal,
+      color: colors.textMuted,
     },
     dateRange: {
       fontFamily: FONTS.regular,

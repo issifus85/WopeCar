@@ -64,7 +64,7 @@ export async function recordVendorPayout(vendor, { amount, note }) {
     userId: vendor.user_id,
     type: 'vendor_payout',
     title: 'Payout recorded',
-    body: `A payout of GHS ${Number(amount).toFixed(2)} has been recorded for your account.`,
+    body: `A payout of GH₵${Math.round(Number(amount))} has been recorded for your account.`,
   });
   supabase.functions.invoke('send-vendor-payout', {
     body: { vendorUserId: vendor.user_id, amount, note },

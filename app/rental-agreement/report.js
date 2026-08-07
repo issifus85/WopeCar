@@ -68,8 +68,8 @@ export default function RentalAgreementReportScreen() {
           <Row label="Duration" value={`${formatDate(agreement.durationStart)} — ${formatDate(agreement.durationEnd)}`} styles={styles} />
           <Row label="Pickup Time" value={agreement.pickupTime || '—'} styles={styles} />
           <Row label="Return Time" value={agreement.returnTime || '—'} styles={styles} />
-          <Row label="Daily Rate" value={agreement.dailyRate !== '' ? `¢${agreement.dailyRate}` : '—'} styles={styles} />
-          <Row label="Security Deposit" value={agreement.securityDeposit !== '' ? `¢${agreement.securityDeposit}` : '—'} styles={styles} />
+          <Row label="Daily Rate" value={agreement.dailyRate !== '' ? `GH₵${agreement.dailyRate}` : '—'} styles={styles} />
+          <Row label="Security Deposit" value={agreement.securityDeposit !== '' ? `GH₵${agreement.securityDeposit}` : '—'} styles={styles} />
           <Row label="Ghana-Only Use" value={agreement.ghanaOnlyUse ? 'Agreed' : 'Not agreed'} styles={styles} />
         </View>
 

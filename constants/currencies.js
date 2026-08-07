@@ -11,12 +11,12 @@ export const CURRENCY_META = {
   GHS: {
     code: 'GHS',
     name: 'Ghana Cedis',
-    symbol: '¢',
+    symbol: 'GH₵',
     isMain: true,
     format: 'left',
     thousandSeparator: '',
     decimalSeparator: '.',
-    decimals: 2,
+    decimals: 0,
   },
   USD: {
     code: 'USD',
@@ -36,6 +36,6 @@ export const CURRENCY_META = {
     format: 'left',
     thousandSeparator: '.',
     decimalSeparator: ',',
-    decimals: 2,
+    decimals: 0,
   },
 };

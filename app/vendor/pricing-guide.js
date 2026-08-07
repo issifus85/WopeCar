@@ -401,7 +401,7 @@ function createStyles(colors) {
     tierRange: {
       fontFamily: FONTS.semiBold,
       fontSize: 13,
-      color: colors.teal,
+      color: colors.textPrimary,
     },
     tierExamples: {
       fontFamily: FONTS.regular,

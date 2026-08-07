@@ -96,7 +96,7 @@ function createStyles(colors) {
     countText: {
       fontFamily: FONTS.bold,
       fontSize: 10,
-      color: colors.teal,
+      color: colors.textMuted,
     },
     countTextActive: {
       color: colors.white,
