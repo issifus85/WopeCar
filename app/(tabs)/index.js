@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View, TextInput, FlatList, TouchableOpacity, ScrollView, ActivityIndicator, Animated } from 'react-native';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { CATEGORIES } from '../../data/cars';
 import { fetchCars } from '../../services/carsApi';
@@ -17,6 +18,7 @@ import CarTileCard from '../../components/CarTileCard';
 export default function HomeScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { currencies, activeCurrency, setCurrency } = useCurrency();
   const [isCurrencyModalVisible, setIsCurrencyModalVisible] = useState(false);
@@ -141,7 +143,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header} />
+      <View style={[styles.header, { paddingTop: insets.top + 44 }]} />
 
       <View style={styles.combinedBar}>
         <TouchableOpacity
@@ -365,8 +367,12 @@ function createStyles(colors) {
       backgroundColor: colors.background,
     },
     header: {
+      // paddingTop is set inline from useSafeAreaInsets() - a fixed value
+      // here can't account for how much a device's notch/Dynamic
+      // Island/punch-hole camera actually eats into the top of the screen,
+      // which is exactly what let the combined search/date bar ride up
+      // into the camera cutout on some phones.
       backgroundColor: colors.teal,
-      paddingTop: 44,
       paddingBottom: 12,
       borderBottomLeftRadius: 28,
       borderBottomRightRadius: 28,

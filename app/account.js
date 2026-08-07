@@ -209,7 +209,17 @@ export default function AccountScreen() {
     }
   };
 
-  if (isLoading || !user) {
+  // Deliberately not `isLoading || !user` - AuthContext's refresh() flips
+  // isLoading back to true on every SIGNED_IN/USER_UPDATED auth event (e.g.
+  // saving an email change here fires USER_UPDATED), not just on first
+  // mount. Gating on isLoading meant any background refresh mid-session
+  // wiped this whole screen back to a bare spinner while the user was
+  // sitting on it - looked exactly like the screen "going unresponsive".
+  // `user` itself keeps its last value during a refresh (only replaced once
+  // the new fetch resolves), so gating on it alone still shows the spinner
+  // correctly before the first load / while genuinely logged out, without
+  // interrupting an already-rendered screen.
+  if (!user) {
     return (
       <View style={styles.centerState}>
         <ActivityIndicator size="large" color={colors.teal} />
