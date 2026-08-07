@@ -143,7 +143,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 44 }]} />
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]} />
 
       <View style={styles.combinedBar}>
         <TouchableOpacity
