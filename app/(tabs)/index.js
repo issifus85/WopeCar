@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { CATEGORIES } from '../../data/cars';
+import { QUICK_FILTERS } from '../../data/cars';
 import { fetchCars } from '../../services/carsApi';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
@@ -27,7 +27,13 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchText, setSearchText] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
+  // Category moved from a single-select pill into the Filter modal (now a
+  // multi-select checkbox section there, like Vehicle Class) - kept as an
+  // array so the "SUVs/4x4" quick pill can toggle the exact same state the
+  // modal's Category checkboxes write to.
+  const [selectedTypes, setSelectedTypes] = useState([]);
+  const [seats, setSeats] = useState([]);
+  const [locationFilters, setLocationFilters] = useState([]);
   const [viewMode, setViewMode] = useState('tile');
   const [isDateModalVisible, setIsDateModalVisible] = useState(false);
   const [startDate, setStartDate] = useState(null);
@@ -43,7 +49,8 @@ export default function HomeScreen() {
   const [priceRange, setPriceRange] = useState(null);
   const [vehicleClass, setVehicleClass] = useState([]);
 
-  const activeFilterCount = drivenBy.length + (priceRange ? 1 : 0) + vehicleClass.length;
+  const activeFilterCount =
+    drivenBy.length + (priceRange ? 1 : 0) + vehicleClass.length + selectedTypes.length + seats.length + locationFilters.length;
   const currentSortLabel = SORT_OPTIONS.find(o => o.value === sortBy)?.label ?? 'Sort';
 
   const handleSearchFocus = () => {
@@ -58,14 +65,20 @@ export default function HomeScreen() {
 
   useEffect(() => {
     loadCars();
-  }, [selectedCategory, startDate, endDate, sortBy, drivenBy, priceRange, vehicleClass]);
+  }, [selectedTypes, seats, locationFilters, startDate, endDate, sortBy, drivenBy, priceRange, vehicleClass]);
 
   const loadCars = () => {
     setIsLoading(true);
     setError(null);
     const params = {};
-    if (selectedCategory && selectedCategory !== 'All') {
-      params.type = selectedCategory;
+    if (selectedTypes.length) {
+      params.type = selectedTypes;
+    }
+    if (seats.length) {
+      params.seats = seats;
+    }
+    if (locationFilters.length) {
+      params.location = locationFilters;
     }
     // No list-level date-availability filter yet against Supabase (see
     // services/carsApi.js's fetchCars doc comment) - startDate/endDate stay
@@ -121,6 +134,34 @@ export default function HomeScreen() {
       }
       return next;
     });
+  };
+
+  // Quick-filter pills span several different filter dimensions (see
+  // data/cars.js's QUICK_FILTERS doc comment), so each pill's `key` decides
+  // which state array it reads/toggles - "SUVs/4x4" and the Filter modal's
+  // Category checkbox both end up toggling the same selectedTypes array.
+  const toggleInArray = (list, value) => (list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
+
+  const isQuickFilterActive = (filter) => {
+    switch (filter.key) {
+      case 'driveType': return drivenBy.includes(filter.value);
+      case 'vehicleClass': return vehicleClass.includes(filter.value);
+      case 'type': return selectedTypes.includes(filter.value);
+      case 'seats': return seats.includes(filter.value);
+      case 'location': return locationFilters.includes(filter.value);
+      default: return false;
+    }
+  };
+
+  const toggleQuickFilter = (filter) => {
+    switch (filter.key) {
+      case 'driveType': return setDrivenBy((prev) => toggleInArray(prev, filter.value));
+      case 'vehicleClass': return setVehicleClass((prev) => toggleInArray(prev, filter.value));
+      case 'type': return setSelectedTypes((prev) => toggleInArray(prev, filter.value));
+      case 'seats': return setSeats((prev) => toggleInArray(prev, filter.value));
+      case 'location': return setLocationFilters((prev) => toggleInArray(prev, filter.value));
+      default: return undefined;
+    }
   };
 
   const filteredCars = cars.filter(car => {
@@ -218,23 +259,20 @@ export default function HomeScreen() {
           style={styles.categoriesRow}
           contentContainerStyle={styles.categoriesContent}
         >
-          {CATEGORIES.map(category => (
-            <TouchableOpacity
-              key={category.value}
-              style={[
-                styles.categoryButton,
-                selectedCategory === category.value && styles.categoryButtonActive
-              ]}
-              onPress={() => setSelectedCategory(category.value)}
-            >
-              <Text style={[
-                styles.categoryText,
-                selectedCategory === category.value && styles.categoryTextActive
-              ]}>
-                {category.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          {QUICK_FILTERS.map((filter) => {
+            const isActive = isQuickFilterActive(filter);
+            return (
+              <TouchableOpacity
+                key={`${filter.key}-${filter.value}`}
+                style={[styles.categoryButton, isActive && styles.categoryButtonActive]}
+                onPress={() => toggleQuickFilter(filter)}
+              >
+                <Text style={[styles.categoryText, isActive && styles.categoryTextActive]}>
+                  {filter.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </View>
 
@@ -350,10 +388,12 @@ export default function HomeScreen() {
         drivenBy={drivenBy}
         priceRange={priceRange}
         vehicleClass={vehicleClass}
-        onApply={({ drivenBy, priceRange, vehicleClass }) => {
+        type={selectedTypes}
+        onApply={({ drivenBy, priceRange, vehicleClass, type }) => {
           setDrivenBy(drivenBy);
           setPriceRange(priceRange);
           setVehicleClass(vehicleClass);
+          setSelectedTypes(type);
         }}
       />
     </View>

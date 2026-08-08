@@ -56,25 +56,47 @@ export default function CarListCard({ car, onPress }) {
             </View>
           ) : null}
         </View>
-        <Text style={styles.location} numberOfLines={1}>📍 {car.location}</Text>
-        {car.drivenBy ? (
-          <View style={styles.driveBadgeRow}>
-            <View style={[
-              styles.driveBadge,
-              car.drivenBy === 'Chauffeur' && styles.driveBadgeChauffeur,
-            ]}>
-              <Ionicons
-                name={car.drivenBy === 'Chauffeur' ? 'person' : 'key-outline'}
-                size={10}
-                color={car.drivenBy === 'Chauffeur' ? colors.orange : colors.mauve}
-              />
-              <Text style={[
-                styles.driveBadgeText,
-                car.drivenBy === 'Chauffeur' && styles.driveBadgeTextChauffeur,
-              ]}>
-                {car.drivenBy === 'Chauffeur' ? 'Chauffeur Only' : 'Self-Drive'}
-              </Text>
+        <View style={styles.locationRow}>
+          <Text style={styles.location} numberOfLines={1}>📍 {car.location}</Text>
+          {car.rating != null && (
+            <View style={styles.ratingInline}>
+              <Ionicons name="star" size={11} color="#F5A623" />
+              <Text style={styles.ratingInlineText}>{car.rating.toFixed(1)}</Text>
             </View>
+          )}
+        </View>
+        {(car.drivenBy || car.transmission || car.seats) ? (
+          <View style={styles.driveBadgeRow}>
+            {car.drivenBy ? (
+              <View style={[
+                styles.driveBadge,
+                car.drivenBy === 'Chauffeur' && styles.driveBadgeChauffeur,
+              ]}>
+                <Ionicons
+                  name={car.drivenBy === 'Chauffeur' ? 'person' : 'key-outline'}
+                  size={10}
+                  color={car.drivenBy === 'Chauffeur' ? colors.orange : colors.mauve}
+                />
+                <Text style={[
+                  styles.driveBadgeText,
+                  car.drivenBy === 'Chauffeur' && styles.driveBadgeTextChauffeur,
+                ]}>
+                  {car.drivenBy === 'Chauffeur' ? 'Chauffeur Only' : 'Self-Drive'}
+                </Text>
+              </View>
+            ) : null}
+            {car.transmission ? (
+              <View style={styles.specItem}>
+                <Ionicons name="settings-outline" size={10} color={colors.textMuted} />
+                <Text style={styles.specText}>{car.transmission}</Text>
+              </View>
+            ) : null}
+            {car.seats ? (
+              <View style={styles.specItem}>
+                <Ionicons name="people-outline" size={10} color={colors.textMuted} />
+                <Text style={styles.specText}>{car.seats} seats</Text>
+              </View>
+            ) : null}
           </View>
         ) : null}
         <View style={styles.bottomRow}>
@@ -172,7 +194,21 @@ function createStyles(colors) {
     },
     driveBadgeRow: {
       flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      rowGap: 3,
+      columnGap: 6,
       marginTop: 4,
+    },
+    specItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+    },
+    specText: {
+      fontFamily: FONTS.medium,
+      fontSize: 11,
+      color: colors.textMuted,
     },
     // Decorative accent-tint badges - kept constant across themes like the
     // brand colors they pair with, rather than added as new surface tokens.
@@ -196,11 +232,28 @@ function createStyles(colors) {
     driveBadgeTextChauffeur: {
       color: colors.orange,
     },
+    locationRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 2,
+    },
     location: {
       fontFamily: FONTS.regular,
       fontSize: 12,
       color: colors.textMuted,
-      marginTop: 2,
+      flexShrink: 1,
+    },
+    ratingInline: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+      marginLeft: 6,
+    },
+    ratingInlineText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 11,
+      color: colors.textPrimary,
     },
     bottomRow: {
       flexDirection: 'row',

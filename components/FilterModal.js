@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, TouchableOpacity, Modal, Pressable, ScrollView 
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
-import { VEHICLE_CLASSES } from '../constants/vehicleCatalog';
+import { VEHICLE_CLASSES, VEHICLE_TYPES } from '../constants/vehicleCatalog';
 
 const DRIVE_TYPES = [
   { value: 'Chauffeur', label: 'Chauffeur only' },
@@ -28,6 +28,7 @@ export default function FilterModal({
   drivenBy,
   priceRange,
   vehicleClass,
+  type,
   onApply,
 }) {
   const { colors } = useAppTheme();
@@ -35,12 +36,14 @@ export default function FilterModal({
   const [tempDrivenBy, setTempDrivenBy] = useState(drivenBy);
   const [tempPriceRange, setTempPriceRange] = useState(priceRange);
   const [tempVehicleClass, setTempVehicleClass] = useState(vehicleClass);
+  const [tempType, setTempType] = useState(type);
 
   useEffect(() => {
     if (visible) {
       setTempDrivenBy(drivenBy);
       setTempPriceRange(priceRange);
       setTempVehicleClass(vehicleClass);
+      setTempType(type);
     }
   }, [visible]);
 
@@ -48,10 +51,11 @@ export default function FilterModal({
     setTempDrivenBy([]);
     setTempPriceRange(null);
     setTempVehicleClass([]);
+    setTempType([]);
   };
 
   const handleApply = () => {
-    onApply({ drivenBy: tempDrivenBy, priceRange: tempPriceRange, vehicleClass: tempVehicleClass });
+    onApply({ drivenBy: tempDrivenBy, priceRange: tempPriceRange, vehicleClass: tempVehicleClass, type: tempType });
     onClose();
   };
 
@@ -67,6 +71,23 @@ export default function FilterModal({
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} style={styles.scroll}>
+            <Text style={styles.sectionTitle}>Category</Text>
+            {VEHICLE_TYPES.map((option) => {
+              const isSelected = tempType.includes(option.value);
+              return (
+                <TouchableOpacity
+                  key={option.value}
+                  style={styles.checkboxRow}
+                  onPress={() => setTempType(toggleValue(tempType, option.value))}
+                >
+                  <View style={[styles.checkbox, isSelected && styles.checkboxChecked]}>
+                    {isSelected && <Ionicons name="checkmark" size={14} color={colors.white} />}
+                  </View>
+                  <Text style={styles.checkboxLabel}>{option.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+
             <Text style={styles.sectionTitle}>Drive Type</Text>
             {DRIVE_TYPES.map((option) => {
               const isSelected = tempDrivenBy.includes(option.value);

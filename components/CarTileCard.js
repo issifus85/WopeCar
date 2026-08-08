@@ -35,25 +35,47 @@ export default function CarTileCard({ car, onPress }) {
             </View>
           ) : null}
         </View>
-        <Text style={styles.location} numberOfLines={1}>📍 {car.location}</Text>
-        {car.drivenBy ? (
-          <View style={styles.driveBadgeRow}>
-            <View style={[
-              styles.driveBadge,
-              car.drivenBy === 'Chauffeur' && styles.driveBadgeChauffeur,
-            ]}>
-              <Ionicons
-                name={car.drivenBy === 'Chauffeur' ? 'person' : 'key-outline'}
-                size={11}
-                color={car.drivenBy === 'Chauffeur' ? colors.orange : colors.mauve}
-              />
-              <Text style={[
-                styles.driveBadgeText,
-                car.drivenBy === 'Chauffeur' && styles.driveBadgeTextChauffeur,
-              ]}>
-                {car.drivenBy === 'Chauffeur' ? 'Chauffeur Only' : 'Self-Drive'}
-              </Text>
+        <View style={styles.locationRow}>
+          <Text style={styles.location} numberOfLines={1}>📍 {car.location}</Text>
+          {car.rating != null && (
+            <View style={styles.ratingInline}>
+              <Ionicons name="star" size={12} color="#F5A623" />
+              <Text style={styles.ratingInlineText}>{car.rating.toFixed(1)}</Text>
             </View>
+          )}
+        </View>
+        {(car.drivenBy || car.transmission || car.seats) ? (
+          <View style={styles.driveBadgeRow}>
+            {car.drivenBy ? (
+              <View style={[
+                styles.driveBadge,
+                car.drivenBy === 'Chauffeur' && styles.driveBadgeChauffeur,
+              ]}>
+                <Ionicons
+                  name={car.drivenBy === 'Chauffeur' ? 'person' : 'key-outline'}
+                  size={11}
+                  color={car.drivenBy === 'Chauffeur' ? colors.orange : colors.mauve}
+                />
+                <Text style={[
+                  styles.driveBadgeText,
+                  car.drivenBy === 'Chauffeur' && styles.driveBadgeTextChauffeur,
+                ]}>
+                  {car.drivenBy === 'Chauffeur' ? 'Chauffeur Only' : 'Self-Drive'}
+                </Text>
+              </View>
+            ) : null}
+            {car.transmission ? (
+              <View style={styles.specItem}>
+                <Ionicons name="settings-outline" size={11} color={colors.textMuted} />
+                <Text style={styles.specText}>{car.transmission}</Text>
+              </View>
+            ) : null}
+            {car.seats ? (
+              <View style={styles.specItem}>
+                <Ionicons name="people-outline" size={11} color={colors.textMuted} />
+                <Text style={styles.specText}>{car.seats} seats</Text>
+              </View>
+            ) : null}
           </View>
         ) : null}
         <View style={styles.bottomRow}>
@@ -139,7 +161,21 @@ function createStyles(colors) {
     },
     driveBadgeRow: {
       flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      rowGap: 4,
+      columnGap: 8,
       marginTop: 6,
+    },
+    specItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    specText: {
+      fontFamily: FONTS.medium,
+      fontSize: 12,
+      color: colors.textMuted,
     },
     driveBadge: {
       flexDirection: 'row',
@@ -161,11 +197,28 @@ function createStyles(colors) {
     driveBadgeTextChauffeur: {
       color: colors.orange,
     },
+    locationRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 4,
+    },
     location: {
       fontFamily: FONTS.regular,
       fontSize: 13,
       color: colors.textMuted,
-      marginTop: 4,
+      flexShrink: 1,
+    },
+    ratingInline: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+      marginLeft: 8,
+    },
+    ratingInlineText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 12,
+      color: colors.textPrimary,
     },
     bottomRow: {
       flexDirection: 'row',

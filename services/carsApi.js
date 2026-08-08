@@ -28,9 +28,9 @@ function stripLegacyTermsBlock(description) {
  * app/rental-agreement/[bookingId].js) need to change.
  *
  * reviewScore/reviews still have no Supabase equivalent (no reviews/ratings
- * table backing this file directly - see attachRatingsAndSortByRating for
- * the one place ratings actually get attached, list-sort only, not per-car
- * detail). `faqs` does have a real per-car equivalent now (the `cars.faqs`
+ * table backing this file directly - see attachRatings for the one place
+ * ratings actually get attached to list results, not per-car detail).
+ * `faqs` does have a real per-car equivalent now (the `cars.faqs`
  * jsonb column, backfilled from the original Bravo/Laravel export via
  * supabase/scripts/data/bravo_cars.json - not every car has FAQs, only the
  * ones that did in the source data).
@@ -91,18 +91,15 @@ function normalizeCar(raw) {
 }
 
 /**
- * Attaches each car's live average rating (published reviews only) and
- * sorts by it descending, unrated cars last - reviews live in their own
- * table (see supabase/migrations' add_reviews_table), not a column on
- * `cars`, so this can't be a plain `.order()` on the cars query itself.
- * One extra query for the whole result set's review rows (not N+1 - a
- * single `.in('car_id', ids)` covers every car already fetched), then a
- * client-side sort. Safe to sort client-side here specifically because
- * fetchCars has no real pagination today (see its own doc comment - `page`
- * is accepted but nothing currently passes it, `limit` is rarely used) -
- * every matching car is already in `cars` before this runs.
+ * Attaches each car's live average rating (published reviews only) - reviews
+ * live in their own table (see supabase/migrations' add_reviews_table), not
+ * a column on `cars`. One extra query for the whole result set's review rows
+ * (not N+1 - a single `.in('car_id', ids)` covers every car already
+ * fetched). Called unconditionally by fetchCars (not just for the
+ * 'rate_high_low' sort) since CarTileCard/CarListCard now show a rating
+ * badge on every card, not only when sorted by rating.
  */
-async function attachRatingsAndSortByRating(cars) {
+async function attachRatings(cars) {
   const carIds = cars.map((c) => c.id);
   if (carIds.length === 0) return cars;
 
@@ -120,30 +117,40 @@ async function attachRatingsAndSortByRating(cars) {
     counts[row.car_id] = (counts[row.car_id] ?? 0) + 1;
   });
 
-  const withRatings = cars.map((car) => ({
+  return cars.map((car) => ({
     ...car,
     rating: counts[car.id] ? sums[car.id] / counts[car.id] : null,
     reviewCount: counts[car.id] ?? 0,
   }));
+}
 
-  withRatings.sort((a, b) => {
+/**
+ * Sorts by rating descending, unrated cars last. Client-side sort is safe
+ * here specifically because fetchCars has no real pagination today (see its
+ * own doc comment - `page` is accepted but nothing currently passes it,
+ * `limit` is rarely used) - every matching car is already in `cars` before
+ * this runs.
+ */
+function sortByRatingDesc(cars) {
+  return [...cars].sort((a, b) => {
     if (a.rating == null && b.rating == null) return 0;
     if (a.rating == null) return 1;
     if (b.rating == null) return -1;
     return b.rating - a.rating;
   });
-
-  return withRatings;
 }
 
 /**
  * Supported filters: type (string or string[]), driveType (string or
- * string[]), vehicleClass (string or string[]), minPrice, maxPrice, orderBy
- * ('price_low_high' | 'price_high_low' | 'rate_high_low' - sorts by real
- * review data, see attachRatingsAndSortByRating; 'recommended' - admin-
- * curated via cars.is_recommended, see app/admin/car/edit/[id].js, tagged
- * cars first, newest-first tiebreak; 'latest' - newest first by
- * created_at, real column, no tagging needed), limit, page.
+ * string[]), vehicleClass (string or string[]), seats (number or number[]),
+ * location (string or string[] - substring match against `location`, not an
+ * exact/enum match, since a car's location is a free-text string, not a
+ * fixed region), minPrice, maxPrice, orderBy ('price_low_high' |
+ * 'price_high_low' | 'rate_high_low' - sorts by real review data, see
+ * attachRatings/sortByRatingDesc; 'recommended' - admin-curated via
+ * cars.is_recommended, see app/admin/car/edit/[id].js, tagged cars first,
+ * newest-first tiebreak; 'latest' - newest first by created_at, real
+ * column, no tagging needed), limit, page.
  *
  * 'recommended' and 'latest' both order the *whole* list rather than
  * filtering down to just the tagged/recent subset - a "sort" that could
@@ -167,6 +174,16 @@ export async function fetchCars(params = {}) {
   if (params.vehicleClass) {
     query = Array.isArray(params.vehicleClass) ? query.in('vehicle_class', params.vehicleClass) : query.eq('vehicle_class', params.vehicleClass);
   }
+  if (params.seats) {
+    query = Array.isArray(params.seats) ? query.in('seats', params.seats) : query.eq('seats', params.seats);
+  }
+  if (params.location) {
+    // OR'd substring matches, e.g. ['Accra', 'Kumasi'] -> cars in Accra OR
+    // Kumasi - each term needs its own %...% ilike, PostgREST's .or() takes
+    // a single comma-joined filter-list string rather than an array.
+    const locations = Array.isArray(params.location) ? params.location : [params.location];
+    query = query.or(locations.map((loc) => `location.ilike.%${loc}%`).join(','));
+  }
   if (params.minPrice) query = query.gte('price_per_day', params.minPrice);
   if (params.maxPrice) query = query.lte('price_per_day', params.maxPrice);
 
@@ -181,8 +198,9 @@ export async function fetchCars(params = {}) {
   if (error) throw error;
 
   let cars = data.map(normalizeCar);
+  cars = await attachRatings(cars);
   if (params.orderBy === 'rate_high_low') {
-    cars = await attachRatingsAndSortByRating(cars);
+    cars = sortByRatingDesc(cars);
   }
 
   return {
