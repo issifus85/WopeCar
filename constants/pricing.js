@@ -10,7 +10,7 @@ const DEFAULT_CURRENCY = {
   rate: 1,
   format: 'left',
   decimals: 0,
-  thousandSeparator: '',
+  thousandSeparator: ',',
   decimalSeparator: '.',
 };
 

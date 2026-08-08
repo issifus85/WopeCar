@@ -14,7 +14,7 @@ export const CURRENCY_META = {
     symbol: 'GH₵',
     isMain: true,
     format: 'left',
-    thousandSeparator: '',
+    thousandSeparator: ',',
     decimalSeparator: '.',
     decimals: 0,
   },
