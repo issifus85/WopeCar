@@ -1,6 +1,13 @@
-// Supabase Edge Function - sends real booking-confirmation emails via
-// Resend right after a booking is created and paid for: one to the renter,
-// one to admin/support with full details (client, vendor, cost breakdown).
+// Supabase Edge Function - sends the "Booking Received" email via Resend
+// right after a booking is created and paid for: one to the renter, one to
+// admin/support with full details (client, vendor, cost breakdown). Despite
+// the function's name (kept as-is to avoid an unnecessary redeploy-under-a-
+// new-name churn), this is deliberately NOT the "your booking is confirmed"
+// message - payment alone doesn't mean the vendor/admin has actually agreed
+// to fulfill the trip yet. That real confirmation email is a separate
+// function, send-booking-confirmed, fired once a vendor accepts or an admin
+// confirms (see services/vendorBookingsApi.js's acceptBookingRequest and
+// services/adminBookingsApi.js's confirmBooking).
 // Mirrors delete-account's security pattern: identify the caller from their
 // own JWT first, then use service_role only for the actual privileged work
 // (joined read across bookings/cars/vendors/users, plus the outbound
@@ -82,9 +89,9 @@ function buildEmailHtml({ booking, car, vendor, renterName, supportEmail }: any)
   const body = `
       <div style="padding:28px 24px;">
         <div style="text-align:center;margin-bottom:24px;">
-          <div style="width:56px;height:56px;border-radius:28px;background:#EEF9F9;display:inline-block;text-align:center;font-size:28px;line-height:56px;">&#9989;</div>
-          <h1 style="font-size:20px;color:#154B59;margin:16px 0 4px;">Booking Confirmed!</h1>
-          <p style="font-size:14px;color:#666666;margin:0;">Hi ${escapeHtml(renterName || 'there')}, your ride is booked.</p>
+          <div style="width:56px;height:56px;border-radius:28px;background:#EEF9F9;display:inline-block;text-align:center;font-size:28px;line-height:56px;">&#128179;</div>
+          <h1 style="font-size:20px;color:#154B59;margin:16px 0 4px;">Booking Received!</h1>
+          <p style="font-size:14px;color:#666666;margin:0;">Hi ${escapeHtml(renterName || 'there')}, we've received your booking and payment for ${escapeHtml(car?.name ?? 'your car')}. It's now pending confirmation from ${escapeHtml(vendor?.business_name ?? 'the host')} - we'll email you as soon as it's confirmed.</p>
         </div>
 
         <div style="background:#f5f5f5;border-radius:12px;padding:16px;margin-bottom:20px;">
@@ -113,7 +120,7 @@ function buildAdminEmailHtml({ booking, car, vendor, renter, vendorUser }: any) 
   const body = `
       <div style="padding:28px 24px;">
         <div style="text-align:center;margin-bottom:20px;">
-          <h1 style="font-size:18px;color:#154B59;margin:0 0 4px;">New Paid Booking</h1>
+          <h1 style="font-size:18px;color:#154B59;margin:0 0 4px;">New Paid Booking - Pending Vendor Confirmation</h1>
           <p style="font-size:13px;color:#666666;margin:0;">Booking ${escapeHtml(booking.booking_ref)}</p>
         </div>
 
@@ -236,7 +243,7 @@ Deno.serve(async (req) => {
     await sendResendEmail(resendApiKey, {
       from: 'WopeCar <bookings@wopecar.com>',
       to: [user.email],
-      subject: `Booking Confirmed - ${booking.cars?.name ?? 'Your Car'}`,
+      subject: `Booking Received - ${booking.cars?.name ?? 'Your Car'}`,
       html: renterHtml,
     });
 
@@ -255,7 +262,7 @@ Deno.serve(async (req) => {
         await sendResendEmail(resendApiKey, {
           from: 'WopeCar <bookings@wopecar.com>',
           to: [supportEmail],
-          subject: `New Paid Booking - ${booking.booking_ref}`,
+          subject: `New Paid Booking (Pending Confirmation) - ${booking.booking_ref}`,
           html: adminHtml,
         });
       } catch (e) {

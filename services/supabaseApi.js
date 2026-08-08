@@ -227,3 +227,21 @@ export async function sendBookingCancelledEmail(bookingId, reason) {
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
 }
+
+/**
+ * Sends the real "Booking Confirmed" email (send-booking-confirmed Edge
+ * Function) - distinct from sendBookingConfirmationEmail above, which
+ * actually sends "Booking Received" (payment time, before anyone has agreed
+ * to fulfill the trip). This one fires once the booking is genuinely
+ * confirmed - callable by the vendor who owns it (services/
+ * vendorBookingsApi.js's acceptBookingRequest) or an admin (services/
+ * adminBookingsApi.js's confirmBooking). Best-effort, same fire-and-forget
+ * spirit as the other booking emails.
+ */
+export async function sendBookingConfirmedEmail(bookingId) {
+  const { data, error } = await supabase.functions.invoke('send-booking-confirmed', {
+    body: { bookingId },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+}

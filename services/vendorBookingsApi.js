@@ -1,6 +1,6 @@
 import supabase from './supabase';
 import { getVendorProfile } from './vendorCarsApi';
-import { getVendorBookings, sendBookingCancelledEmail } from './supabaseApi';
+import { getVendorBookings, sendBookingCancelledEmail, sendBookingConfirmedEmail } from './supabaseApi';
 
 // bookings.status ('pending'/'confirmed'/'completed'/'cancelled') plus
 // vendor_accepted (null until the vendor responds) together decide the
@@ -56,7 +56,10 @@ export async function getVendorBookingsSplit() {
  * vendor to touch these two columns, everything else on the row raises.
  * Booking is already paid by this point (checkout only creates the row
  * after Paystack succeeds), so "accept" is the vendor confirming they can
- * fulfill it, not a payment step.
+ * fulfill it, not a payment step. This is one of the two real "Booking
+ * Confirmed" triggers (the other is admin's confirmBooking in
+ * adminBookingsApi.js) - fires the real confirmation email here, since the
+ * renter only got a "received, pending confirmation" email at payment time.
  */
 export async function acceptBookingRequest(bookingId) {
   const { data, error } = await supabase
@@ -66,25 +69,31 @@ export async function acceptBookingRequest(bookingId) {
     .select('*, cars(name)')
     .single();
   if (error) throw error;
+  sendBookingConfirmedEmail(bookingId).catch(() => {});
   return normalizeVendorBooking(data);
 }
 
 /**
- * Declining is a cancellation from the vendor's side - reuses the same
- * send-booking-cancelled Edge Function the renter/admin cancel paths use,
- * so client, vendor (this vendor), and admin all get notified consistently.
- * `reason` is best-effort, forwarded into that email only - there's no
- * dedicated column for it on `bookings` (matching adminBookingsApi.
- * cancelBooking's existing reason handling, which doesn't persist it either).
+ * Declining is a cancellation from the vendor's side - routes through the
+ * same cancel-booking Edge Function the renter/admin cancel paths use
+ * (previously did a raw table update here instead, which meant declining
+ * produced zero in-app/push notifications for anyone - cancel-booking now
+ * handles that, plus setting vendor_accepted=false itself so
+ * vendorStatusFor() still shows this as "Declined" not "Cancelled").
+ * sendBookingCancelledEmail is still called separately here since
+ * cancel-booking only handles in-app/push, not email (same split as the
+ * renter/admin cancel paths).
  */
 export async function declineBookingRequest(bookingId, reason) {
-  const { data, error } = await supabase
-    .from('bookings')
-    .update({ status: 'cancelled', vendor_accepted: false })
-    .eq('id', bookingId)
-    .select('*, cars(name)')
-    .single();
+  const { data: result, error } = await supabase.functions.invoke('cancel-booking', {
+    body: { bookingId, reason },
+  });
   if (error) throw error;
+  if (result?.error) throw new Error(result.error);
+
   sendBookingCancelledEmail(bookingId, reason).catch(() => {});
+
+  const { data, error: fetchError } = await supabase.from('bookings').select('*, cars(name)').eq('id', bookingId).single();
+  if (fetchError) throw fetchError;
   return normalizeVendorBooking(data);
 }

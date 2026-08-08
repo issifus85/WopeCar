@@ -1,7 +1,7 @@
 import { Alert } from 'react-native';
 import supabase from './supabase';
 import { notifyUser } from './adminNotify';
-import { sendBookingCancelledEmail } from './supabaseApi';
+import { sendBookingCancelledEmail, sendBookingConfirmedEmail } from './supabaseApi';
 import { getSelfDriveDeliveryFee, calculateSecurityDeposit, calculateRentalPricing } from '../constants/pricing';
 
 const BOOKING_SELECT = `
@@ -45,7 +45,21 @@ async function notifyBoth(booking, { type, title, body }) {
   ]);
 }
 
-/** Confirm: status=confirmed AND payment_status=paid, per the spec's exact wording for this action. */
+/**
+ * Confirm: status=confirmed AND payment_status=paid, per the spec's exact
+ * wording for this action. This is one of the two real "Booking Confirmed"
+ * triggers (the other is the vendor's own acceptBookingRequest in
+ * vendorBookingsApi.js) - fires the real confirmation email here too, since
+ * the renter only got a "received, pending confirmation" email at payment
+ * time.
+ *
+ * Only notifies the VENDOR here (push/in-app) - the renter's push/in-app
+ * now comes from inside send-booking-confirmed itself (service_role, so it
+ * covers both trigger paths uniformly without duplicating here). Vendor
+ * still gets their own notification since admin confirming on their behalf
+ * is genuinely new information to them, distinct from them having done it
+ * themselves via acceptBookingRequest.
+ */
 export async function confirmBooking(booking) {
   const { data, error } = await supabase
     .from('bookings')
@@ -55,11 +69,14 @@ export async function confirmBooking(booking) {
     .single();
   if (error) throw error;
 
-  await notifyBoth(data, {
+  await notifyUser({
+    userId: data.vendors?.user_id,
     type: 'booking_confirmed',
     title: 'Booking confirmed',
     body: `Booking ${data.booking_ref} has been confirmed.`,
+    bookingId: data.id,
   });
+  sendBookingConfirmedEmail(data.id).catch(() => {});
   return data;
 }
 
@@ -111,7 +128,14 @@ export async function markBookingPaid(booking) {
   return data;
 }
 
-/** Only available on confirmed bookings, enforced by the caller (UI) per spec - not re-checked here since RLS/the check constraint don't encode that transition rule. */
+/**
+ * Only available on confirmed bookings, enforced by the caller (UI) per
+ * spec - not re-checked here since RLS/the check constraint don't encode
+ * that transition rule. Fires two completion emails: send-review-request
+ * to the renter (unchanged, pre-existing), send-trip-completed to the
+ * vendor + admin/support (new - previously neither heard anything when a
+ * trip finished).
+ */
 export async function markBookingCompleted(booking) {
   const { data, error } = await supabase
     .from('bookings')
@@ -127,6 +151,7 @@ export async function markBookingCompleted(booking) {
     body: `Booking ${data.booking_ref} has been marked as completed.`,
   });
   supabase.functions.invoke('send-review-request', { body: { bookingId: data.id } }).catch(() => {});
+  supabase.functions.invoke('send-trip-completed', { body: { bookingId: data.id } }).catch(() => {});
   return data;
 }
 
