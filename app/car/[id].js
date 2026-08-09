@@ -150,7 +150,7 @@ export default function CarDetailScreen() {
         car.id,
         `Hi! I have a question about the ${car.name} (${car.location}).`
       );
-      router.push(`/inbox/${conversationId}`);
+      router.push({ pathname: `/inbox/${conversationId}`, params: { from: 'car', carId: car.id } });
     } catch (e) {
       Alert.alert('Could not start inquiry', e.message || 'Please check your connection and try again.');
     }

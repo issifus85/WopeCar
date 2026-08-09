@@ -378,7 +378,7 @@ export default function BookingDetailScreen() {
       Alert.alert('Messaging unavailable', "Messaging isn't available for this booking yet.");
       return;
     }
-    router.push(`/inbox/${serverConversation.id}`);
+    router.push({ pathname: `/inbox/${serverConversation.id}`, params: { from: 'booking', bookingId: booking.id } });
   };
 
   if (!booking) {
