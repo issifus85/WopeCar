@@ -38,7 +38,7 @@ export default function VendorAgreementScreen() {
 
         <RichBody text={PARTNER_TERMS} colors={colors} />
 
-        <TouchableOpacity style={styles.linkButton} onPress={() => router.push('/terms')}>
+        <TouchableOpacity style={styles.linkButton} onPress={() => router.push({ pathname: '/terms', params: { from: 'vendor-agreement' } })}>
           <Text style={styles.linkButtonText}>View Full Terms of Service</Text>
         </TouchableOpacity>
       </ScrollView>

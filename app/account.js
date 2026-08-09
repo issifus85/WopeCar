@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import {
   StyleSheet, Text, View, TextInput, TouchableOpacity, ActivityIndicator,
   ScrollView, Alert, Share, Pressable, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { useRouter, useNavigation, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
@@ -74,6 +74,8 @@ const EMPTY_FORM = {
 
 export default function AccountScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
+  const { from } = useLocalSearchParams();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, isLoading, logout, updateProfile, uploadAvatar } = useAuth();
@@ -89,6 +91,29 @@ export default function AccountScreen() {
       router.replace('/login');
     }
   }, [isLoading, user]);
+
+  // This screen is reached from two different places (Profile's account row
+  // and three Settings rows), both pushed from inside the (tabs)/settings
+  // nested navigators - the same GO_BACK-unresolved-on-web issue documented
+  // for booking/[id].js and protection-plan.js applies here too, so this
+  // uses the same custom-headerLeft/router.replace fix instead of the
+  // default back button. `from` (set by the Settings call sites) picks the
+  // right destination; Profile's own call site omits it since that's the
+  // default.
+  const handleBack = useCallback(() => {
+    router.replace(from === 'settings' ? '/settings' : '/(tabs)/profile');
+  }, [router, from]);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity onPress={handleBack} hitSlop={10} style={styles.headerBackButton}>
+          <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+          <Text style={styles.headerBackLabel}>{from === 'settings' ? 'Settings' : 'Account'}</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, handleBack, styles, colors, from]);
 
   useEffect(() => {
     if (!user) return;
@@ -412,6 +437,17 @@ export default function AccountScreen() {
 
 function createStyles(colors) {
   return StyleSheet.create({
+  headerBackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 8,
+  },
+  headerBackLabel: {
+    fontFamily: FONTS.regular,
+    fontSize: 17,
+    color: colors.textPrimary,
+    marginLeft: -4,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

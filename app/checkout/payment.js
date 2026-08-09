@@ -310,7 +310,7 @@ export default function CheckoutPaymentScreen() {
           </TouchableOpacity>
           <Text style={styles.checkboxLabel} onPress={() => setAgreedToTerms((prev) => !prev)}>
             I agree to the{' '}
-            <Text style={styles.termsLink} onPress={() => router.push('/terms')}>
+            <Text style={styles.termsLink} onPress={() => router.push({ pathname: '/terms', params: { from: 'checkout' } })}>
               Terms of Service
             </Text>
           </Text>

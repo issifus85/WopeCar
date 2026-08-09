@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert, Linking } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { useRouter } from 'expo-router';
+import { useRouter, useNavigation } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
@@ -87,6 +87,7 @@ function EmptySection({ text, styles, colors }) {
 
 export default function DocumentsScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const { colors } = useAppTheme();
   const { user } = useAuth();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -94,6 +95,26 @@ export default function DocumentsScreen() {
   const [documents, setDocuments] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [uploadingType, setUploadingType] = useState(null);
+
+  // Only reached from Profile's menu (pushed from inside the (tabs) group's
+  // nested navigator), so the default back button can leave GO_BACK
+  // unresolved on web even though Profile is a real previous screen - same
+  // fix as protection-plan.js/account.js: a custom headerLeft that always
+  // router.replace()s to a known destination instead of relying on GO_BACK.
+  const handleBack = useCallback(() => {
+    router.replace('/(tabs)/profile');
+  }, [router]);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity onPress={handleBack} hitSlop={10} style={styles.headerBackButton}>
+          <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+          <Text style={styles.headerBackLabel}>Account</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, handleBack, styles, colors]);
 
   const load = useCallback(() => {
     documentsApi.getDocuments()
@@ -282,6 +303,17 @@ function groupByCar(docs) {
 
 function createStyles(colors) {
   return StyleSheet.create({
+    headerBackButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingRight: 8,
+    },
+    headerBackLabel: {
+      fontFamily: FONTS.regular,
+      fontSize: 17,
+      color: colors.textPrimary,
+      marginLeft: -4,
+    },
     container: {
       flex: 1,
       backgroundColor: colors.background,

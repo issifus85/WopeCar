@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { Platform, StyleSheet, Text, View, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useNavigation } from 'expo-router';
 import Constants from 'expo-constants';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as Updates from 'expo-updates';
@@ -224,9 +224,29 @@ function BiometricLoginRow({ last, styles, colors }) {
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user } = useAuth();
+
+  // Only reached from Profile's menu (pushed from inside the (tabs) group's
+  // nested navigator) - same GO_BACK-unresolved-on-web fix as
+  // protection-plan.js/account.js/documents.js/privacy.js/support.js.
+  const handleBack = useCallback(() => {
+    router.replace('/(tabs)/profile');
+  }, [router]);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity onPress={handleBack} hitSlop={10} style={styles.headerBackButton}>
+          <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+          <Text style={styles.headerBackLabel}>Account</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, handleBack, styles, colors]);
+
   const { updateSetting } = useSettings();
   const { currencies } = useCurrency();
   const currencyOptions = useMemo(() => currencies.map((c) => c.code), [currencies]);
@@ -329,7 +349,7 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
         <Section title="General" styles={styles}>
-          <NavRow label="Account Information" subtitle="Manage account details" onPress={() => router.push('/account')} styles={styles} colors={colors} />
+          <NavRow label="Account Information" subtitle="Manage account details" onPress={() => router.push({ pathname: '/account', params: { from: 'settings' } })} styles={styles} colors={colors} />
           <NavRow label="Change Password" subtitle="Update password" onPress={() => router.push('/settings/change-password')} styles={styles} colors={colors} />
           <BiometricLoginRow styles={styles} colors={colors} />
           <NavRow label="Two-Factor Authentication" subtitle="Enable additional security" onPress={() => openComingSoon('Two-Factor Authentication')} styles={styles} colors={colors} />
@@ -362,7 +382,7 @@ export default function SettingsScreen() {
           <NavRow
             label="Preferred Pickup Location"
             subtitle={user?.preferredPickupLocation || 'Set a default location'}
-            onPress={() => router.push('/account')}
+            onPress={() => router.push({ pathname: '/account', params: { from: 'settings' } })}
             styles={styles}
             colors={colors}
           />
@@ -401,8 +421,8 @@ export default function SettingsScreen() {
         <Section title="Security" styles={styles}>
           <NavRow label="Login Activity" subtitle="Recent login history" onPress={() => openComingSoon('Login Activity')} styles={styles} colors={colors} />
           <NavRow label="Trusted Devices" subtitle="Manage remembered devices" onPress={() => openComingSoon('Trusted Devices')} styles={styles} colors={colors} />
-          <NavRow label="Change Email" subtitle="Requires verification" onPress={() => router.push('/account')} styles={styles} colors={colors} />
-          <NavRow label="Change Mobile Number" subtitle="Requires OTP verification" onPress={() => router.push('/account')} styles={styles} colors={colors} />
+          <NavRow label="Change Email" subtitle="Requires verification" onPress={() => router.push({ pathname: '/account', params: { from: 'settings' } })} styles={styles} colors={colors} />
+          <NavRow label="Change Mobile Number" subtitle="Requires OTP verification" onPress={() => router.push({ pathname: '/account', params: { from: 'settings' } })} styles={styles} colors={colors} />
           <SecurityAlertsRow last styles={styles} colors={colors} />
         </Section>
 
@@ -471,6 +491,17 @@ export default function SettingsScreen() {
 
 function createStyles(colors) {
   return StyleSheet.create({
+  headerBackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 8,
+  },
+  headerBackLabel: {
+    fontFamily: FONTS.regular,
+    fontSize: 17,
+    color: colors.textPrimary,
+    marginLeft: -4,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

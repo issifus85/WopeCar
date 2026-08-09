@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useCallback, useLayoutEffect, useMemo } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Linking } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
@@ -9,8 +9,27 @@ const SUPPORT_EMAIL = 'support@wopecar.com';
 
 export default function SupportScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+
+  // Only reached from Profile's menu (pushed from inside the (tabs) group's
+  // nested navigator) - same GO_BACK-unresolved-on-web fix as
+  // protection-plan.js/account.js/documents.js/privacy.js.
+  const handleBack = useCallback(() => {
+    router.replace('/(tabs)/profile');
+  }, [router]);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity onPress={handleBack} hitSlop={10} style={styles.headerBackButton}>
+          <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+          <Text style={styles.headerBackLabel}>Account</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, handleBack, styles, colors]);
 
   const openMail = (subject) => {
     Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`);
@@ -50,6 +69,17 @@ export default function SupportScreen() {
 
 function createStyles(colors) {
   return StyleSheet.create({
+    headerBackButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingRight: 8,
+    },
+    headerBackLabel: {
+      fontFamily: FONTS.regular,
+      fontSize: 17,
+      color: colors.textPrimary,
+      marginLeft: -4,
+    },
     container: {
       flex: 1,
       backgroundColor: colors.background,

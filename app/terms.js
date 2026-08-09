@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
@@ -154,8 +155,43 @@ function AccordionSection({ heading, body, styles, colors }) {
 }
 
 export default function TermsScreen() {
+  const router = useRouter();
+  const navigation = useNavigation();
+  const { from } = useLocalSearchParams();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+
+  // Reached from three places (Profile's menu, Payment's terms checkbox,
+  // Vendor Agreement's "View Full Terms" link) - the same GO_BACK-
+  // unresolved-on-web fix as protection-plan.js/account.js, but here `from`
+  // (set by the checkout/vendor call sites) picks the right destination
+  // since there's no single default to fall back to. Profile's own call
+  // site omits it since that's the default (and the one nested-tab origin
+  // actually susceptible to the bug).
+  const handleBack = useCallback(() => {
+    if (from === 'checkout') {
+      router.replace('/checkout/payment');
+      return;
+    }
+    if (from === 'vendor-agreement') {
+      router.replace('/vendor/agreement');
+      return;
+    }
+    router.replace('/(tabs)/profile');
+  }, [router, from]);
+
+  const backLabel = from === 'checkout' ? 'Payment' : from === 'vendor-agreement' ? 'Agreement' : 'Account';
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity onPress={handleBack} hitSlop={10} style={styles.headerBackButton}>
+          <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+          <Text style={styles.headerBackLabel}>{backLabel}</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, handleBack, styles, colors, backLabel]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -173,6 +209,17 @@ export default function TermsScreen() {
 
 function createStyles(colors) {
   return StyleSheet.create({
+  headerBackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 8,
+  },
+  headerBackLabel: {
+    fontFamily: FONTS.regular,
+    fontSize: 17,
+    color: colors.textPrimary,
+    marginLeft: -4,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.surface,
