@@ -10,6 +10,7 @@ const BOOKING_SELECT = `
   addon_names, addon_days, rental_cost, addons_cost, delivery_fee,
   security_deposit, total_cost, status, payment_ref, payment_status,
   vendor_accepted, created_at, updated_at,
+  wopecare_plan, wopecare_daily_rate, wopecare_total_cost, wopecare_coverage,
   cars ( name, type, price_per_day, regional_addons ),
   renter:renter_id ( id, full_name, email, phone ),
   vendors ( id, user_id, business_name )

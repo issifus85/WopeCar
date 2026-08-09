@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../../constants/theme';
 import { useAppTheme } from '../../../contexts/ThemeContext';
-import { formatCurrency } from '../../../constants/pricing';
+import { formatCurrency, WOPECARE_PLANS } from '../../../constants/pricing';
 import SectionHeading from '../../../components/SectionHeading';
 import BadgeStatus from '../../../components/admin/BadgeStatus';
 import ConfirmModal from '../../../components/ConfirmModal';
@@ -277,9 +277,25 @@ export default function AdminBookingDetailScreen() {
             )}
 
             <View style={styles.section}>
+              <SectionHeading>WopeCare Protection</SectionHeading>
+              {booking.wopecare_plan && booking.wopecare_plan !== 'none' ? (
+                <>
+                  <Row label="Plan" value={WOPECARE_PLANS[booking.wopecare_plan]?.name ?? booking.wopecare_plan} styles={styles} />
+                  <Row label="Coverage" value={`Up to ${formatCurrency(booking.wopecare_coverage)}`} styles={styles} />
+                  <Row label="Daily Rate" value={`${formatCurrency(booking.wopecare_daily_rate)}/day`} styles={styles} />
+                </>
+              ) : (
+                <Row label="Plan" value="No protection selected" styles={styles} />
+              )}
+            </View>
+
+            <View style={styles.section}>
               <SectionHeading>Cost Breakdown</SectionHeading>
               <Row label="Rental Cost" value={formatCurrency(booking.rental_cost)} styles={styles} />
               <Row label="Add-ons Cost" value={formatCurrency(booking.addons_cost)} styles={styles} />
+              {!!booking.wopecare_plan && booking.wopecare_plan !== 'none' && (
+                <Row label="WopeCare" value={formatCurrency(booking.wopecare_total_cost)} styles={styles} />
+              )}
               <Row label="Delivery Fee" value={formatCurrency(booking.delivery_fee)} styles={styles} />
               <Row label="Security Deposit" value={formatCurrency(booking.security_deposit)} styles={styles} />
               <Row label="Total" value={formatCurrency(booking.total_cost)} styles={styles} />

@@ -5,7 +5,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { formatCurrency, getSelfDriveDeliveryFee, calculateSecurityDeposit, calculateRentalPricing } from '../../constants/pricing';
+import {
+  formatCurrency,
+  getSelfDriveDeliveryFee,
+  calculateSecurityDeposit,
+  calculateRentalPricing,
+  WOPECARE_PLANS,
+  calculateWopeCareCost,
+  calculateWopeCareDailyRate,
+} from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { getDatePriceMap } from '../../services/carPricingApi';
 import { validatePromoCode } from '../../services/promoApi';
@@ -92,6 +100,14 @@ export default function CheckoutSummaryScreen() {
   const deliveryFee = isSelfDrive ? getSelfDriveDeliveryFee() : 0;
   const securityDeposit = calculateSecurityDeposit(subtotal);
 
+  // Recomputed live from this screen's own `days` (not trusted from
+  // draft.wopeCareDetails, a snapshot taken back on the addons screen) so
+  // it stays correct if the renter goes back and changes dates after
+  // picking a plan - same reasoning as rentalCost/addonsCost above.
+  const wopeCarePlan = car && draft.wopeCare && draft.wopeCare !== 'none' ? WOPECARE_PLANS[draft.wopeCare] : null;
+  const wopeCareDailyRate = wopeCarePlan ? calculateWopeCareDailyRate(car.pricePerDay, draft.wopeCare) : 0;
+  const wopeCareCost = wopeCarePlan ? calculateWopeCareCost(car.pricePerDay, draft.wopeCare, days) : 0;
+
   // Recomputed from the promo's own discount shape (not a stored amount) so
   // it stays correct if the renter goes back and changes dates/addons after
   // applying a code - see the comment on CheckoutContext's EMPTY_DRAFT.
@@ -103,7 +119,7 @@ export default function CheckoutSummaryScreen() {
     return Math.min(subtotal, Math.max(0, amount));
   }, [draft.promoCode, draft.promoDiscountType, draft.promoDiscountValue, subtotal]);
 
-  const total = subtotal - promoDiscountAmount + deliveryFee + securityDeposit;
+  const total = subtotal - promoDiscountAmount + deliveryFee + securityDeposit + wopeCareCost;
 
   const [promoInput, setPromoInput] = useState('');
   const [isApplyingPromo, setIsApplyingPromo] = useState(false);
@@ -196,6 +212,22 @@ export default function CheckoutSummaryScreen() {
               </Text>
             </View>
           ))}
+
+          {wopeCarePlan ? (
+            <View style={styles.costRow}>
+              <Text style={styles.costLabel}>
+                {wopeCarePlan.name} ({formatCurrency(wopeCareDailyRate, activeCurrency)}/day)
+              </Text>
+              <Text style={styles.costValue}>{formatCurrency(wopeCareCost, activeCurrency)}</Text>
+            </View>
+          ) : (
+            <View style={styles.costRow}>
+              <Text style={[styles.costLabel, styles.noProtectionLabel]}>No Protection Selected</Text>
+              <TouchableOpacity onPress={() => router.push({ pathname: '/checkout/addons', params: { carId } })}>
+                <Text style={styles.addProtectionLink}>Add Protection →</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {isSelfDrive && (
             <View style={styles.costRow}>
@@ -357,6 +389,14 @@ function createStyles(colors) {
   },
   discountLabel: {
     color: colors.success,
+  },
+  noProtectionLabel: {
+    color: colors.textSubtle,
+  },
+  addProtectionLink: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 13,
+    color: colors.teal,
   },
   discountValue: {
     fontFamily: FONTS.semiBold,

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { COLORS } from './theme';
 
 export const CURRENCY_CODE = 'GHS';
 
@@ -418,4 +419,79 @@ export function calculateRentalPricing({
     totalDiscount: lengthOfStayDiscountAmount + blanketDiscountAmount,
     rentalCost,
   };
+}
+
+// --- WopeCare (damage protection add-on) -------------------------------
+// WopeCare is a WopeCar-direct damage protection benefit offered at
+// checkout - explicitly NOT insurance. Rate is a percentage of the car's
+// own pricePerDay, charged per billable day; `coverage` is the maximum
+// eligible incidental-damage amount that plan protects against, not a
+// price. Colors reference the same brand-fixed COLORS every plan badge
+// elsewhere in the app already uses, rather than re-hardcoding hex here.
+export const WOPECARE_PLANS = {
+  none: {
+    id: 'none',
+    name: 'No Protection',
+    rate: 0,
+    coverage: 0,
+    description: 'You remain responsible for all damage costs',
+  },
+  basic: {
+    id: 'basic',
+    name: 'WopeCare Basic',
+    label: 'Essential Protection',
+    rate: 0.08,
+    coverage: 1500,
+    color: COLORS.teal,
+    features: [
+      'Scratches & scuffs',
+      'Minor dents',
+      'Minor bumper & body damage',
+    ],
+  },
+  plus: {
+    id: 'plus',
+    name: 'WopeCare Plus',
+    label: 'Most Popular',
+    rate: 0.12,
+    coverage: 3000,
+    color: COLORS.navy,
+    features: [
+      'Scratches & scuffs',
+      'Minor dents',
+      'Minor bumper & body damage',
+      'More protection for unexpected damage',
+    ],
+  },
+  premium: {
+    id: 'premium',
+    name: 'WopeCare Premium',
+    label: 'Maximum Protection',
+    rate: 0.16,
+    coverage: 5000,
+    color: COLORS.orange,
+    features: [
+      'Scratches & scuffs',
+      'Minor dents',
+      'Minor bumper & body damage',
+      'Our highest incidental damage protection',
+    ],
+  },
+};
+
+// Total WopeCare cost for the whole trip - `days` should be the same
+// billableDays calculateRentalPricing() already computed for this booking,
+// not a naive calendar-day count, so WopeCare bills on the same cycle as
+// the rental itself.
+export function calculateWopeCareCost(pricePerDay, plan, days) {
+  if (plan === 'none' || !plan) return 0;
+  const dailyRate = pricePerDay * WOPECARE_PLANS[plan].rate;
+  return Math.round(dailyRate * days * 100) / 100;
+}
+
+// Per-day WopeCare rate for display (e.g. "GH₵17.40/day") - independent of
+// trip length, unlike calculateWopeCareCost() above.
+export function calculateWopeCareDailyRate(pricePerDay, plan) {
+  if (plan === 'none' || !plan) return 0;
+  return Math.round(pricePerDay * WOPECARE_PLANS[plan].rate * 100) / 100;
 }

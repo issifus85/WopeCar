@@ -28,6 +28,15 @@ function normalizeSupabaseBooking(row) {
     pickupLocation: row.pickup_location,
     returnLocation: row.return_location,
     addons: (row.addon_names ?? []).map((name, i) => ({ name, days: row.addon_days?.[i] ?? 1 })),
+    // Same shape as the local booking object app/checkout/payment.js
+    // builds on the optimistic-add path, so a booking looks identical
+    // whether it just came from a fresh checkout or from this Supabase sync.
+    wopeCare: {
+      plan: row.wopecare_plan ?? 'none',
+      dailyRate: row.wopecare_daily_rate ?? 0,
+      totalCost: row.wopecare_total_cost ?? 0,
+      coverage: row.wopecare_coverage ?? 0,
+    },
     totalCost: row.total_cost,
     paystackReference: row.payment_ref,
     status: STATUS_MAP[row.status] ?? 'Pending',

@@ -390,11 +390,29 @@ Local sub-components defined outside the main screen function (e.g. `TimeSlotPic
 - **Settings wiring**: `ToggleRow` in `app/settings/index.js` takes an optional `onToggle` override prop (every other toggle is unaffected). Only the Push Notifications row uses it — enabling calls `requestPushPermission()`; on denial the toggle reverts to off with an explanatory alert rather than silently persisting an "on" setting that can never fire.
 - **UI**: `app/inbox/index.js` (was a flat `app/inbox.js` stub) is now a two-tab hub (Messages/Notifications) using the same `STATUS_TABS` pill pattern as `(tabs)/bookings.js`; `app/inbox/[id].js` is the thread screen (non-inverted `FlatList` + `scrollToEnd()`, not `inverted`, to avoid a react-native-web rendering bug). Entry points: `car/[id].js`'s "Inquiry" button and a "Message Host"/"Message Driver" button on `booking/[id].js` both call `startConversation` then navigate to the thread; `checkout/payment.js` seeds the welcome conversation and fires `booking_created` right after a booking is placed.
 
+### 6.11 WopeCare (damage protection add-on)
+
+WopeCare is a WopeCar-direct vehicle damage protection benefit offered at checkout — explicitly **not insurance**. Three tiers (Basic 8% / Plus 12% / Premium 16% of the car's `pricePerDay`, capped coverage of GH₵1,500 / 3,000 / 5,000 respectively) plus "no protection", billed per the trip's real billable days — the same cycle `calculateRentalPricing()` already computes (self-drive 24h / chauffeur 12h).
+
+`constants/pricing.js` — `WOPECARE_PLANS` (rate/coverage/features per plan; `color` sourced from `COLORS.teal`/`navy`/`orange`, not re-hardcoded), `calculateWopeCareCost(pricePerDay, plan, days)` (trip total), `calculateWopeCareDailyRate(pricePerDay, plan)` (per-day display figure).
+
+`components/WopeCareSelector.js` — the single UI for picking a plan (header, 3 plan cards, a combined "Rather not add WopeCare?" block, and an expandable "How WopeCare Works" section with real coverage-scenario copy), reused in two places with different `onSelect` wiring:
+- `app/checkout/addons.js` (**Step 3**, above the existing Regional Add-ons section) — real: `onSelect` calls `updateDraft({ wopeCare: planId, wopeCareDetails })`, persisted through the rest of checkout via `CheckoutContext`'s draft (`wopeCare: 'none'|'basic'|'plus'|'premium'`, `wopeCareDetails`: the selected plan object or `null`).
+- `app/protection-plan.js` (Profile → Protection Plan, registered in `app/_layout.js` with the standard `...themedHeader` treatment) — informational only: local `useState` for visual selection, an illustrative `pricePerDay: 145`/`days: 1`, no checkout draft involved. Deliberately has no separate branded header of its own — `WopeCareSelector`'s own internal header already covers that, so stacking a second one would just be a visual duplicate.
+- The in-app "WopeCare Terms & Conditions" link opens a "Coming soon" `ConfirmModal` — no real T&C page exists yet (see [Section 9](#9-known-gaps--deferred-work)).
+
+Cost flows through the same places every other checkout line item does, always recomputed live from the real trip length rather than trusting a stale draft snapshot (same pattern `rentalCost`/`addonsCost` already follow):
+- `checkout/summary.js` — a cost-breakdown row (plan name + daily rate + trip total, or a muted "No Protection Selected" + "Add Protection →" link back to addons), folded into `total`.
+- `checkout/payment.js` — recomputed again at the moment of booking, written to both the Supabase `bookings` row (`wopecare_plan`/`wopecare_daily_rate`/`wopecare_total_cost`/`wopecare_coverage` columns — see [Section 7](#7-business-rules--constants-reference)) and the local optimistic booking object (`wopeCare: { plan, dailyRate, totalCost, coverage }`).
+- `contexts/BookingsContext.js` — `normalizeSupabaseBooking()` maps those same four columns back into the identical `wopeCare: {...}` shape, so a booking looks the same whether it just came from checkout or synced from Supabase.
+- `app/booking/[id].js` (renter) — a "WopeCare Protection" card (green shield-checkmark + plan/coverage/rate/total, or an orange warning "No WopeCare Protection") in view mode; in editing mode, WopeCare cost is recomputed live against the edited trip length and folded into `recomputedTotal`, exactly like every other cost component there.
+- `app/admin/(tabs)/bookings.js` / `app/admin/booking/[id].js` — `BOOKING_SELECT` in `services/adminBookingsApi.js` includes the 4 `wopecare_*` columns; the list shows a small "WopeCare" badge next to Paid/status when a plan was picked, the detail screen has its own "WopeCare Protection" section (plan/coverage/rate) plus a line in Cost Breakdown. **Not wired**: the admin's own booking-modify flow (`recomputeBookingCost`/`modifyBooking` in `services/adminBookingsApi.js`) doesn't recompute the WopeCare portion if an admin changes a booking's dates — only the renter-side modify flow in `booking/[id].js` does that.
+
 ---
 
 ## 7. Business Rules & Constants Reference
 
-All in `constants/pricing.js`. **This is the single source of truth — never hardcode these numbers elsewhere.**
+All in `constants/pricing.js`. **This is the single source of truth — never hardcode these numbers elsewhere.** Note: this file has grown well beyond the table below (a full dynamic pricing engine — `calculateRentalPricing()`, length-of-stay tiers, car-level and app-wide discounts, several live-editable `app_settings` — see the file itself); this table hasn't been fully audited against that growth, only extended for WopeCare below.
 
 | Rule | Value | Applies to |
 |---|---|---|
@@ -404,8 +422,10 @@ All in `constants/pricing.js`. **This is the single source of truth — never ha
 | Working days | Monday–Saturday. **Sundays blocked** in every date picker (`DateRangeModal`, `checkout/dates.js`) | All bookings |
 | Time slots | 8:00 AM – 6:00 PM, hourly | Pickup/return time pickers |
 | Currency | `GHS` (`CURRENCY_CODE`), formatted via `formatCurrency()` | Display only |
+| WopeCare rates | Basic `8%` / Plus `12%` / Premium `16%` of `pricePerDay`, via `WOPECARE_PLANS` + `calculateWopeCareCost()`/`calculateWopeCareDailyRate()` | Checkout add-ons step, opt-in |
+| WopeCare coverage caps | Basic `GH₵1,500` / Plus `GH₵3,000` / Premium `GH₵5,000` — max eligible-damage benefit, not a price | Same |
 
-Source for these numbers: `wopecar.com/faq` (live FAQ page) and `wopecar.com`'s booking widget/T&Cs — cross-checked and confirmed matching before the min-booking-days rule was added.
+Source for the original 6 rules: `wopecar.com/faq` (live FAQ page) and `wopecar.com`'s booking widget/T&Cs — cross-checked and confirmed matching before the min-booking-days rule was added. WopeCare's rates/coverage/copy were supplied directly by the user, not scraped from a live source (WopeCare didn't exist on the site before this feature).
 
 ---
 
@@ -436,9 +456,9 @@ Each module has a `RouterServiceProvider` that maps its `Routes/*.php` files und
 
 ### 8.3 What does NOT exist on the backend (important)
 
-- **No booking-creation/list/status API.** `mapApiRoutes()` in `Booking/RouterServiceProvider.php` is defined but never called from `map()`, and `Booking/Routes/api.php` is empty. This is why bookings are 100% client-local (`BookingsContext` + `bookingsStorage`) — there's nowhere real to send them yet.
-- **No admin UI for bookings.** `Booking/Routes/admin.php` is empty and there's no `Booking/Admin/` directory, unlike `Car/Admin/CarController.php` which is fully built. Bookings made through the backend's own web checkout flow (`Booking/Routes/web.php` does have `doCheckout`, `confirm/{gateway}`, etc.) still wouldn't be visible in the admin dashboard today.
-- **No change-password endpoint.**
+- **No booking-creation/list/status API on the Laravel backend specifically.** `mapApiRoutes()` in `Booking/RouterServiceProvider.php` is defined but never called from `map()`, and `Booking/Routes/api.php` is empty. **This is stale as a description of the app overall, though** — bookings are no longer client-local. At some point after this doc was last updated for this section, bookings were cut over to a **Supabase-backed** architecture that bypasses the Laravel `Booking` module entirely: `services/supabaseApi.js`'s `createBooking()`/`updateBooking()` write straight to a real Supabase `bookings` table (RLS-guarded, a `cancel-booking` Edge Function handles cancellation + refunds), and `contexts/BookingsContext.js` merges that with local-only pre-cutover bookings. See [6.11](#611-wopecare-damage-protection-add-on) for one concrete, current example (WopeCare's 4 columns) of code actively reading/writing this table. This whole section (8) describes the Laravel backend specifically and may have drifted further since — treat it as historical/Laravel-only context, not as a statement about where booking data actually lives today.
+- **No admin UI for bookings on the Laravel backend.** `Booking/Routes/admin.php` is empty and there's no `Booking/Admin/` directory, unlike `Car/Admin/CarController.php` which is fully built — still true for the Laravel side. **But this repo has its own admin surface that isn't on the Laravel backend at all**: `app/admin/` (a role-gated section of this same Expo app, `role='admin'` or `is_support=true`, reachable via Profile → Admin Panel / Express Desk) includes a real bookings list + detail view (`app/admin/(tabs)/bookings.js`, `app/admin/booking/[id].js`) reading/writing the same Supabase `bookings` table directly via `services/adminBookingsApi.js` — confirm/cancel/mark-paid/modify all real, not stubs.
+- **No change-password endpoint** (Laravel).
 
 ### 8.4 The Paystack callback bridge (a client-driven backend change)
 
@@ -463,7 +483,9 @@ If you touch the Paystack flow again, remember: this route must stay deployed on
 
 Explicitly deferred, not oversights — flagged here so future work doesn't accidentally treat them as "done":
 
-- **Bookings have no backend.** Local-device-only. Multi-device sync, admin visibility, and server-side status changes are all impossible until a real Booking API + admin panel are built (see 8.3).
+- ~~**Bookings have no backend.**~~ **Stale — no longer true.** Bookings are Supabase-backed (real table, RLS, a `cancel-booking` Edge Function) with a real admin panel in this same app (`app/admin/`) — see the corrected 8.3 and [6.11](#611-wopecare-damage-protection-add-on). Left struck through rather than deleted so it's clear this was corrected, not silently removed. **Still genuinely true:** the Laravel backend itself (Section 8) has no booking API/admin of its own — bookings just never went through Laravel at all.
+- **Admin's own booking-modify flow doesn't recompute WopeCare.** `services/adminBookingsApi.js`'s `recomputeBookingCost()`/`modifyBooking()` don't account for the WopeCare portion of a booking's total when an admin changes its dates — only the renter-side modify flow in `app/booking/[id].js` does that recalculation (see [6.11](#611-wopecare-damage-protection-add-on)).
+- **WopeCare has no real Terms & Conditions page.** The in-app "WopeCare Terms & Conditions" link opens a "Coming soon" `ConfirmModal` — no such page exists on the live site or in this app yet.
 - **Settings preferences that don't change app behavior yet:** Language, Theme Colour, Map Provider, Distance Units, Currency, Navigation Preference, Promotions & Offers, Wishlist Alerts, Price Drop Alerts, Profile Visibility, Marketing Preferences, Auto-play Videos. They persist correctly; nothing in the app reads them yet. (**Dark Mode** and **Push/Email/SMS Notifications, Booking Updates, New Messages, Trip Reminders** are now wired up for real — see [6.9](#69-dark-theme--themecontext) and [6.10](#610-unified-inbox--notifications) — they're no longer in this "inert" list.)
 - **~20 Settings items are backend/infra-dependent stubs** ("Coming soon" modal): Change Password, Biometric Login, 2FA, Active Devices, Data Sharing Preferences, Download My Data, Delete Account, all 6 Payment items, Login Activity, Trusted Devices, Security Alerts, Navigation Preference, Cache Management, Check for Updates, Diagnostics, Clear Cache, Developer Mode.
 - **No i18n, no multi-currency pricing** anywhere in the app (formatCurrency hardcodes GHS).
@@ -506,7 +528,10 @@ Explicitly deferred, not oversights — flagged here so future work doesn't acci
 | `inbox/index.js` | `/inbox` | Unified Inbox hub — Messages/Notifications tabs |
 | `inbox/[id].js` | `/inbox/:id` | Conversation thread (bubbles + composer) |
 | `documents.js` | `/documents` | (stub/simple) |
+| `protection-plan.js` | `/protection-plan` | WopeCare info screen (Profile → Protection Plan) — `WopeCareSelector` in informational mode, no checkout draft involved (see [6.11](#611-wopecare-damage-protection-add-on)) |
 | `payment-callback.js` | `/payment-callback` | Deep-link landing target for the Paystack bridge |
+
+This table predates several areas of the app (e.g. `app/admin/*`, `app/vendor/*`, `app/staff-inbox/*`, `app/rental-terms.js`, `app/support.js` aren't listed) — only extended here for the one screen this session added, not audited/rebuilt wholesale.
 
 ### Components (`components/`)
 | Component | Purpose |
@@ -527,6 +552,7 @@ Explicitly deferred, not oversights — flagged here so future work doesn't acci
 | `CarOwnerCard.js` | Car Detail owner/partner card |
 | `CheckoutHeader.js` | Checkout step title + progress bar |
 | `CheckoutFooterButton.js` | Checkout sticky bottom CTA |
+| `WopeCareSelector.js` | WopeCare plan picker — reused in `checkout/addons.js` (real selection) and `protection-plan.js` (informational, see [6.11](#611-wopecare-damage-protection-add-on)) |
 
 ### Contexts (`contexts/`) + paired storage (`services/`)
 | Context | Hook | Storage service | Persisted? |
@@ -556,7 +582,7 @@ Explicitly deferred, not oversights — flagged here so future work doesn't acci
 | File | Exports |
 |---|---|
 | `theme.js` | `COLORS` (brand-fixed), `LIGHT_COLORS`, `DARK_COLORS`, `FONTS` |
-| `pricing.js` | `CURRENCY_CODE`, `formatCurrency`, `SELF_DRIVE_DELIVERY_FEE`, `calculateSecurityDeposit`, `MIN_BOOKING_DAYS_SELF_DRIVE`, `MIN_BOOKING_DAYS_CHAUFFEUR`, `getMinBookingDays` |
+| `pricing.js` | `CURRENCY_CODE`, `formatCurrency`, `SELF_DRIVE_DELIVERY_FEE`, `calculateSecurityDeposit`, `MIN_BOOKING_DAYS_SELF_DRIVE`, `MIN_BOOKING_DAYS_CHAUFFEUR`, `getMinBookingDays`, `WOPECARE_PLANS`, `calculateWopeCareCost`, `calculateWopeCareDailyRate` — **not exhaustive**, this file has grown a full dynamic pricing engine (`calculateRentalPricing`, discounts, live `app_settings` reads) not listed here; see [Section 7](#7-business-rules--constants-reference)'s caveat |
 
 ---
 

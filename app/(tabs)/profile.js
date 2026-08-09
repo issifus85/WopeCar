@@ -16,6 +16,7 @@ const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 const BASE_MENU_ITEMS = [
   { label: 'Inbox', icon: 'mail-outline', route: '/inbox' },
   { label: 'Documents', icon: 'folder-outline', route: '/documents' },
+  { label: 'Protection Plan', icon: 'shield-checkmark-outline', route: '/protection-plan' },
   { label: 'Terms of Service', icon: 'document-text-outline', route: '/terms' },
   { label: 'Privacy Policy', icon: 'shield-checkmark-outline', route: '/privacy' },
   { label: 'Support', icon: 'help-buoy-outline', route: '/support' },

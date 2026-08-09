@@ -8,7 +8,15 @@ import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useSettings } from '../../contexts/SettingsContext';
-import { formatCurrency, getSelfDriveDeliveryFee, calculateSecurityDeposit, calculateRentalPricing, getMinBookingDays } from '../../constants/pricing';
+import {
+  formatCurrency,
+  getSelfDriveDeliveryFee,
+  calculateSecurityDeposit,
+  calculateRentalPricing,
+  getMinBookingDays,
+  WOPECARE_PLANS,
+  calculateWopeCareCost,
+} from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { getDatePriceMap } from '../../services/carPricingApi';
 import { payWithPaystack } from '../../services/paystackCheckout';
@@ -252,6 +260,16 @@ export default function BookingDetailScreen() {
 
   const days = pricing?.billableDays ?? 0;
 
+  // Live-recalculated the same way rentalCost/addonsCost/etc. already are
+  // below - driven by the edited `days`, never trusting the stale total
+  // captured back at checkout. dailyRate/coverage don't change (still the
+  // same plan on the same car), only the trip-length-dependent total does.
+  const recomputedWopeCareCost = useMemo(() => {
+    const plan = booking?.wopeCare?.plan;
+    if (!car || !days || !plan || plan === 'none') return 0;
+    return calculateWopeCareCost(car.pricePerDay, plan, days);
+  }, [car, days, booking?.wopeCare?.plan]);
+
   const recomputedTotal = useMemo(() => {
     if (!car || !pricing || !days) return booking?.totalCost ?? 0;
     const rentalCost = pricing.rentalCost;
@@ -275,8 +293,8 @@ export default function BookingDetailScreen() {
     const isSelfDrive = car.drivenBy === 'Self-drive';
     const deliveryFee = isSelfDrive ? getSelfDriveDeliveryFee() : 0;
     const securityDeposit = calculateSecurityDeposit(subtotal);
-    return subtotal + deliveryFee + securityDeposit;
-  }, [car, pricing, days, booking, originalDays]);
+    return subtotal + deliveryFee + securityDeposit + recomputedWopeCareCost;
+  }, [car, pricing, days, booking, originalDays, recomputedWopeCareCost]);
 
   const difference = recomputedTotal - (booking?.totalCost ?? 0);
 
@@ -305,6 +323,9 @@ export default function BookingDetailScreen() {
     pickupLocation: editPickupLocation,
     returnLocation: editReturnLocation,
     totalCost: recomputedTotal,
+    wopeCare: booking.wopeCare?.plan && booking.wopeCare.plan !== 'none'
+      ? { ...booking.wopeCare, totalCost: recomputedWopeCareCost }
+      : booking.wopeCare,
     ...extra,
   });
 
@@ -650,6 +671,38 @@ export default function BookingDetailScreen() {
 
       {mode === 'view' && (
         <View style={styles.card}>
+          <Text style={styles.sectionTitle}>WopeCare Protection</Text>
+          {booking.wopeCare?.plan && booking.wopeCare.plan !== 'none' ? (
+            <>
+              <View style={styles.row}>
+                <View style={styles.wopeCareTitleRow}>
+                  <Ionicons name="shield-checkmark" size={16} color={colors.success} />
+                  <Text style={styles.rowLabel}>{WOPECARE_PLANS[booking.wopeCare.plan]?.name ?? 'WopeCare'}</Text>
+                </View>
+                <Text style={styles.rowValue}>{formatCurrency(booking.wopeCare.totalCost, activeCurrency)}</Text>
+              </View>
+              <View style={styles.row}>
+                <Text style={styles.rowLabel}>Coverage</Text>
+                <Text style={styles.rowValue}>Up to {formatCurrency(booking.wopeCare.coverage, activeCurrency)}</Text>
+              </View>
+              <View style={[styles.row, styles.rowLast]}>
+                <Text style={styles.rowLabel}>Daily Rate</Text>
+                <Text style={styles.rowValue}>{formatCurrency(booking.wopeCare.dailyRate, activeCurrency)}/day</Text>
+              </View>
+            </>
+          ) : (
+            <View style={[styles.row, styles.rowLast]}>
+              <View style={styles.wopeCareTitleRow}>
+                <Ionicons name="warning" size={16} color={colors.warning} />
+                <Text style={styles.rowLabel}>No WopeCare Protection</Text>
+              </View>
+            </View>
+          )}
+        </View>
+      )}
+
+      {mode === 'view' && (
+        <View style={styles.card}>
           <Text style={styles.sectionTitle}>Payment</Text>
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Total Paid</Text>
@@ -943,6 +996,12 @@ function createStyles(colors) {
     gap: 8,
     flexShrink: 1,
     justifyContent: 'flex-end',
+  },
+  wopeCareTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 1,
   },
   directionsButton: {
     width: 26,

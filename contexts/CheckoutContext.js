@@ -13,6 +13,13 @@ const EMPTY_DRAFT = {
   // portion of the trip actually spent in that region, not the whole trip).
   addons: [],
   totalCost: 0,
+  // 'none' | 'basic' | 'plus' | 'premium' - see constants/pricing.js's
+  // WOPECARE_PLANS. wopeCareDetails caches the selected plan object itself
+  // (not just the id) so screens after addons.js can read plan.rate/
+  // coverage/name without re-importing WOPECARE_PLANS or risking it drift
+  // from whatever was actually selected.
+  wopeCare: 'none',
+  wopeCareDetails: null,
   // Only the code + the promo's own discount shape are kept, not a raw
   // discount amount - it's recomputed reactively against whatever the
   // subtotal actually is on each screen (see checkout/summary.js and

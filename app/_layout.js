@@ -389,6 +389,10 @@ function RootNavigator({ authRedirectType }) {
             options={{ headerShown: true, title: 'Documents', ...themedHeader }}
           />
           <Stack.Screen
+            name="protection-plan"
+            options={{ headerShown: true, title: 'Protection Plan', ...themedHeader }}
+          />
+          <Stack.Screen
             name="terms"
             options={{ headerShown: true, title: 'Terms of Service', ...themedHeader }}
           />

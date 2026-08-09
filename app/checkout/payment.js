@@ -6,7 +6,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { formatCurrency, calculateRentalPricing, calculateSecurityDeposit, getSelfDriveDeliveryFee } from '../../constants/pricing';
+import {
+  formatCurrency,
+  calculateRentalPricing,
+  calculateSecurityDeposit,
+  getSelfDriveDeliveryFee,
+  WOPECARE_PLANS,
+  calculateWopeCareCost,
+  calculateWopeCareDailyRate,
+} from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { getDatePriceMap } from '../../services/carPricingApi';
 import { redeemPromoCode } from '../../services/promoApi';
@@ -94,7 +102,13 @@ export default function CheckoutPaymentScreen() {
         ? subtotal * (draft.promoDiscountValue / 100)
         : draft.promoDiscountValue))
       : 0;
-    return { rentalCost, addonsCost, deliveryFee, securityDeposit, promoDiscountAmount };
+    // Same "recompute live from real days, don't trust a stale draft
+    // snapshot" reasoning as checkout/summary.js's own wopeCare fields.
+    const wopeCarePlanId = draft.wopeCare && draft.wopeCare !== 'none' ? draft.wopeCare : null;
+    const wopeCareDailyRate = wopeCarePlanId ? calculateWopeCareDailyRate(car.pricePerDay, wopeCarePlanId) : 0;
+    const wopeCareCost = wopeCarePlanId ? calculateWopeCareCost(car.pricePerDay, wopeCarePlanId, pricing.billableDays) : 0;
+    const wopeCareCoverage = wopeCarePlanId ? WOPECARE_PLANS[wopeCarePlanId].coverage : 0;
+    return { rentalCost, addonsCost, deliveryFee, securityDeposit, promoDiscountAmount, wopeCarePlanId, wopeCareDailyRate, wopeCareCost, wopeCareCoverage };
   };
 
   const handlePay = async () => {
@@ -109,7 +123,7 @@ export default function CheckoutPaymentScreen() {
       // charge a card with no booking ever created; that's now structurally
       // impossible, since a Supabase write failure can only happen here,
       // before Paystack is ever called.
-      const { rentalCost, addonsCost, deliveryFee, securityDeposit, promoDiscountAmount } = await buildPricingBreakdown();
+      const { rentalCost, addonsCost, deliveryFee, securityDeposit, promoDiscountAmount, wopeCarePlanId, wopeCareDailyRate, wopeCareCost, wopeCareCoverage } = await buildPricingBreakdown();
 
       // Redeemed (uses_count incremented) here, immediately before the
       // booking that actually spends it gets created - not back on the
@@ -142,6 +156,10 @@ export default function CheckoutPaymentScreen() {
         security_deposit: securityDeposit,
         promo_code: promoCode,
         promo_discount_amount: promoDiscountAmount,
+        wopecare_plan: wopeCarePlanId ?? 'none',
+        wopecare_daily_rate: wopeCareDailyRate,
+        wopecare_total_cost: wopeCareCost,
+        wopecare_coverage: wopeCareCoverage,
         total_cost: draft.totalCost,
         status: 'pending',
         payment_status: 'unpaid',
@@ -209,6 +227,12 @@ export default function CheckoutPaymentScreen() {
         pickupLocation: draft.pickupLocation,
         returnLocation: draft.returnLocation,
         addons: draft.addons,
+        wopeCare: {
+          plan: wopeCarePlanId ?? 'none',
+          dailyRate: wopeCareDailyRate,
+          totalCost: wopeCareCost,
+          coverage: wopeCareCoverage,
+        },
         totalCost: draft.totalCost,
         form: draft.form,
         paystackReference: reference,
