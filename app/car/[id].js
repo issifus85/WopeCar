@@ -33,7 +33,7 @@ export default function CarDetailScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { isFavorite, toggleFavorite } = useFavorites();
   const { addToCart } = useCart();
-  const { startConversation } = useInbox();
+  const { startInquiry } = useInbox();
   const [car, setCar] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -138,16 +138,22 @@ export default function CarDetailScreen() {
   };
 
   // Hosts are never directly messageable (see InboxContext.js) - a
-  // pre-booking inquiry has no booking yet to anchor a real conversation
-  // to anyway, so this opens the general WopeCar Support conversation.
-  const handleInquiry = () => {
+  // pre-booking inquiry has no booking yet to anchor a real conversation to,
+  // so this opens a real, server-side conversation pinned to this car
+  // instead (conversations.car_id, see startInquiry/InboxContext.js) rather
+  // than a real booking - visible to WopeCar Support the same way a
+  // booking-anchored conversation already is.
+  const handleInquiry = async () => {
     setIsBookingModalVisible(false);
-    const participant = { id: 'support', name: 'WopeCar Support', role: 'Support', avatar: null };
-    const conversationId = startConversation({
-      participant,
-      welcomeMessage: `Hi! I have a question about the ${car.name} (${car.location}).`,
-    });
-    router.push(`/inbox/${conversationId}`);
+    try {
+      const conversationId = await startInquiry(
+        car.id,
+        `Hi! I have a question about the ${car.name} (${car.location}).`
+      );
+      router.push(`/inbox/${conversationId}`);
+    } catch (e) {
+      Alert.alert('Could not start inquiry', e.message || 'Please check your connection and try again.');
+    }
   };
 
   const handleContinue = () => {

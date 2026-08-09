@@ -55,6 +55,19 @@ export async function getConversations({ scope } = {}) {
 }
 
 /**
+ * create_or_get_inquiry_conversation(p_car_id) - the pre-booking "Inquiry"
+ * counterpart to the booking-anchored flow (which creates its conversation
+ * via a DB trigger on booking insert, not a client call). Returns the raw
+ * conversation id; the RPC itself reuses an existing unresolved inquiry for
+ * the same car+caller rather than creating a duplicate every time.
+ */
+export async function createInquiryConversation(carId) {
+  const { data, error } = await supabase.rpc('create_or_get_inquiry_conversation', { p_car_id: carId });
+  if (error) throw error;
+  return data;
+}
+
+/**
  * get_conversation(p_conversation_id) - metadata + pinned summary +
  * participants, no messages.
  */

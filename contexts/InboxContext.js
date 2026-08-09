@@ -55,11 +55,6 @@ function buildNotificationContent(type, booking) {
   }
 }
 
-function conversationIdFor({ carId, participant }) {
-  if (participant.role === 'Support') return SUPPORT_CONVERSATION_ID;
-  return `conv-${participant.role.toLowerCase()}-${carId}`;
-}
-
 function isServerConversationId(id) {
   return typeof id === 'string' && id.startsWith(SERVER_CONVERSATION_PREFIX);
 }
@@ -292,61 +287,21 @@ export function InboxProvider({ children }) {
     return () => subscription.remove();
   }, [scanReminders]);
 
-  const startConversation = useCallback(({ participant, carId = null, bookingId = null, welcomeMessage = null }) => {
-    const id = conversationIdFor({ carId, participant });
-
-    setData((prev) => {
-      const existing = prev.conversations.find((c) => c.id === id);
-      if (existing) {
-        if (bookingId && !existing.bookingId) {
-          const conversations = prev.conversations.map((c) =>
-            c.id === id ? { ...c, bookingId } : c
-          );
-          const next = { ...prev, conversations };
-          inboxStorage.setInboxData(next);
-          return next;
-        }
-        return prev;
-      }
-
-      const now = new Date().toISOString();
-      const conversation = {
-        id,
-        participant,
-        carId,
-        bookingId,
-        pinned: false,
-        lastMessageText: welcomeMessage ?? '',
-        lastMessageAt: now,
-        unreadCount: welcomeMessage ? 1 : 0,
-      };
-      const messages = welcomeMessage
-        ? [...prev.messages, {
-            id: `msg-${Date.now()}`,
-            conversationId: id,
-            senderId: participant.id,
-            text: welcomeMessage,
-            createdAt: now,
-            readAt: null,
-          }]
-        : prev.messages;
-
-      const next = { ...prev, conversations: [...prev.conversations, conversation], messages };
-      inboxStorage.setInboxData(next);
-
-      if (welcomeMessage && settings.newMessages) {
-        sendLocalPushNotification({
-          title: participant.name,
-          body: welcomeMessage,
-          data: { url: `/inbox/${id}` },
-        });
-      }
-
-      return next;
-    });
-
-    return id;
-  }, [settings.newMessages]);
+  // Pre-booking "Inquiry" (app/car/[id].js) - unlike startConversation's old
+  // local-only behavior (which collapsed every car into the same generic
+  // conv-support id and silently dropped the welcome message), this goes
+  // through the real create_or_get_inquiry_conversation RPC so the car is
+  // actually pinned (conversations.car_id, see
+  // supabase/migrations/0042_inquiry_conversations.sql) and visible to
+  // staff/admin, same as a booking-anchored conversation already is.
+  const startInquiry = useCallback(async (carId, welcomeMessage) => {
+    const rawId = await conversationsApi.createInquiryConversation(carId);
+    if (welcomeMessage) {
+      await conversationsApi.sendMessage(rawId, welcomeMessage).catch(() => {});
+    }
+    syncServerConversations();
+    return `${SERVER_CONVERSATION_PREFIX}${rawId}`;
+  }, [syncServerConversations]);
 
   const sendMessage = useCallback((conversationId, text) => {
     const trimmed = text.trim();
@@ -597,7 +552,7 @@ export function InboxProvider({ children }) {
     totalUnreadCount,
     getMessages,
     sendMessage,
-    startConversation,
+    startInquiry,
     markConversationRead,
     markNotificationRead,
     markAllNotificationsRead,
@@ -610,7 +565,7 @@ export function InboxProvider({ children }) {
     syncServerConversations,
   }), [
     conversations, notifications, isLoading, totalUnreadCount, getMessages, sendMessage,
-    startConversation, markConversationRead, markNotificationRead, markAllNotificationsRead,
+    startInquiry, markConversationRead, markNotificationRead, markAllNotificationsRead,
     markConversationUnread, deleteConversation, markNotificationUnread, deleteNotification, notifyBookingEvent,
     syncMessages, syncServerConversations,
   ]);

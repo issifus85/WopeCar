@@ -44,18 +44,22 @@ export default function PinnedBookingSummary({ summary }) {
           )}
         </View>
         {!!summary.customerName && <Text style={styles.customerName}>{summary.customerName}</Text>}
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Pickup</Text>
-          <Text style={styles.detailValue} numberOfLines={1}>
-            {formatDateTime(summary.pickupDateTime)}{summary.pickupAddress ? ` · ${summary.pickupAddress}` : ''}
-          </Text>
-        </View>
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Return</Text>
-          <Text style={styles.detailValue} numberOfLines={1}>
-            {formatDateTime(summary.returnDateTime)}{summary.returnAddress ? ` · ${summary.returnAddress}` : ''}
-          </Text>
-        </View>
+        {(!!summary.pickupDateTime || !!summary.pickupAddress) && (
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Pickup</Text>
+            <Text style={styles.detailValue} numberOfLines={1}>
+              {formatDateTime(summary.pickupDateTime)}{summary.pickupAddress ? ` · ${summary.pickupAddress}` : ''}
+            </Text>
+          </View>
+        )}
+        {(!!summary.returnDateTime || !!summary.returnAddress) && (
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Return</Text>
+            <Text style={styles.detailValue} numberOfLines={1}>
+              {formatDateTime(summary.returnDateTime)}{summary.returnAddress ? ` · ${summary.returnAddress}` : ''}
+            </Text>
+          </View>
+        )}
         {typeof summary.totalCost === 'number' && (
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Total</Text>
