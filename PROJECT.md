@@ -398,8 +398,8 @@ WopeCare is a WopeCar-direct vehicle damage protection benefit offered at checko
 
 `components/WopeCareSelector.js` — the single UI for picking a plan (header, 3 plan cards, a combined "Rather not add WopeCare?" block, and an expandable "How WopeCare Works" section with real coverage-scenario copy), reused in two places with different `onSelect` wiring:
 - `app/checkout/addons.js` (**Step 3**, above the existing Regional Add-ons section) — real: `onSelect` calls `updateDraft({ wopeCare: planId, wopeCareDetails })`, persisted through the rest of checkout via `CheckoutContext`'s draft (`wopeCare: 'none'|'basic'|'plus'|'premium'`, `wopeCareDetails`: the selected plan object or `null`).
-- `app/protection-plan.js` (Profile → Protection Plan, registered in `app/_layout.js` with the standard `...themedHeader` treatment) — informational only: local `useState` for visual selection, an illustrative `pricePerDay: 145`/`days: 1`, no checkout draft involved. Deliberately has no separate branded header of its own — `WopeCareSelector`'s own internal header already covers that, so stacking a second one would just be a visual duplicate.
-- The in-app "WopeCare Terms & Conditions" link opens a "Coming soon" `ConfirmModal` — no real T&C page exists yet (see [Section 9](#9-known-gaps--deferred-work)).
+- `app/protection-plan.js` (Profile → Protection Plan, registered in `app/_layout.js` with the standard `...themedHeader` treatment) — a static WopeCare Terms & Conditions summary page (What is WopeCare?, plans table, covered/not-covered lists, important conditions, how to make a claim with in-app inbox/phone/email contact rows, refunds, "Remember" obligations, footer). Uses a custom `headerLeft`/`router.replace('/(tabs)/profile')` back button instead of the default header back arrow — on web, a root-level `Stack.Screen` pushed from inside the `(tabs)` group's nested navigator can leave the default back button's `GO_BACK` unresolved even though a real previous screen is visible, so `useLayoutEffect(() => navigation.setOptions({ headerLeft: ... }))` with an explicit `router.replace()` destination sidesteps it (same pattern used in `app/booking/[id].js`). Not a duplicate of the selector UI — it replaced an earlier version that rendered `WopeCareSelector` read-only, which was too close to the real picker in `checkout/addons.js`.
+- The in-app "See WopeCare Terms & Conditions" link in `WopeCareSelector` navigates to `/protection-plan` (`router.push`) — no more "Coming soon" modal.
 
 Cost flows through the same places every other checkout line item does, always recomputed live from the real trip length rather than trusting a stale draft snapshot (same pattern `rentalCost`/`addonsCost` already follow):
 - `checkout/summary.js` — a cost-breakdown row (plan name + daily rate + trip total, or a muted "No Protection Selected" + "Add Protection →" link back to addons), folded into `total`.
@@ -485,7 +485,6 @@ Explicitly deferred, not oversights — flagged here so future work doesn't acci
 
 - ~~**Bookings have no backend.**~~ **Stale — no longer true.** Bookings are Supabase-backed (real table, RLS, a `cancel-booking` Edge Function) with a real admin panel in this same app (`app/admin/`) — see the corrected 8.3 and [6.11](#611-wopecare-damage-protection-add-on). Left struck through rather than deleted so it's clear this was corrected, not silently removed. **Still genuinely true:** the Laravel backend itself (Section 8) has no booking API/admin of its own — bookings just never went through Laravel at all.
 - **Admin's own booking-modify flow doesn't recompute WopeCare.** `services/adminBookingsApi.js`'s `recomputeBookingCost()`/`modifyBooking()` don't account for the WopeCare portion of a booking's total when an admin changes its dates — only the renter-side modify flow in `app/booking/[id].js` does that recalculation (see [6.11](#611-wopecare-damage-protection-add-on)).
-- **WopeCare has no real Terms & Conditions page.** The in-app "WopeCare Terms & Conditions" link opens a "Coming soon" `ConfirmModal` — no such page exists on the live site or in this app yet.
 - **Settings preferences that don't change app behavior yet:** Language, Theme Colour, Map Provider, Distance Units, Currency, Navigation Preference, Promotions & Offers, Wishlist Alerts, Price Drop Alerts, Profile Visibility, Marketing Preferences, Auto-play Videos. They persist correctly; nothing in the app reads them yet. (**Dark Mode** and **Push/Email/SMS Notifications, Booking Updates, New Messages, Trip Reminders** are now wired up for real — see [6.9](#69-dark-theme--themecontext) and [6.10](#610-unified-inbox--notifications) — they're no longer in this "inert" list.)
 - **~20 Settings items are backend/infra-dependent stubs** ("Coming soon" modal): Change Password, Biometric Login, 2FA, Active Devices, Data Sharing Preferences, Download My Data, Delete Account, all 6 Payment items, Login Activity, Trusted Devices, Security Alerts, Navigation Preference, Cache Management, Check for Updates, Diagnostics, Clear Cache, Developer Mode.
 - **No i18n, no multi-currency pricing** anywhere in the app (formatCurrency hardcodes GHS).
@@ -528,7 +527,7 @@ Explicitly deferred, not oversights — flagged here so future work doesn't acci
 | `inbox/index.js` | `/inbox` | Unified Inbox hub — Messages/Notifications tabs |
 | `inbox/[id].js` | `/inbox/:id` | Conversation thread (bubbles + composer) |
 | `documents.js` | `/documents` | (stub/simple) |
-| `protection-plan.js` | `/protection-plan` | WopeCare info screen (Profile → Protection Plan) — `WopeCareSelector` in informational mode, no checkout draft involved (see [6.11](#611-wopecare-damage-protection-add-on)) |
+| `protection-plan.js` | `/protection-plan` | WopeCare Terms & Conditions summary (Profile → Protection Plan) — static content, no checkout draft involved (see [6.11](#611-wopecare-damage-protection-add-on)) |
 | `payment-callback.js` | `/payment-callback` | Deep-link landing target for the Paystack bridge |
 
 This table predates several areas of the app (e.g. `app/admin/*`, `app/vendor/*`, `app/staff-inbox/*`, `app/rental-terms.js`, `app/support.js` aren't listed) — only extended here for the one screen this session added, not audited/rebuilt wholesale.
@@ -552,7 +551,7 @@ This table predates several areas of the app (e.g. `app/admin/*`, `app/vendor/*`
 | `CarOwnerCard.js` | Car Detail owner/partner card |
 | `CheckoutHeader.js` | Checkout step title + progress bar |
 | `CheckoutFooterButton.js` | Checkout sticky bottom CTA |
-| `WopeCareSelector.js` | WopeCare plan picker — reused in `checkout/addons.js` (real selection) and `protection-plan.js` (informational, see [6.11](#611-wopecare-damage-protection-add-on)) |
+| `WopeCareSelector.js` | WopeCare plan picker — used in `checkout/addons.js` (real selection); its "See WopeCare Terms & Conditions" link opens `protection-plan.js` (see [6.11](#611-wopecare-damage-protection-add-on)) |
 
 ### Contexts (`contexts/`) + paired storage (`services/`)
 | Context | Hook | Storage service | Persisted? |

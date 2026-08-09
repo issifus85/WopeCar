@@ -1,26 +1,29 @@
 import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { formatCurrency, WOPECARE_PLANS, calculateWopeCareCost, calculateWopeCareDailyRate } from '../constants/pricing';
-import ConfirmModal from './ConfirmModal';
 
 const SELECTABLE_PLAN_IDS = ['basic', 'plus', 'premium'];
 
 /**
- * Reusable in both the checkout addons screen (real onSelect -> updateDraft)
- * and the Profile > Protection Plan informational screen (onSelect just
- * drives local highlight state there, no booking involved) - see each
- * call site for how selection is wired.
+ * The real, interactive plan picker - used only in the checkout addons
+ * screen now (real onSelect -> updateDraft). app/protection-plan.js (Profile
+ * > Protection Plan) used to render this in a read-only mode, but that was
+ * a near-duplicate of this component's own header/plan cards, so it was
+ * replaced with a plain WopeCare Terms & Conditions summary page instead -
+ * this component's own "See WopeCare Terms & Conditions" link now points
+ * there.
  */
 export default function WopeCareSelector({ pricePerDay, days, selectedPlan, onSelect }) {
+  const router = useRouter();
   const { colors } = useAppTheme();
   const { activeCurrency } = useCurrency();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [howItWorksOpen, setHowItWorksOpen] = useState(false);
-  const [showTermsComingSoon, setShowTermsComingSoon] = useState(false);
 
   const dayLabel = days === 1 ? 'day' : 'days';
 
@@ -188,22 +191,12 @@ export default function WopeCareSelector({ pricePerDay, days, selectedPlan, onSe
             <Text style={styles.paragraph}>
               WopeCare protection applies to one rental and cannot be purchased after your rental has begun.
             </Text>
-            <TouchableOpacity onPress={() => setShowTermsComingSoon(true)}>
+            <TouchableOpacity onPress={() => router.push('/protection-plan')}>
               <Text style={styles.termsLink}>See WopeCare Terms &amp; Conditions for complete details.</Text>
             </TouchableOpacity>
           </View>
         )}
       </View>
-
-      <ConfirmModal
-        visible={showTermsComingSoon}
-        title="WopeCare Terms & Conditions"
-        message="The full WopeCare Terms & Conditions page is coming soon. The details above summarize how WopeCare works in the meantime."
-        confirmLabel="Got it"
-        cancelLabel={null}
-        onConfirm={() => setShowTermsComingSoon(false)}
-        onCancel={() => setShowTermsComingSoon(false)}
-      />
     </View>
   );
 }
