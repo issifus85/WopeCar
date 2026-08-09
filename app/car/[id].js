@@ -3,7 +3,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
-import { fetchCarById } from '../../services/carsApi';
+import { fetchCarById, fetchCarAvailabilityByStatus } from '../../services/carsApi';
+import { WEEKDAYS, MONTH_NAMES, stripTime, toISODate, buildMonthGrid } from '../../services/vendorCalendar';
 import { getCarReviews, getCarReviewScore } from '../../services/reviewsApi';
 import { getCarDetailFaqs } from '../../services/faqsApi';
 import { FONTS } from '../../constants/theme';
@@ -41,6 +42,9 @@ export default function CarDetailScreen() {
   const [reviewScore, setReviewScore] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [faqs, setFaqs] = useState([]);
+  const [unavailableDates, setUnavailableDates] = useState(new Set());
+  const today = stripTime(new Date());
+  const [availabilityViewMonth, setAvailabilityViewMonth] = useState(today);
   const appWideDiscount = useAppWideDiscount();
 
   useEffect(() => {
@@ -57,6 +61,14 @@ export default function CarDetailScreen() {
     getCarReviewScore(id).then(setReviewScore).catch(() => setReviewScore(null));
     getCarReviews(id).then(setReviews).catch(() => setReviews([]));
     getCarDetailFaqs().then(setFaqs).catch(() => setFaqs([]));
+
+    // Same "nice to have, don't block the page" treatment as
+    // app/checkout/dates.js's own availability fetch - a renter can still
+    // browse and start checkout if this fails, the real date-conflict check
+    // happens there (and, now, at the database level).
+    fetchCarAvailabilityByStatus(id)
+      .then(({ bookedDates, blockedDates }) => setUnavailableDates(new Set([...bookedDates, ...blockedDates])))
+      .catch(() => setUnavailableDates(new Set()));
   }, [id]);
 
   if (isLoading) {
@@ -85,6 +97,10 @@ export default function CarDetailScreen() {
 
   const rating = reviewScore?.score_total ?? 0;
   const totalReviews = reviewScore?.total_review ?? 0;
+
+  const canGoPrevAvailabilityMonth =
+    availabilityViewMonth.getFullYear() > today.getFullYear() ||
+    (availabilityViewMonth.getFullYear() === today.getFullYear() && availabilityViewMonth.getMonth() > today.getMonth());
 
   const hasActiveDiscount = isAnyDiscountActive(car.discount, appWideDiscount);
   const discountedPricePerDay = hasActiveDiscount ? applyAnyDiscount(car.pricePerDay, car.discount, appWideDiscount) : car.pricePerDay;
@@ -259,6 +275,70 @@ export default function CarDetailScreen() {
               )}
             </View>
           )}
+
+          <View style={styles.section}>
+            <SectionHeading>Availability</SectionHeading>
+            <View style={styles.availabilityLegendRow}>
+              <View style={styles.availabilityLegendItem}>
+                <View style={[styles.availabilityLegendDot, { backgroundColor: colors.teal }]} />
+                <Text style={styles.availabilityLegendText}>Available</Text>
+              </View>
+              <View style={styles.availabilityLegendItem}>
+                <View style={[styles.availabilityLegendDot, { backgroundColor: '#FFCDD2' }]} />
+                <Text style={styles.availabilityLegendText}>Unavailable</Text>
+              </View>
+            </View>
+
+            <View style={styles.availabilityMonthNav}>
+              <TouchableOpacity
+                onPress={() => setAvailabilityViewMonth(new Date(availabilityViewMonth.getFullYear(), availabilityViewMonth.getMonth() - 1, 1))}
+                disabled={!canGoPrevAvailabilityMonth}
+                hitSlop={10}
+              >
+                <Ionicons name="chevron-back" size={20} color={canGoPrevAvailabilityMonth ? colors.textPrimary : colors.disabled} />
+              </TouchableOpacity>
+              <Text style={styles.availabilityMonthLabel}>
+                {MONTH_NAMES[availabilityViewMonth.getMonth()]} {availabilityViewMonth.getFullYear()}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setAvailabilityViewMonth(new Date(availabilityViewMonth.getFullYear(), availabilityViewMonth.getMonth() + 1, 1))}
+                hitSlop={10}
+              >
+                <Ionicons name="chevron-forward" size={20} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.availabilityWeekdayRow}>
+              {WEEKDAYS.map((w) => <Text key={w} style={styles.availabilityWeekdayText}>{w}</Text>)}
+            </View>
+
+            <View style={styles.availabilityGrid}>
+              {buildMonthGrid(availabilityViewMonth).map((day, index) => {
+                if (!day) return <View key={`empty-${index}`} style={styles.availabilityDayCell} />;
+
+                const isPast = day < today;
+                const isUnavailable = unavailableDates.has(toISODate(day));
+                const isSunday = day.getDay() === 0;
+
+                return (
+                  <View key={toISODate(day)} style={styles.availabilityDayCell}>
+                    <View style={[
+                      styles.availabilityDayCircle,
+                      (isUnavailable || isSunday) && styles.availabilityDayCircleUnavailable,
+                    ]}>
+                      <Text style={[
+                        styles.availabilityDayText,
+                        (isPast || isSunday) && styles.availabilityDayTextPast,
+                        isUnavailable && styles.availabilityDayTextUnavailable,
+                      ]}>
+                        {day.getDate()}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
 
           <View style={styles.section}>
             <RentalTermsSection drivenBy={car.drivenBy} />
@@ -511,6 +591,80 @@ function createStyles(colors) {
     fontSize: 13,
     color: colors.teal,
     marginTop: 6,
+  },
+  availabilityLegendRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  availabilityLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  availabilityLegendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  availabilityLegendText: {
+    fontFamily: FONTS.regular,
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  availabilityMonthNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  availabilityMonthLabel: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  availabilityWeekdayRow: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  availabilityWeekdayText: {
+    flex: 1,
+    textAlign: 'center',
+    fontFamily: FONTS.medium,
+    fontSize: 11,
+    color: colors.textSubtle,
+  },
+  availabilityGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  availabilityDayCell: {
+    width: '14.28%',
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  availabilityDayCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  availabilityDayCircleUnavailable: {
+    backgroundColor: '#FFCDD2',
+  },
+  availabilityDayText: {
+    fontFamily: FONTS.regular,
+    fontSize: 13,
+    color: colors.textPrimary,
+  },
+  availabilityDayTextPast: {
+    color: colors.disabled,
+  },
+  availabilityDayTextUnavailable: {
+    color: '#C62828',
   },
   cancellationRow: {
     flexDirection: 'row',

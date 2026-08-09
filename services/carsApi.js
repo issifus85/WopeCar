@@ -270,3 +270,26 @@ export async function fetchCarAvailability(id) {
 
   return ranges;
 }
+
+/**
+ * Same underlying `availability` table as fetchCarAvailability(), but kept
+ * as separate ISO-date sets by status rather than collapsed into ranges -
+ * for callers that need to tell a real booking apart from a vendor-set
+ * block (the admin per-car availability screen, and the read-only calendar
+ * on the renter-facing car details screen), not just "is this date takeable
+ * or not" like app/checkout/dates.js.
+ */
+export async function fetchCarAvailabilityByStatus(id) {
+  const { data, error } = await supabase
+    .from('availability')
+    .select('date, status')
+    .eq('car_id', id);
+  if (error) throw error;
+
+  const bookedDates = new Set();
+  const blockedDates = new Set();
+  (data ?? []).forEach((row) => {
+    (row.status === 'booked' ? bookedDates : blockedDates).add(row.date);
+  });
+  return { bookedDates, blockedDates };
+}

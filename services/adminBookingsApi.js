@@ -33,6 +33,25 @@ export async function listBookings(tab) {
   return data ?? [];
 }
 
+/**
+ * Lightweight booked-date-range source for the admin per-car availability
+ * calendar (app/admin/car/availability/[id].js) - mirrors what
+ * bookedRangesForCar() in services/vendorCalendar.js does for the vendor's
+ * own calendars (only a confirmed/completed booking occupies the calendar),
+ * just scoped by car_id instead of vendor_id and without the full
+ * BOOKING_SELECT join, since this is only ever rendered as date ranges.
+ */
+export async function getBookingsForCar(carId) {
+  const { data, error } = await supabase
+    .from('bookings')
+    .select('id, start_date, end_date, status')
+    .eq('car_id', carId)
+    .in('status', ['confirmed', 'completed'])
+    .order('start_date', { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function getBooking(id) {
   const { data, error } = await supabase.from('bookings').select(BOOKING_SELECT).eq('id', id).single();
   if (error) throw error;

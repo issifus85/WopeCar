@@ -87,6 +87,12 @@ export default function CarDetailModal({ visible, car, onClose, onChanged }) {
               >
                 <Ionicons name="pricetag-outline" size={22} color={colors.teal} />
               </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => { onClose(); router.push(`/admin/car/availability/${car.id}`); }}
+                hitSlop={10}
+              >
+                <Ionicons name="calendar-outline" size={22} color={colors.teal} />
+              </TouchableOpacity>
               <TouchableOpacity onPress={onClose} hitSlop={10}>
                 <Ionicons name="close" size={24} color={colors.textPrimary} />
               </TouchableOpacity>

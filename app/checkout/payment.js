@@ -196,8 +196,19 @@ export default function CheckoutPaymentScreen() {
       // like before. Still worth a few retries rather than a bare attempt,
       // since this is genuinely the one place left where a transient
       // failure would leave real state (a successful charge) unreflected.
+      //
+      // One error is not transient and must not be retried: Postgres code
+      // 23P01 is the bookings_no_overlapping_paid_dates exclusion
+      // constraint (see supabase/migrations/0041_...) rejecting this
+      // payment_status: 'paid' update because another renter's booking for
+      // these same car+dates was confirmed first. Retrying would fail
+      // identically every time - the charge already succeeded above, so
+      // this is surfaced as its own honest message rather than the generic
+      // "please try again" error, and the payment reference is recorded on
+      // the now-cancelled reservation so support can find and refund it.
       let confirmed;
       let lastConfirmError;
+      let datesConflict = false;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
           confirmed = await confirmSupabaseBooking(reserved.id, {
@@ -207,9 +218,24 @@ export default function CheckoutPaymentScreen() {
           break;
         } catch (e) {
           lastConfirmError = e;
+          if (e.code === '23P01') {
+            datesConflict = true;
+            break;
+          }
         }
       }
-      if (!confirmed) throw lastConfirmError;
+      if (!confirmed) {
+        if (datesConflict) {
+          await confirmSupabaseBooking(reserved.id, {
+            status: 'cancelled',
+            cancellation_reason: `Payment succeeded (ref ${reference}) but these dates were booked by another renter first - needs manual refund.`,
+          }).catch(() => {});
+          throw new Error(
+            `Your payment went through, but these dates were just booked by another renter. Contact WopeCar support with reference ${reference} for a refund.`
+          );
+        }
+        throw lastConfirmError;
+      }
 
       await markDatesBooked(carId, toISODate(draft.startDate), toISODate(draft.endDate)).catch(() => {});
       sendBookingConfirmationEmail(confirmed.id).catch(() => {});

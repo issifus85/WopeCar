@@ -66,6 +66,7 @@ export default function AdminLayout() {
       <Stack.Screen name="reviews" />
       <Stack.Screen name="car/edit/[id]" />
       <Stack.Screen name="car/pricing/[id]" />
+      <Stack.Screen name="car/availability/[id]" />
       <Stack.Screen name="booking/[id]" />
       <Stack.Screen name="settings" />
     </Stack>
