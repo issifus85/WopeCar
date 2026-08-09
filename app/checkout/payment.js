@@ -211,7 +211,7 @@ export default function CheckoutPaymentScreen() {
       }
       if (!confirmed) throw lastConfirmError;
 
-      await markDatesBooked(carId, draft.startDate, draft.endDate).catch(() => {});
+      await markDatesBooked(carId, toISODate(draft.startDate), toISODate(draft.endDate)).catch(() => {});
       sendBookingConfirmationEmail(confirmed.id).catch(() => {});
       sendBookingRequestVendorEmail(confirmed.id).catch(() => {});
 
