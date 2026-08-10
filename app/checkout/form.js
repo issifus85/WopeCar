@@ -114,7 +114,7 @@ export default function CheckoutFormScreen() {
 
   return (
     <View style={styles.container}>
-      <CheckoutHeader title="Booking Details" step={5} />
+      <CheckoutHeader title="Booking Details" step={6} />
 
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>

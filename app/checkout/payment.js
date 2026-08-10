@@ -287,7 +287,7 @@ export default function CheckoutPaymentScreen() {
 
   return (
     <View style={styles.container}>
-      <CheckoutHeader title="Payment" step={6} />
+      <CheckoutHeader title="Payment" step={7} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.paystackBadge}>

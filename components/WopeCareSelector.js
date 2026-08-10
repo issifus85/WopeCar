@@ -10,8 +10,9 @@ import { formatCurrency, WOPECARE_PLANS, calculateWopeCareCost, calculateWopeCar
 const SELECTABLE_PLAN_IDS = ['basic', 'plus', 'premium'];
 
 /**
- * The real, interactive plan picker - used only in the checkout addons
- * screen now (real onSelect -> updateDraft). app/protection-plan.js (Profile
+ * The real, interactive plan picker - used only in the checkout Extra
+ * Add-ons screen now (app/checkout/wopecare.js, real onSelect ->
+ * updateDraft). app/protection-plan.js (Profile
  * > Protection Plan) used to render this in a read-only mode, but that was
  * a near-duplicate of this component's own header/plan cards, so it was
  * replaced with a plain WopeCare Terms & Conditions summary page instead -

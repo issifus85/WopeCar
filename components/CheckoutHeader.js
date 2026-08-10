@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 7;
 
 export default function CheckoutHeader({ title, step }) {
   const router = useRouter();

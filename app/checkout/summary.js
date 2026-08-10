@@ -160,7 +160,7 @@ export default function CheckoutSummaryScreen() {
 
   return (
     <View style={styles.container}>
-      <CheckoutHeader title="Cost Breakdown" step={4} />
+      <CheckoutHeader title="Cost Breakdown" step={5} />
 
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -223,7 +223,7 @@ export default function CheckoutSummaryScreen() {
           ) : (
             <View style={styles.costRow}>
               <Text style={[styles.costLabel, styles.noProtectionLabel]}>No Protection Selected</Text>
-              <TouchableOpacity onPress={() => router.push({ pathname: '/checkout/addons', params: { carId } })}>
+              <TouchableOpacity onPress={() => router.push({ pathname: '/checkout/wopecare', params: { carId } })}>
                 <Text style={styles.addProtectionLink}>Add Protection →</Text>
               </TouchableOpacity>
             </View>

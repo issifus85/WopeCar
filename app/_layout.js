@@ -268,7 +268,8 @@ function RootNavigator({ authRedirectType }) {
               Terms of Service, reached via the checkbox link on Payment). */}
           <Stack.Screen name="checkout/dates" options={{ headerShown: false, title: 'Select Dates' }} />
           <Stack.Screen name="checkout/details" options={{ headerShown: false, title: 'Pickup & Return' }} />
-          <Stack.Screen name="checkout/addons" options={{ headerShown: false, title: 'Travel Add-ons' }} />
+          <Stack.Screen name="checkout/addons" options={{ headerShown: false, title: 'Regional Add-ons' }} />
+          <Stack.Screen name="checkout/wopecare" options={{ headerShown: false, title: 'Extra Add-ons' }} />
           <Stack.Screen name="checkout/summary" options={{ headerShown: false, title: 'Cost Breakdown' }} />
           <Stack.Screen name="checkout/form" options={{ headerShown: false, title: 'Booking Details' }} />
           <Stack.Screen name="checkout/payment" options={{ headerShown: false, title: 'Payment' }} />

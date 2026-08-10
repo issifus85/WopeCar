@@ -308,17 +308,18 @@ Each checkout screen reads what it needs from `draft`, calls `updateDraft`/`upda
 | `components/FilterModal.js` | Search filters (drive type, vehicle class, etc.) on Home. | |
 | `components/SortModal.js` | Sort options on Home (exports `SORT_OPTIONS`). | |
 
-### 6.5 Checkout (6-step flow)
+### 6.5 Checkout (7-step flow)
 
 Route order, each pushing to the next on "Continue":
 1. `app/checkout/dates.js` — **Step 1: Select Dates.** Own calendar implementation (not `DateRangeModal` — a separate inline grid because it also needs to show booked/unavailable ranges from `fetchCarAvailability`). Disables past dates, Sundays, and booked ranges. Enforces the car's minimum booking length (`getMinBookingDays`) with an inline warning + disabled Continue.
 2. `app/checkout/details.js` — **Step 2: Pickup & Return.** Time slot grid (8:00 AM–6:00 PM hourly) + pickup/return location text fields + "same as pickup" checkbox.
-3. `app/checkout/addons.js` — **Step 3: Regional Travel Add-ons.** Per-car optional add-ons (`car.regionalAddons`), some `per_day` priced, some flat.
-4. `app/checkout/summary.js` — **Step 4: Cost Breakdown.** Computes `rentalCost = pricePerDay × days`, `addonsCost`, `deliveryFee` (self-drive only), `securityDeposit` (all rentals) — see [Section 7](#7-business-rules--constants-reference) for the exact formulas.
-5. `app/checkout/form.js` — **Step 5: Booking form + document uploads** (name/email/phone/address, driver's licence images via `expo-image-picker`).
-6. `app/checkout/payment.js` — **Step 6: Payment.** Calls `payWithPaystack()` ([6.6](#66-paystack-payment-flow)); on success, builds a booking object and calls `addBooking()` from `BookingsContext`, then `router.replace('/(tabs)/bookings')`.
+3. `app/checkout/addons.js` — **Step 3: Regional Add-ons.** Per-car optional add-ons (`car.regionalAddons`), some `per_day` priced, some flat.
+4. `app/checkout/wopecare.js` — **Step 4: Extra Add-ons (WopeCare).** Split out of `checkout/addons.js` (previously stacked above Regional Add-ons on the same screen) into its own step, per the requested ordering: regional add-ons first, WopeCare second — see [6.11](#611-wopecare-damage-protection-add-on).
+5. `app/checkout/summary.js` — **Step 5: Cost Breakdown.** Computes `rentalCost = pricePerDay × days`, `addonsCost`, `deliveryFee` (self-drive only), `securityDeposit` (all rentals) — see [Section 7](#7-business-rules--constants-reference) for the exact formulas.
+6. `app/checkout/form.js` — **Step 6: Booking form + document uploads** (name/email/phone/address, driver's licence images via `expo-image-picker`).
+7. `app/checkout/payment.js` — **Step 7: Payment.** Calls `payWithPaystack()` ([6.6](#66-paystack-payment-flow)); on success, builds a booking object and calls `addBooking()` from `BookingsContext`, then `router.replace('/(tabs)/bookings')`.
 
-Shared UI: `components/CheckoutHeader.js` (title + step N of 6 progress bar), `components/CheckoutFooterButton.js` (sticky bottom CTA).
+Shared UI: `components/CheckoutHeader.js` (title + step N of 7 progress bar), `components/CheckoutFooterButton.js` (sticky bottom CTA).
 
 ### 6.6 Paystack payment flow
 
@@ -396,13 +397,12 @@ WopeCare is a WopeCar-direct vehicle damage protection benefit offered at checko
 
 `constants/pricing.js` — `WOPECARE_PLANS` (rate/coverage/features per plan; `color` sourced from `COLORS.teal`/`navy`/`orange`, not re-hardcoded), `calculateWopeCareCost(pricePerDay, plan, days)` (trip total), `calculateWopeCareDailyRate(pricePerDay, plan)` (per-day display figure).
 
-`components/WopeCareSelector.js` — the single UI for picking a plan (header, 3 plan cards, a combined "Rather not add WopeCare?" block, and an expandable "How WopeCare Works" section with real coverage-scenario copy), reused in two places with different `onSelect` wiring:
-- `app/checkout/addons.js` (**Step 3**, above the existing Regional Add-ons section) — real: `onSelect` calls `updateDraft({ wopeCare: planId, wopeCareDetails })`, persisted through the rest of checkout via `CheckoutContext`'s draft (`wopeCare: 'none'|'basic'|'plus'|'premium'`, `wopeCareDetails`: the selected plan object or `null`).
-- `app/protection-plan.js` (Profile → Protection Plan, registered in `app/_layout.js` with the standard `...themedHeader` treatment) — a static WopeCare Terms & Conditions summary page (What is WopeCare?, plans table, covered/not-covered lists, important conditions, how to make a claim with in-app inbox/phone/email contact rows, refunds, "Remember" obligations, footer). Uses a custom `headerLeft`/`router.replace('/(tabs)/profile')` back button instead of the default header back arrow — on web, a root-level `Stack.Screen` pushed from inside the `(tabs)` group's nested navigator can leave the default back button's `GO_BACK` unresolved even though a real previous screen is visible, so `useLayoutEffect(() => navigation.setOptions({ headerLeft: ... }))` with an explicit `router.replace()` destination sidesteps it (same pattern used in `app/booking/[id].js`). Not a duplicate of the selector UI — it replaced an earlier version that rendered `WopeCareSelector` read-only, which was too close to the real picker in `checkout/addons.js`.
+`components/WopeCareSelector.js` — the single UI for picking a plan (header, 3 plan cards, a combined "Rather not add WopeCare?" block, and an expandable "How WopeCare Works" section with real coverage-scenario copy), used in `app/checkout/wopecare.js` (**Step 4: Extra Add-ons**, its own screen — split out of `checkout/addons.js`, which used to stack this above Regional Add-ons on one combined screen, per the requested ordering: regional add-ons first, WopeCare second) — real: `onSelect` calls `updateDraft({ wopeCare: planId, wopeCareDetails })`, persisted through the rest of checkout via `CheckoutContext`'s draft (`wopeCare: 'none'|'basic'|'plus'|'premium'`, `wopeCareDetails`: the selected plan object or `null`).
+- `app/protection-plan.js` (Profile → Protection Plan, registered in `app/_layout.js` with the standard `...themedHeader` treatment) — a static WopeCare Terms & Conditions summary page (What is WopeCare?, plans table, covered/not-covered lists, important conditions, how to make a claim with in-app inbox/phone/email contact rows, refunds, "Remember" obligations, footer) — no longer renders `WopeCareSelector` at all (that was an earlier, since-replaced version too close to the real picker). Uses a custom `headerLeft`/`router.replace('/(tabs)/profile')` back button instead of the default header back arrow — on web, a root-level `Stack.Screen` pushed from inside the `(tabs)` group's nested navigator can leave the default back button's `GO_BACK` unresolved even though a real previous screen is visible, so `useLayoutEffect(() => navigation.setOptions({ headerLeft: ... }))` with an explicit `router.replace()` destination sidesteps it (same pattern used in `app/booking/[id].js`).
 - The in-app "See WopeCare Terms & Conditions" link in `WopeCareSelector` navigates to `/protection-plan` (`router.push`) — no more "Coming soon" modal.
 
 Cost flows through the same places every other checkout line item does, always recomputed live from the real trip length rather than trusting a stale draft snapshot (same pattern `rentalCost`/`addonsCost` already follow):
-- `checkout/summary.js` — a cost-breakdown row (plan name + daily rate + trip total, or a muted "No Protection Selected" + "Add Protection →" link back to addons), folded into `total`.
+- `checkout/summary.js` — a cost-breakdown row (plan name + daily rate + trip total, or a muted "No Protection Selected" + "Add Protection →" link to `checkout/wopecare.js`), folded into `total`.
 - `checkout/payment.js` — recomputed again at the moment of booking, written to both the Supabase `bookings` row (`wopecare_plan`/`wopecare_daily_rate`/`wopecare_total_cost`/`wopecare_coverage` columns — see [Section 7](#7-business-rules--constants-reference)) and the local optimistic booking object (`wopeCare: { plan, dailyRate, totalCost, coverage }`).
 - `contexts/BookingsContext.js` — `normalizeSupabaseBooking()` maps those same four columns back into the identical `wopeCare: {...}` shape, so a booking looks the same whether it just came from checkout or synced from Supabase.
 - `app/booking/[id].js` (renter) — a "WopeCare Protection" card (green shield-checkmark + plan/coverage/rate/total, or an orange warning "No WopeCare Protection") in view mode; in editing mode, WopeCare cost is recomputed live against the edited trip length and folded into `recomputedTotal`, exactly like every other cost component there.
@@ -512,10 +512,11 @@ Explicitly deferred, not oversights — flagged here so future work doesn't acci
 | `booking/[id].js` | `/booking/:id` | Booking detail, modify, cancel |
 | `checkout/dates.js` | `/checkout/dates` | Checkout step 1 |
 | `checkout/details.js` | `/checkout/details` | Checkout step 2 |
-| `checkout/addons.js` | `/checkout/addons` | Checkout step 3 |
-| `checkout/summary.js` | `/checkout/summary` | Checkout step 4 |
-| `checkout/form.js` | `/checkout/form` | Checkout step 5 |
-| `checkout/payment.js` | `/checkout/payment` | Checkout step 6 |
+| `checkout/addons.js` | `/checkout/addons` | Checkout step 3 (Regional Add-ons) |
+| `checkout/wopecare.js` | `/checkout/wopecare` | Checkout step 4 (Extra Add-ons / WopeCare) |
+| `checkout/summary.js` | `/checkout/summary` | Checkout step 5 |
+| `checkout/form.js` | `/checkout/form` | Checkout step 6 |
+| `checkout/payment.js` | `/checkout/payment` | Checkout step 7 |
 | `settings/index.js` | `/settings` | Settings hub (9 categories) |
 | `settings/about.js` | `/settings/about` | About WopeCar |
 | `settings/help-centre.js` | `/settings/help-centre` | FAQ accordion (real content) |
@@ -551,7 +552,7 @@ This table predates several areas of the app (e.g. `app/admin/*`, `app/vendor/*`
 | `CarOwnerCard.js` | Car Detail owner/partner card |
 | `CheckoutHeader.js` | Checkout step title + progress bar |
 | `CheckoutFooterButton.js` | Checkout sticky bottom CTA |
-| `WopeCareSelector.js` | WopeCare plan picker — used in `checkout/addons.js` (real selection); its "See WopeCare Terms & Conditions" link opens `protection-plan.js` (see [6.11](#611-wopecare-damage-protection-add-on)) |
+| `WopeCareSelector.js` | WopeCare plan picker — used in `checkout/wopecare.js` (real selection); its "See WopeCare Terms & Conditions" link opens `protection-plan.js` (see [6.11](#611-wopecare-damage-protection-add-on)) |
 
 ### Contexts (`contexts/`) + paired storage (`services/`)
 | Context | Hook | Storage service | Persisted? |

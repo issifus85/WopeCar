@@ -5,12 +5,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { formatCurrency, calculateRentalPricing, WOPECARE_PLANS } from '../../constants/pricing';
+import { formatCurrency, calculateRentalPricing } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
-import WopeCareSelector from '../../components/WopeCareSelector';
 
 export default function CheckoutAddonsScreen() {
   const { carId } = useLocalSearchParams();
@@ -74,7 +73,7 @@ export default function CheckoutAddonsScreen() {
 
   const handleContinue = () => {
     updateDraft({ addons: Object.entries(selected).map(([name, addonDays]) => ({ name, days: addonDays })) });
-    router.push({ pathname: '/checkout/summary', params: { carId } });
+    router.push({ pathname: '/checkout/wopecare', params: { carId } });
   };
 
   if (isLoading) {
@@ -89,17 +88,10 @@ export default function CheckoutAddonsScreen() {
 
   return (
     <View style={styles.container}>
-      <CheckoutHeader title="Travel Add-ons" step={3} />
+      <CheckoutHeader title="Regional Add-ons" step={3} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <WopeCareSelector
-          pricePerDay={car?.pricePerDay ?? 0}
-          days={days}
-          selectedPlan={draft.wopeCare}
-          onSelect={(planId) => updateDraft({ wopeCare: planId, wopeCareDetails: planId === 'none' ? null : WOPECARE_PLANS[planId] })}
-        />
-
-        <Text style={[styles.sectionTitle, styles.addonsSectionTitle]}>Regional Travel Add-ons</Text>
+        <Text style={styles.sectionTitle}>Regional Travel Add-ons</Text>
         <Text style={styles.sectionSubtitle}>
           Select any regions outside the base rental area you plan to drive to.
         </Text>
@@ -183,12 +175,6 @@ function createStyles(colors) {
       fontFamily: FONTS.bold,
       fontSize: 16,
       color: colors.textPrimary,
-    },
-    addonsSectionTitle: {
-      marginTop: 8,
-      paddingTop: 20,
-      borderTopWidth: 1,
-      borderTopColor: colors.divider,
     },
     sectionSubtitle: {
       fontFamily: FONTS.regular,
