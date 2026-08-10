@@ -14,6 +14,16 @@ import { getCarDocuments } from '../../services/documentsApi';
 
 const STATUS_TONE = { pending: 'warning', active: 'success', inactive: 'muted' };
 
+function formatExpiry(iso) {
+  if (!iso) return null;
+  return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function isExpired(iso) {
+  if (!iso) return false;
+  return new Date(`${iso}T00:00:00`) < new Date();
+}
+
 function Spec({ label, value, styles }) {
   if (!value) return null;
   return (
@@ -159,31 +169,47 @@ export default function CarDetailModal({ visible, car, onClose, onChanged }) {
                 <View style={styles.docThumbRow}>
                   <TouchableOpacity
                     style={styles.docThumbWrap}
-                    disabled={!complianceDocs.roadworthy}
-                    onPress={() => Linking.openURL(complianceDocs.roadworthy)}
+                    disabled={!complianceDocs.roadworthy?.signedUrl}
+                    onPress={() => Linking.openURL(complianceDocs.roadworthy.signedUrl)}
                   >
-                    {complianceDocs.roadworthy ? (
-                      <Image source={{ uri: complianceDocs.roadworthy }} style={styles.docThumb} resizeMode="cover" />
+                    {complianceDocs.roadworthy?.signedUrl ? (
+                      <Image source={{ uri: complianceDocs.roadworthy.signedUrl }} style={styles.docThumb} resizeMode="cover" />
                     ) : (
                       <View style={[styles.docThumb, styles.docThumbEmpty]}>
                         <Ionicons name="document-outline" size={20} color={colors.textSubtle} />
                       </View>
                     )}
                     <Text style={styles.docThumbLabel}>Roadworthy Cert.</Text>
+                    {complianceDocs.roadworthy?.expiresAt ? (
+                      <Text style={[styles.docExpiryText, isExpired(complianceDocs.roadworthy.expiresAt) && styles.docExpiryTextExpired]}>
+                        {isExpired(complianceDocs.roadworthy.expiresAt) ? 'Expired ' : 'Expires '}
+                        {formatExpiry(complianceDocs.roadworthy.expiresAt)}
+                      </Text>
+                    ) : complianceDocs.roadworthy?.signedUrl ? (
+                      <Text style={styles.docExpiryText}>No expiry on file</Text>
+                    ) : null}
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.docThumbWrap}
-                    disabled={!complianceDocs.insurance}
-                    onPress={() => Linking.openURL(complianceDocs.insurance)}
+                    disabled={!complianceDocs.insurance?.signedUrl}
+                    onPress={() => Linking.openURL(complianceDocs.insurance.signedUrl)}
                   >
-                    {complianceDocs.insurance ? (
-                      <Image source={{ uri: complianceDocs.insurance }} style={styles.docThumb} resizeMode="cover" />
+                    {complianceDocs.insurance?.signedUrl ? (
+                      <Image source={{ uri: complianceDocs.insurance.signedUrl }} style={styles.docThumb} resizeMode="cover" />
                     ) : (
                       <View style={[styles.docThumb, styles.docThumbEmpty]}>
                         <Ionicons name="document-outline" size={20} color={colors.textSubtle} />
                       </View>
                     )}
                     <Text style={styles.docThumbLabel}>Insurance Doc</Text>
+                    {complianceDocs.insurance?.expiresAt ? (
+                      <Text style={[styles.docExpiryText, isExpired(complianceDocs.insurance.expiresAt) && styles.docExpiryTextExpired]}>
+                        {isExpired(complianceDocs.insurance.expiresAt) ? 'Expired ' : 'Expires '}
+                        {formatExpiry(complianceDocs.insurance.expiresAt)}
+                      </Text>
+                    ) : complianceDocs.insurance?.signedUrl ? (
+                      <Text style={styles.docExpiryText}>No expiry on file</Text>
+                    ) : null}
                   </TouchableOpacity>
                 </View>
               )}
@@ -385,6 +411,16 @@ function createStyles(colors) {
       fontFamily: FONTS.regular,
       fontSize: 10,
       color: colors.textSubtle,
+    },
+    docExpiryText: {
+      fontFamily: FONTS.medium,
+      fontSize: 10,
+      color: colors.textSubtle,
+      textAlign: 'center',
+    },
+    docExpiryTextExpired: {
+      color: colors.error,
+      fontFamily: FONTS.semiBold,
     },
     description: {
       fontFamily: FONTS.regular,

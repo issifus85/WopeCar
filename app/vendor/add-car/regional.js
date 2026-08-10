@@ -32,7 +32,7 @@ export default function AddCarRegionalScreen() {
   };
 
   const handleContinue = () => {
-    router.push('/vendor/add-car/vetting');
+    router.push('/vendor/add-car/documents');
   };
 
   return (

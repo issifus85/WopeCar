@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 6;
 
 // Mirrors components/CheckoutHeader.js exactly (back chevron + title + step
 // progress bar) - the Add Car wizard is Vendor Mode's equivalent of the

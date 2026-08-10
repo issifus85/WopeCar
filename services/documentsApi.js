@@ -205,7 +205,7 @@ export async function uploadDocument(type, uri) {
  * `documents_admin_all` (admin) already cover both parties this needs to be
  * visible to, no new RLS required.
  */
-export async function uploadCarDocument(carId, type, uri) {
+export async function uploadCarDocument(carId, type, uri, expiresAt = null) {
   const user = await getCurrentUser();
   const extMatch = /\.([a-zA-Z0-9]+)$/.exec(uri);
   const ext = extMatch ? extMatch[1].toLowerCase() : 'jpg';
@@ -219,7 +219,7 @@ export async function uploadCarDocument(carId, type, uri) {
 
   const { data, error } = await supabase
     .from('documents')
-    .insert({ user_id: user.id, car_id: carId, type, file_path: path })
+    .insert({ user_id: user.id, car_id: carId, type, file_path: path, expires_at: expiresAt })
     .select()
     .single();
   if (error) throw error;
@@ -239,12 +239,14 @@ export async function uploadCarDocument(carId, type, uri) {
  * Listing view and admin's Car Detail (documents_owner_select scopes the
  * former to the uploading vendor, documents_admin_all covers the latter).
  * Only the newest upload per type is returned, same "latest wins" rule as
- * services/vendorDocumentsApi.js's getMyVendorDocuments().
+ * services/vendorDocumentsApi.js's getMyVendorDocuments(). Each entry is
+ * `{ signedUrl, expiresAt }` (expiresAt a plain 'YYYY-MM-DD' or null) rather
+ * than a bare URL string, so callers can flag an expired/expiring document.
  */
 export async function getCarDocuments(carId) {
   const { data, error } = await supabase
     .from('documents')
-    .select('id, type, file_path, created_at')
+    .select('id, type, file_path, expires_at, created_at')
     .eq('car_id', carId)
     .in('type', CAR_DOCUMENT_TYPES)
     .order('created_at', { ascending: false });
@@ -259,7 +261,7 @@ export async function getCarDocuments(carId) {
     CAR_DOCUMENT_TYPES.map(async (type) => {
       const row = latestByType[type];
       if (!row) return [type, null];
-      return [type, await signedUrlFor(row.file_path)];
+      return [type, { signedUrl: await signedUrlFor(row.file_path), expiresAt: row.expires_at }];
     })
   );
   return Object.fromEntries(entries);

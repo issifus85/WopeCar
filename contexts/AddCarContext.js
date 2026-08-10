@@ -16,7 +16,7 @@ Ideal for: [e.g. Family trips, business travel, weekend getaways]
 
 Please note: [e.g. Return with same fuel level, no smoking]`;
 
-// In-memory draft across the 5-step Add Car wizard - mirrors
+// In-memory draft across the 6-step Add Car wizard - mirrors
 // CheckoutContext.js exactly (not persisted, intentionally reset each
 // attempt via startAddCar()).
 const EMPTY_DRAFT = {
@@ -43,9 +43,13 @@ const EMPTY_DRAFT = {
   vettingTime: null,
   // Compliance docs - local device uris until review.js's submit uploads
   // them for real (needs the car's own id first, see uploadCarDocument).
+  // Expiry dates are plain 'YYYY-MM-DD' strings (see SingleDateModal),
+  // required alongside their document per app/vendor/add-car/documents.js.
   insurancePolicyNumber: '',
   roadworthyDocUri: null,
+  roadworthyExpiryDate: null,
   insuranceDocUri: null,
+  insuranceExpiryDate: null,
 };
 
 const AddCarContext = createContext(null);

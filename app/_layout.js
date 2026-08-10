@@ -301,6 +301,7 @@ function RootNavigator({ authRedirectType }) {
           <Stack.Screen name="vendor/add-car/index" options={{ headerShown: false, title: 'Vehicle Details' }} />
           <Stack.Screen name="vendor/add-car/location" options={{ headerShown: false, title: 'Location & Pricing' }} />
           <Stack.Screen name="vendor/add-car/regional" options={{ headerShown: false, title: 'Regional Add-on Pricing' }} />
+          <Stack.Screen name="vendor/add-car/documents" options={{ headerShown: false, title: 'Compliance Documents' }} />
           <Stack.Screen name="vendor/add-car/vetting" options={{ headerShown: false, title: 'Schedule Photos & Vetting' }} />
           <Stack.Screen name="vendor/add-car/review" options={{ headerShown: false, title: 'Review & Submit' }} />
           <Stack.Screen name="vendor/car/[id]" options={{ headerShown: false, title: 'Car Management' }} />

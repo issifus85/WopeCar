@@ -69,8 +69,8 @@ export default function AddCarReviewScreen() {
       // Needs the car's own id, so these can only upload after addCar()
       // above returns - not part of the same insert.
       await Promise.all([
-        uploadCarDocument(car.id, 'roadworthy', draft.roadworthyDocUri),
-        uploadCarDocument(car.id, 'insurance', draft.insuranceDocUri),
+        uploadCarDocument(car.id, 'roadworthy', draft.roadworthyDocUri, draft.roadworthyExpiryDate),
+        uploadCarDocument(car.id, 'insurance', draft.insuranceDocUri, draft.insuranceExpiryDate),
       ]);
 
       setShowSubmitted(true);
@@ -88,7 +88,7 @@ export default function AddCarReviewScreen() {
 
   return (
     <View style={styles.container}>
-      <VendorWizardHeader title="Review & Submit" step={5} />
+      <VendorWizardHeader title="Review & Submit" step={6} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.sectionTitle}>Vehicle</Text>
@@ -151,7 +151,9 @@ export default function AddCarReviewScreen() {
         <View style={styles.card}>
           <SummaryRow label="Insurance Policy #" value={draft.insurancePolicyNumber || 'Not provided'} styles={styles} />
           <SummaryRow label="Roadworthy Cert." value={draft.roadworthyDocUri ? 'Attached' : 'Not attached'} styles={styles} />
+          <SummaryRow label="Roadworthy Expiry" value={formatVettingDate(draft.roadworthyExpiryDate) || 'Not provided'} styles={styles} />
           <SummaryRow label="Insurance Document" value={draft.insuranceDocUri ? 'Attached' : 'Not attached'} styles={styles} />
+          <SummaryRow label="Insurance Expiry" value={formatVettingDate(draft.insuranceExpiryDate) || 'Not provided'} styles={styles} />
         </View>
 
         <View style={styles.noticeBox}>
