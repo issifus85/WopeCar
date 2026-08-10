@@ -157,7 +157,7 @@ export default function ProtectionPlanScreen() {
         ))}
       </View>
 
-      <SectionHeading styles={styles}>How to Make a Claim</SectionHeading>
+      <SectionHeading styles={styles}>How to Report a Damage</SectionHeading>
       <Text style={styles.paragraph}>Report damage within 24 hours of your rental ending:</Text>
       <View style={styles.contactList}>
         <TouchableOpacity style={styles.contactRow} onPress={() => router.push('/inbox')}>
