@@ -78,9 +78,25 @@ export async function recordVendorPayout(vendor, { amount, note }) {
  * 'vendor' - confirmed via services/vendorCarsApi.js's applyToBecomeVendor()
  * that applying never touches users.role itself, so this admin approval
  * step really is the only place that promotion happens.
+ *
+ * Also writes application_status='approved' (+ clears rejection_reason) -
+ * the web dashboard's Pending tab filters on application_status, not
+ * is_approved (lib/api/vendors.ts's listPendingVendors). Before this, a
+ * vendor approved here kept application_status='pending' forever (its
+ * insert-time default - see vendorCarsApi.js's applyToBecomeVendor, which
+ * never sets it either), so it would never leave the web dashboard's
+ * Pending tab despite being live and able to list cars. Confirmed via a
+ * live query that all vendors approved so far happened to go through a
+ * path that set both columns, so this had not yet manifested for a real
+ * vendor - but it's a real bug for the next mobile-side approval.
  */
 export async function approveVendor(vendor) {
-  const { data, error } = await supabase.from('vendors').update({ is_approved: true }).eq('id', vendor.id).select().single();
+  const { data, error } = await supabase
+    .from('vendors')
+    .update({ is_approved: true, application_status: 'approved', rejection_reason: null })
+    .eq('id', vendor.id)
+    .select()
+    .single();
   if (error) throw error;
 
   if (vendor.user_id) {
@@ -99,6 +115,18 @@ export async function approveVendor(vendor) {
   return data;
 }
 
+/**
+ * Reject: hard-deletes the row (unlike the web dashboard's rejectVendor,
+ * which soft-rejects and keeps it) - deliberately, not an oversight. The
+ * mobile app has no concept of a 'rejected' vendor anywhere else: apply.js
+ * treats "a vendors row exists for me" as "I've already applied" and
+ * redirects straight into Vendor Mode, and the vendors_user_id_unique
+ * constraint means a leftover rejected row would permanently block
+ * reapplication (or silently resurrect the stale rejected data instead of
+ * accepting a fresh submission) unless apply.js's reapply path were also
+ * rebuilt to detect and revive a rejected row. Until that's done, deleting
+ * here is what keeps "reject then reapply" working.
+ */
 export async function rejectVendor(vendor, reason) {
   const { error } = await supabase.from('vendors').delete().eq('id', vendor.id);
   if (error) throw error;
