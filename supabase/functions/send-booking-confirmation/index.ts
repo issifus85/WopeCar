@@ -120,7 +120,7 @@ function buildAdminEmailHtml({ booking, car, vendor, renter, vendorUser }: any) 
   const body = `
       <div style="padding:28px 24px;">
         <div style="text-align:center;margin-bottom:20px;">
-          <h1 style="font-size:18px;color:#154B59;margin:0 0 4px;">New Paid Booking - Pending Vendor Confirmation</h1>
+          <h1 style="font-size:18px;color:#154B59;margin:0 0 4px;">New Paid Booking - Pending Confirmation</h1>
           <p style="font-size:13px;color:#666666;margin:0;">Booking ${escapeHtml(booking.booking_ref)}</p>
         </div>
 
@@ -154,6 +154,10 @@ function buildAdminEmailHtml({ booking, car, vendor, renter, vendorUser }: any) 
         </div>
 
         ${buildCostRows(booking)}
+
+        <div style="text-align:center;margin-top:20px;">
+          <a href="https://admin.wopecar.com/bookings" style="display:inline-block;background:#154B59;color:#ffffff;font-weight:bold;font-size:14px;padding:12px 28px;border-radius:10px;text-decoration:none;">Confirm in the Admin Dashboard</a>
+        </div>
       </div>`;
   return emailShell(body);
 }
