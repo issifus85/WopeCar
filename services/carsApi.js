@@ -157,10 +157,10 @@ function sortByRatingDesc(cars) {
  * return an empty or tiny list whenever nothing currently qualifies would
  * be a worse experience than just deprioritizing the rest.
  *
- * No list-level date-availability filter (Laravel's start/end params) -
- * no Supabase equivalent exists yet; ships without it, same as noted in the
- * migration plan - Home works fine without it, just doesn't grey out
- * unavailable cars from the list itself.
+ * When params.startDate/endDate (both 'YYYY-MM-DD') are given, cars with an
+ * overlapping paid booking or a vendor-set blocked date in that range are
+ * excluded via fetchUnavailableCarIds() below - see that function's own
+ * comment for exactly what counts as "unavailable".
  */
 export async function fetchCars(params = {}) {
   let query = supabase.from('cars').select('*', { count: 'exact' }).eq('status', 'active');
@@ -198,6 +198,18 @@ export async function fetchCars(params = {}) {
   if (error) throw error;
 
   let cars = data.map(normalizeCar);
+
+  // Filtered client-side after the fact rather than as a `.not('id','in',...)`
+  // clause on the query above - the only real caller (app/(tabs)/index.js)
+  // never combines this with params.limit, so there's no page-size
+  // under-fetch to worry about here. Would need revisiting if a future
+  // caller ever paginates a date-filtered search.
+  const hasDateRange = params.startDate && params.endDate;
+  if (hasDateRange) {
+    const unavailableIds = await fetchUnavailableCarIds(params.startDate, params.endDate);
+    cars = cars.filter((car) => !unavailableIds.has(car.id));
+  }
+
   cars = await attachRatings(cars);
   if (params.orderBy === 'rate_high_low') {
     cars = sortByRatingDesc(cars);
@@ -205,8 +217,53 @@ export async function fetchCars(params = {}) {
 
   return {
     cars,
-    meta: { total: count ?? data.length },
+    meta: { total: hasDateRange ? cars.length : (count ?? data.length) },
   };
+}
+
+/**
+ * Car ids unavailable for a given ['YYYY-MM-DD', 'YYYY-MM-DD'] range, used
+ * by fetchCars() above to filter search results. Two independent sources,
+ * matching the "booked/blocked/unavailable" language used everywhere else
+ * in the app:
+ *   - real, paid, non-cancelled bookings that overlap the range - fetched
+ *     via the get_unavailable_car_ids() RPC (0044_add_get_unavailable_car_
+ *     ids_rpc.sql), NOT a direct `.from('bookings')` query - bookings_renter_
+ *     select/bookings_vendor_select RLS scope a normal SELECT to the
+ *     caller's own bookings/cars only (bookings carries PII), so a renter
+ *     searching would only ever see their own bookings filtered out, not
+ *     other renters' bookings on the same cars. The RPC is SECURITY DEFINER
+ *     and returns only car_id, matching the same "derived fact, not row
+ *     access" pattern as get_partner_stats(). This also means it reflects
+ *     what's actually enforced at booking time, not just what happens to be
+ *     in the `availability` table below (advisory/derived - see
+ *     fetchCarAvailability's own comment - and, since cancel-booking never
+ *     cleans up `availability` rows, can go stale after a cancellation).
+ *   - vendor-set manual blocks (`availability.status = 'blocked'`), which
+ *     have no equivalent in `bookings` at all - availability_public_select
+ *     already allows reading this directly for any active car, no RPC
+ *     needed.
+ * A pending/unpaid booking does NOT block a car here - it's not a
+ * confirmed hold on those dates yet, same reasoning the exclusion
+ * constraint itself uses.
+ */
+export async function fetchUnavailableCarIds(startDate, endDate) {
+  const [bookingsRes, blockedRes] = await Promise.all([
+    supabase.rpc('get_unavailable_car_ids', { p_start_date: startDate, p_end_date: endDate }),
+    supabase
+      .from('availability')
+      .select('car_id')
+      .eq('status', 'blocked')
+      .gte('date', startDate)
+      .lte('date', endDate),
+  ]);
+  if (bookingsRes.error) throw bookingsRes.error;
+  if (blockedRes.error) throw blockedRes.error;
+
+  const ids = new Set();
+  (bookingsRes.data ?? []).forEach((row) => ids.add(row.car_id));
+  (blockedRes.data ?? []).forEach((row) => ids.add(row.car_id));
+  return ids;
 }
 
 /**

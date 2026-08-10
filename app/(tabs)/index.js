@@ -9,6 +9,7 @@ import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import DateRangeModal, { formatDateShort } from '../../components/DateRangeModal';
+import { toISODate } from '../../services/vendorCalendar';
 import SortModal, { SORT_OPTIONS } from '../../components/SortModal';
 import CurrencyModal from '../../components/CurrencyModal';
 import FilterModal from '../../components/FilterModal';
@@ -80,9 +81,10 @@ export default function HomeScreen() {
     if (locationFilters.length) {
       params.location = locationFilters;
     }
-    // No list-level date-availability filter yet against Supabase (see
-    // services/carsApi.js's fetchCars doc comment) - startDate/endDate stay
-    // selected for display and for the checkout flow, just not sent here.
+    if (startDate && endDate) {
+      params.startDate = toISODate(startDate);
+      params.endDate = toISODate(endDate);
+    }
     // 'recommended' is real now (cars.is_recommended), so it's sent like
     // every other sort rather than treated as a no-op default.
     if (sortBy) {
