@@ -1,4 +1,5 @@
 import supabase from './supabase';
+import { notifyUser } from './adminNotify';
 
 const PAGE_SIZE = 50;
 
@@ -50,9 +51,17 @@ export async function getUserDetail(id) {
   return data;
 }
 
+// Notification copy on all three below matches the web dashboard's
+// lib/api/users.ts exactly - same wording either surface uses this from.
 export async function verifyUser(id) {
   const { data, error } = await supabase.from('users').update({ is_verified: true }).eq('id', id).select().single();
   if (error) throw error;
+  await notifyUser({
+    userId: id,
+    type: 'account_verified',
+    title: 'Your account is verified',
+    body: 'An administrator has verified your WopeCar account.',
+  });
   return data;
 }
 
@@ -60,11 +69,23 @@ export async function verifyUser(id) {
 export async function suspendUser(id) {
   const { data, error } = await supabase.from('users').update({ role: 'suspended' }).eq('id', id).select().single();
   if (error) throw error;
+  await notifyUser({
+    userId: id,
+    type: 'account_suspended',
+    title: 'Account suspended',
+    body: 'Your WopeCar account has been suspended by an administrator. Contact support for details.',
+  });
   return data;
 }
 
 export async function changeUserRole(id, role) {
   const { data, error } = await supabase.from('users').update({ role }).eq('id', id).select().single();
   if (error) throw error;
+  await notifyUser({
+    userId: id,
+    type: 'account_role_changed',
+    title: 'Your account role changed',
+    body: `An administrator changed your account role to ${role}.`,
+  });
   return data;
 }
