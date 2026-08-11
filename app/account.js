@@ -137,6 +137,14 @@ export default function AccountScreen() {
     if (form.firstName !== user.firstName) payload.first_name = form.firstName;
     if (form.lastName !== user.lastName) payload.last_name = form.lastName;
     if (form.nickname !== user.nickname) payload.nickname = form.nickname;
+    // full_name is a separate column (predates first_name/last_name - see
+    // 0005_extend_users_profile.sql) that the Account screen header, the
+    // admin dashboard, and other screens all display - keep it in sync
+    // whenever either name part changes, or it silently goes stale.
+    if (payload.first_name !== undefined || payload.last_name !== undefined) {
+      const nextFullName = `${form.firstName || ''} ${form.lastName || ''}`.trim();
+      if (nextFullName && nextFullName !== user.name) payload.full_name = nextFullName;
+    }
     if (form.email !== user.email) payload.email = form.email;
     if (form.phone !== user.phone) payload.phone = form.phone;
     if (form.birthday !== (user.birthday ?? '')) payload.birthday = form.birthday;
