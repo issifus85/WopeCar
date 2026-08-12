@@ -83,6 +83,7 @@ export default function AccountScreen() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [isPickingAvatar, setIsPickingAvatar] = useState(false); // guards against a double-tap launching two overlapping native pickers, which can leave the picker sheet stuck open and unresponsive
   const [error, setError] = useState(null);
   const [showPhotoSourceModal, setShowPhotoSourceModal] = useState(false);
 
@@ -188,35 +189,51 @@ export default function AccountScreen() {
   };
 
   const pickFromLibrary = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permission needed', 'Please allow photo library access to update your photo.');
-      return;
+    if (isPickingAvatar) return;
+    setIsPickingAvatar(true);
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission needed', 'Please allow photo library access to update your photo.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.7,
+        allowsEditing: true,
+        aspect: [1, 1],
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      await commitAvatar(result.assets[0].uri);
+    } catch (e) {
+      Alert.alert('Could not open photo library', 'Please try again.');
+    } finally {
+      setIsPickingAvatar(false);
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-      allowsEditing: true,
-      aspect: [1, 1],
-    });
-    if (result.canceled || !result.assets?.[0]) return;
-    await commitAvatar(result.assets[0].uri);
   };
 
   const pickFromCamera = async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permission needed', 'Please allow camera access to take a new photo.');
-      return;
+    if (isPickingAvatar) return;
+    setIsPickingAvatar(true);
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission needed', 'Please allow camera access to take a new photo.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        quality: 0.7,
+        allowsEditing: true,
+        aspect: [1, 1],
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      await commitAvatar(result.assets[0].uri);
+    } catch (e) {
+      Alert.alert('Could not open camera', 'Please try again.');
+    } finally {
+      setIsPickingAvatar(false);
     }
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-      allowsEditing: true,
-      aspect: [1, 1],
-    });
-    if (result.canceled || !result.assets?.[0]) return;
-    await commitAvatar(result.assets[0].uri);
   };
 
   const handlePickAvatar = () => setShowPhotoSourceModal(true);
@@ -268,7 +285,7 @@ export default function AccountScreen() {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.headerCard}>
-          <TouchableOpacity onPress={handlePickAvatar} disabled={isUploadingAvatar} style={styles.avatarWrap}>
+          <TouchableOpacity onPress={handlePickAvatar} disabled={isUploadingAvatar || isPickingAvatar} style={styles.avatarWrap}>
             {user.avatar ? (
               <Image source={{ uri: user.avatar }} style={styles.avatarImage} />
             ) : (

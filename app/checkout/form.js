@@ -22,11 +22,11 @@ function splitName(fullName) {
 // booking or the Documents Hub - see getMyVerificationDocumentsByType).
 // Tapping either state calls onPick, which always hands back a fresh local
 // URI - so replacing an on-file document is just "tap it and pick again".
-function DocumentUploadTile({ label, value, onPick, styles, colors }) {
+function DocumentUploadTile({ label, value, disabled, onPick, styles, colors }) {
   const isExisting = value && typeof value === 'object';
   const previewUri = isExisting ? value.signedUrl : value;
   return (
-    <TouchableOpacity style={styles.uploadTile} onPress={onPick}>
+    <TouchableOpacity style={styles.uploadTile} onPress={onPick} disabled={disabled}>
       {previewUri ? (
         <Image source={{ uri: previewUri }} style={styles.uploadPreview} />
       ) : (
@@ -62,6 +62,7 @@ export default function CheckoutFormScreen() {
   const [licenseFront, setLicenseFront] = useState(draft.licenseFront);
   const [licenseBack, setLicenseBack] = useState(draft.licenseBack);
   const [proofOfAddress, setProofOfAddress] = useState(draft.proofOfAddress);
+  const [isPicking, setIsPicking] = useState(false); // guards against a double-tap launching two overlapping native pickers, which can leave the picker sheet stuck open and unresponsive
 
   // One-time seed from whatever this renter already has on file (a prior
   // booking, or a direct Documents Hub upload) - so a returning renter
@@ -81,17 +82,25 @@ export default function CheckoutFormScreen() {
   }, []);
 
   const pickImage = async (setter) => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permission needed', 'Please allow photo library access to upload documents.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-    });
-    if (!result.canceled && result.assets?.[0]) {
-      setter(result.assets[0].uri);
+    if (isPicking) return;
+    setIsPicking(true);
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission needed', 'Please allow photo library access to upload documents.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets?.[0]) {
+        setter(result.assets[0].uri);
+      }
+    } catch (e) {
+      Alert.alert('Could not open photo library', 'Please try again.');
+    } finally {
+      setIsPicking(false);
     }
   };
 
@@ -147,11 +156,11 @@ export default function CheckoutFormScreen() {
         </View>
 
         <Text style={styles.sectionTitle}>Driver's License or ID (for Chauffeur)</Text>
-        <DocumentUploadTile label="License - Front" value={licenseFront} onPick={() => pickImage(setLicenseFront)} styles={styles} colors={colors} />
-        <DocumentUploadTile label="License - Back" value={licenseBack} onPick={() => pickImage(setLicenseBack)} styles={styles} colors={colors} />
+        <DocumentUploadTile label="License - Front" value={licenseFront} disabled={isPicking} onPick={() => pickImage(setLicenseFront)} styles={styles} colors={colors} />
+        <DocumentUploadTile label="License - Back" value={licenseBack} disabled={isPicking} onPick={() => pickImage(setLicenseBack)} styles={styles} colors={colors} />
 
         <Text style={styles.sectionTitle}>Proof of Address (eg. Utility bill, hotel reservation, etc)</Text>
-        <DocumentUploadTile label="Utility Bill / Bank Statement" value={proofOfAddress} onPick={() => pickImage(setProofOfAddress)} styles={styles} colors={colors} />
+        <DocumentUploadTile label="Utility Bill / Bank Statement" value={proofOfAddress} disabled={isPicking} onPick={() => pickImage(setProofOfAddress)} styles={styles} colors={colors} />
       </ScrollView>
 
       <CheckoutFooterButton label="Continue" onPress={handleContinue} disabled={!isValid} />

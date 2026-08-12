@@ -18,15 +18,15 @@ function formatExpiry(iso) {
   return `${MONTH_NAMES[d.getMonth()].slice(0, 3)} ${d.getDate()}, ${d.getFullYear()}`;
 }
 
-function DocUploadTile({ label, uri, onPick, styles, colors }) {
+function DocUploadTile({ label, uri, isPicking, onPick, styles, colors }) {
   return (
-    <TouchableOpacity style={styles.docTile} onPress={onPick}>
+    <TouchableOpacity style={styles.docTile} onPress={onPick} disabled={isPicking}>
       {uri ? (
         <Image source={{ uri }} style={styles.docThumbnail} contentFit="cover" />
       ) : (
         <Ionicons name="document-attach-outline" size={26} color={colors.textSubtle} />
       )}
-      <Text style={styles.docTileLabel}>{uri ? `${label} ✓` : `Upload ${label}`}</Text>
+      <Text style={styles.docTileLabel}>{isPicking ? 'Opening…' : uri ? `${label} ✓` : `Upload ${label}`}</Text>
     </TouchableOpacity>
   );
 }
@@ -54,23 +54,32 @@ export default function AddCarDocumentsScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { draft, updateDraft } = useAddCar();
   const [expiryModal, setExpiryModal] = useState(null); // 'roadworthy' | 'insurance' | null
+  const [pickingField, setPickingField] = useState(null); // guards against a double-tap launching two overlapping native pickers, which can leave the picker sheet stuck open and unresponsive
 
   const isValid = !!draft.insurancePolicyNumber.trim()
     && !!draft.roadworthyDocUri && !!draft.roadworthyExpiryDate
     && !!draft.insuranceDocUri && !!draft.insuranceExpiryDate;
 
   const pickDocument = async (field) => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permission needed', 'Please allow photo library access to upload documents.');
-      return;
+    if (pickingField) return;
+    setPickingField(field);
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission needed', 'Please allow photo library access to upload documents.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.7,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      updateDraft({ [field]: result.assets[0].uri });
+    } catch (e) {
+      Alert.alert('Could not open photo library', 'Please try again.');
+    } finally {
+      setPickingField(null);
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-    });
-    if (result.canceled || !result.assets?.[0]) return;
-    updateDraft({ [field]: result.assets[0].uri });
   };
 
   const handleContinue = () => {
@@ -107,6 +116,7 @@ export default function AddCarDocumentsScreen() {
           <DocUploadTile
             label="Roadworthy Cert."
             uri={draft.roadworthyDocUri}
+            isPicking={pickingField === 'roadworthyDocUri'}
             onPick={() => pickDocument('roadworthyDocUri')}
             styles={styles}
             colors={colors}
@@ -123,6 +133,7 @@ export default function AddCarDocumentsScreen() {
           <DocUploadTile
             label="Insurance Doc"
             uri={draft.insuranceDocUri}
+            isPicking={pickingField === 'insuranceDocUri'}
             onPick={() => pickDocument('insuranceDocUri')}
             styles={styles}
             colors={colors}

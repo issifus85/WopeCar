@@ -136,19 +136,24 @@ export default function DocumentsScreen() {
   };
 
   const handleUpload = async (type) => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permission needed', 'Please allow photo library access to upload documents.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-    });
-    if (result.canceled || !result.assets?.[0]) return;
-
+    if (uploadingType) return;
+    // Set before the picker even launches, not just around the upload -
+    // otherwise a double-tap while the permission check/picker is still
+    // opening can launch two overlapping native pickers, which can leave
+    // the picker sheet stuck open and unresponsive.
     setUploadingType(type);
     try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission needed', 'Please allow photo library access to upload documents.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.7,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+
       await documentsApi.uploadDocument(type, result.assets[0].uri);
       load();
     } catch (e) {

@@ -17,9 +17,9 @@ const STATUS_LABEL = {
   rejected: 'Rejected',
 };
 
-function UploadTile({ label, value, isUploading, onPick, styles, colors }) {
+function UploadTile({ label, value, isUploading, disabled, onPick, styles, colors }) {
   return (
-    <TouchableOpacity style={styles.uploadTile} onPress={onPick} disabled={isUploading}>
+    <TouchableOpacity style={styles.uploadTile} onPress={onPick} disabled={isUploading || disabled}>
       {value ? (
         <Image source={{ uri: value }} style={styles.uploadPreview} />
       ) : (
@@ -53,6 +53,7 @@ export default function VendorDocumentVerificationScreen() {
   const [docs, setDocs] = useState({});
   const [isInitialized, setIsInitialized] = useState(false);
   const [uploadingType, setUploadingType] = useState(null);
+  const [isPicking, setIsPicking] = useState(false); // guards against a double-tap launching two overlapping native pickers, which can leave the picker sheet stuck open and unresponsive
   const [error, setError] = useState(null);
 
   const loadDocs = useCallback(async () => {
@@ -67,17 +68,25 @@ export default function VendorDocumentVerificationScreen() {
   const isBusinessVendor = vendorProfile?.businessInfo?.type === 'business';
 
   const pickImage = async (onPicked) => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permission needed', 'Please allow photo library access to upload documents.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-    });
-    if (!result.canceled && result.assets?.[0]) {
-      onPicked(result.assets[0].uri);
+    if (isPicking) return;
+    setIsPicking(true);
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission needed', 'Please allow photo library access to upload documents.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets?.[0]) {
+        onPicked(result.assets[0].uri);
+      }
+    } catch (e) {
+      Alert.alert('Could not open photo library', 'Please try again.');
+    } finally {
+      setIsPicking(false);
     }
   };
 
@@ -126,6 +135,7 @@ export default function VendorDocumentVerificationScreen() {
             label="Ghana Card - Front"
             value={docs.vendor_id_front}
             isUploading={uploadingType === 'vendor_id_front'}
+            disabled={isPicking}
             onPick={() => handlePick('vendor_id_front')}
             styles={styles}
             colors={colors}
@@ -134,6 +144,7 @@ export default function VendorDocumentVerificationScreen() {
             label="Ghana Card - Back"
             value={docs.vendor_id_back}
             isUploading={uploadingType === 'vendor_id_back'}
+            disabled={isPicking}
             onPick={() => handlePick('vendor_id_back')}
             styles={styles}
             colors={colors}
@@ -153,6 +164,7 @@ export default function VendorDocumentVerificationScreen() {
               label="Proof of Business Registration"
               value={docs.vendor_business_reg}
               isUploading={uploadingType === 'vendor_business_reg'}
+              disabled={isPicking}
               onPick={() => handlePick('vendor_business_reg')}
               styles={styles}
               colors={colors}
