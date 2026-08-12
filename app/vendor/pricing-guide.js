@@ -30,7 +30,7 @@ const FACTORS = [
   {
     icon: 'pricetag-outline',
     title: 'Vehicle Type',
-    body: 'Economy, Comfort, or Luxury sets your baseline. A Luxury SUV commands a higher nightly rate than a compact Economy hatchback.',
+    body: 'Economy, Comfort, or Luxury sets your baseline. A Luxury SUV commands a higher daily rate than a compact Economy hatchback.',
   },
   {
     icon: 'calendar-outline',
