@@ -3,8 +3,45 @@ import { CAR_FEATURES } from '../constants/vehicleCatalog';
 
 const FEATURE_BY_SLUG = new Map(CAR_FEATURES.map((f) => [f.slug, f]));
 
-function stripHtml(html) {
-  return (html ?? '').replace(/<[^>]*>/g, '').trim();
+const HTML_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+function decodeHtmlEntities(str) {
+  return str.replace(/&(#\d+|[a-z]+);/gi, (match, entity) => {
+    if (entity[0] === '#') return String.fromCharCode(parseInt(entity.slice(1), 10));
+    return HTML_ENTITIES[entity.toLowerCase()] ?? match;
+  });
+}
+
+// Admin's description field is now the shared Tiptap rich text editor
+// (components/ui/RichTextEditor.tsx in wopecar-admin), which stores real
+// HTML. This app still renders `description` as a single plain <Text> in
+// app/car/[id].js, so that HTML needs flattening to text - and to the same
+// "\n\n" paragraph breaks + "✔ " bullet convention every legacy plain-text
+// row already uses (see supabase/scripts/set-car-descriptions.mjs), so an
+// admin's rich-text edit reads identically to the un-edited rows around it.
+function htmlToPlainText(html) {
+  if (!html) return '';
+  if (!/<[a-z][\s\S]*>/i.test(html)) return html.trim();
+
+  let working = html.replace(/<(ul|ol)[^>]*>([\s\S]*?)<\/\1>/gi, (_, _tag, inner) => {
+    const items = [...inner.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)]
+      .map((m) => decodeHtmlEntities(m[1].replace(/<[^>]*>/g, '')).replace(/\s+/g, ' ').trim())
+      .filter(Boolean)
+      .map((text) => `✔ ${text}`);
+    return items.length ? `\n\n${items.join('\n')}\n\n` : '';
+  });
+
+  working = working
+    .replace(/<\/(p|div|h[1-6]|blockquote)>/gi, '\n\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]*>/g, '');
+  working = decodeHtmlEntities(working);
+
+  return working
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+/g, ' ').trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 // Older migrated rows still have the standard Chauffeured/Self-Drive rental
@@ -60,12 +97,12 @@ function normalizeCar(raw) {
     image: raw.images?.[0] ?? null,
     bannerImage: raw.images?.[0] ?? null,
     gallery: raw.images ?? [],
-    description: raw.description ? stripLegacyTermsBlock(stripHtml(raw.description)) : '',
+    description: raw.description ? stripLegacyTermsBlock(htmlToPlainText(raw.description)) : '',
     reviewScore: undefined, // no reviews/ratings table - Home/Detail already handle this being absent
     drivenBy: raw.drive_type ?? null,
     energySource: raw.energy_source ?? null,
     faqs: raw.faqs ?? [],
-    cancellationPolicy: raw.cancellation_policy ? stripHtml(raw.cancellation_policy) : null,
+    cancellationPolicy: raw.cancellation_policy ? htmlToPlainText(raw.cancellation_policy) : null,
     features,
     reviews: [],
     owner: raw.vendor ? {
