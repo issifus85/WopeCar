@@ -3,6 +3,8 @@ import { StyleSheet, Text, View, TouchableOpacity, FlatList, ActivityIndicator, 
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../../constants/theme';
 import { useAppTheme } from '../../../contexts/ThemeContext';
+import { useCurrency } from '../../../contexts/CurrencyContext';
+import { formatCurrency } from '../../../constants/pricing';
 import { useVendor } from '../../../contexts/VendorContext';
 import { sendLocalPushNotification } from '../../../services/pushNotifications';
 import VendorHeader from '../../../components/VendorHeader';
@@ -16,6 +18,7 @@ function formatDate(iso) {
 
 export default function VendorBookingsScreen() {
   const { colors } = useAppTheme();
+  const { activeCurrency } = useCurrency();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { bookingRequests, respondToBookingRequest, isLoading } = useVendor();
   const [acceptTarget, setAcceptTarget] = useState(null);
@@ -98,6 +101,18 @@ export default function VendorBookingsScreen() {
                 <Ionicons name="time-outline" size={14} color={colors.textSubtle} />
                 <Text style={styles.detailText}>Pickup {item.pickupTime} - Return {item.returnTime}</Text>
               </View>
+
+              {item.payoutPending ? (
+                <View style={styles.detailRow}>
+                  <Ionicons name="time-outline" size={14} color={colors.warning} />
+                  <Text style={styles.payoutPendingText}>Payout: TBC - WopeCar will confirm</Text>
+                </View>
+              ) : (
+                <View style={styles.detailRow}>
+                  <Ionicons name="cash-outline" size={14} color={colors.teal} />
+                  <Text style={styles.payoutText}>Your payout: {formatCurrency(item.earnings, activeCurrency)}</Text>
+                </View>
+              )}
 
               <View style={styles.actionsRow}>
                 <TouchableOpacity style={styles.declineButton} onPress={() => setDeclineTarget(item)}>
@@ -184,6 +199,16 @@ function createStyles(colors) {
       fontFamily: FONTS.regular,
       fontSize: 13,
       color: colors.textMuted,
+    },
+    payoutText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 13,
+      color: colors.teal,
+    },
+    payoutPendingText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 13,
+      color: colors.warning,
     },
     actionsRow: {
       flexDirection: 'row',

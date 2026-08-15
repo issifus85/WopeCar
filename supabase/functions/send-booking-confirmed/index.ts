@@ -95,6 +95,61 @@ function buildRenterEmailHtml({ booking, car, vendor }: any) {
   return emailShell(body);
 }
 
+// Vendor-facing confirmation, added alongside the renter/admin emails above -
+// this function previously never notified the vendor at all despite being
+// one of its two trigger points (vendor accept, admin confirm). Must NEVER
+// include the client's name/email/phone/total, rental/addon/delivery/
+// deposit costs, or wopecar_margin - only vendor_payout_per_day/
+// vendor_payout_total, the two figures the vendor is meant to see (see
+// bookings_compute_vendor_payout, which stamps them server-side so this
+// function never has to compute anything itself, just read the row).
+// deno-lint-ignore no-explicit-any
+function buildVendorEmailHtml({ booking, car, vendorOwnerName, supportEmail, supportPhone }: any) {
+  const payoutPerDay = Number(booking.vendor_payout_per_day ?? 0);
+  const payoutTotal = Number(booking.vendor_payout_total ?? 0);
+  const days = Number(booking.billable_days ?? 0);
+  const body = `
+      <div style="padding:28px 24px;">
+        <div style="text-align:center;margin-bottom:24px;">
+          <div style="width:56px;height:56px;border-radius:28px;background:#EEF9F9;display:inline-block;text-align:center;font-size:28px;line-height:56px;">&#127881;</div>
+          <h1 style="font-size:20px;color:#154B59;margin:16px 0 4px;">Booking Confirmed</h1>
+          <p style="font-size:14px;color:#666666;margin:0;">Hi ${escapeHtml(vendorOwnerName)}, great news &mdash; a booking has been confirmed for your ${escapeHtml(car?.name ?? 'car')}.</p>
+        </div>
+
+        <div style="font-size:11px;font-weight:bold;letter-spacing:0.06em;color:#999999;text-transform:uppercase;margin-bottom:8px;">Booking Details</div>
+        <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:20px;">
+          <tr><td style="padding:6px 0;color:#5b6b6c;">Booking Reference</td><td style="padding:6px 0;text-align:right;color:#154B59;">${escapeHtml(booking.booking_ref)}</td></tr>
+          <tr><td style="padding:6px 0;color:#5b6b6c;">Vehicle</td><td style="padding:6px 0;text-align:right;color:#154B59;">${escapeHtml(car?.name ?? '—')}</td></tr>
+          <tr><td style="padding:6px 0;color:#5b6b6c;">Pickup Date</td><td style="padding:6px 0;text-align:right;color:#154B59;">${formatDate(booking.start_date)} &middot; ${escapeHtml(booking.pickup_time)}</td></tr>
+          <tr><td style="padding:6px 0;color:#5b6b6c;">Return Date</td><td style="padding:6px 0;text-align:right;color:#154B59;">${formatDate(booking.end_date)} &middot; ${escapeHtml(booking.return_time)}</td></tr>
+          <tr><td style="padding:6px 0;color:#5b6b6c;">Pickup Location</td><td style="padding:6px 0;text-align:right;color:#154B59;">${escapeHtml(booking.pickup_location)}</td></tr>
+          <tr><td style="padding:6px 0;color:#5b6b6c;">Return Location</td><td style="padding:6px 0;text-align:right;color:#154B59;">${escapeHtml(booking.return_location)}</td></tr>
+          <tr><td style="padding:6px 0;color:#5b6b6c;">Duration</td><td style="padding:6px 0;text-align:right;color:#154B59;">${days} day${days === 1 ? '' : 's'}</td></tr>
+        </table>
+
+        <div style="background:#EEF9F9;border-radius:12px;padding:16px 18px;margin-bottom:20px;">
+          <div style="font-size:11px;font-weight:bold;letter-spacing:0.06em;color:#3EB6BA;text-transform:uppercase;margin-bottom:10px;">Your Earnings</div>
+          <table style="width:100%;border-collapse:collapse;font-size:14px;">
+            <tr><td style="padding:4px 0;color:#5b6b6c;">Payout Rate</td><td style="padding:4px 0;text-align:right;color:#154B59;">GHS ${payoutPerDay.toFixed(2)}/day</td></tr>
+            <tr><td style="padding:4px 0;color:#154B59;font-weight:bold;">Total Payout</td><td style="padding:4px 0;text-align:right;color:#154B59;font-weight:bold;font-size:16px;">GHS ${payoutTotal.toFixed(2)}</td></tr>
+          </table>
+        </div>
+
+        <p style="font-size:12.5px;color:#999999;line-height:1.6;margin:0 0 20px;">
+          Your payout will be processed after the rental is completed, in accordance with WopeCar's payment schedule.
+        </p>
+
+        <p style="font-size:12.5px;color:#999999;line-height:1.6;margin:0;text-align:center;">
+          If you have any questions, contact WopeCar Support:<br />
+          ${supportEmail ? escapeHtml(supportEmail) : 'support@wopecar.com'}${supportPhone ? ` | ${escapeHtml(supportPhone)}` : ''}
+        </p>
+      </div>
+      <div style="background:#f5f5f5;padding:16px 24px;text-align:center;">
+        <p style="font-size:12px;color:#999999;margin:0;">The WopeCar Team</p>
+      </div>`;
+  return emailShell(body);
+}
+
 // deno-lint-ignore no-explicit-any
 function buildAdminEmailHtml({ booking, car, vendor, confirmedBy }: any) {
   const body = `
@@ -161,7 +216,7 @@ Deno.serve(async (req) => {
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
     const { data: booking, error: bookingError } = await adminClient
       .from('bookings')
-      .select('*, cars(name), vendors(business_name, user_id), renter:renter_id(id, full_name, email)')
+      .select('*, cars(name), vendors(business_name, user_id, owner:users!vendors_user_id_fkey(full_name, email)), renter:renter_id(id, full_name, email)')
       .eq('id', bookingId)
       .single();
     if (bookingError || !booking) {
@@ -184,8 +239,12 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'RESEND_API_KEY is not configured for this project.' }, 500);
     }
 
-    const { data: supportSetting } = await adminClient.from('app_settings').select('value').eq('key', 'support_email').maybeSingle();
-    const supportEmail = typeof supportSetting?.value === 'string' ? supportSetting.value : null;
+    const { data: supportSettings } = await adminClient
+      .from('app_settings')
+      .select('key, value')
+      .in('key', ['support_email', 'support_phone_1']);
+    const supportEmail = supportSettings?.find((s) => s.key === 'support_email' && typeof s.value === 'string')?.value ?? null;
+    const supportPhone = supportSettings?.find((s) => s.key === 'support_phone_1' && typeof s.value === 'string')?.value ?? null;
     const confirmedBy = isVendor ? 'the vendor' : 'admin/support';
 
     const sends: Promise<void>[] = [
@@ -196,6 +255,27 @@ Deno.serve(async (req) => {
         html: buildRenterEmailHtml({ booking, car: booking.cars, vendor: booking.vendors }),
       }),
     ];
+
+    // The vendor themselves - this function previously only emailed the
+    // renter and admin/support, never the one party being told "you're
+    // getting paid for this." Best-effort in the sense that a missing
+    // vendor owner email doesn't fail the whole confirm - same posture as
+    // the admin CC below.
+    const vendorOwnerEmail = booking.vendors?.owner?.email;
+    if (vendorOwnerEmail) {
+      sends.push(sendResendEmail(resendApiKey, {
+        from: 'WopeCar <bookings@wopecar.com>',
+        to: [vendorOwnerEmail],
+        subject: `Booking Confirmed - Your ${booking.cars?.name ?? 'Car'} is Booked`,
+        html: buildVendorEmailHtml({
+          booking,
+          car: booking.cars,
+          vendorOwnerName: booking.vendors?.owner?.full_name || booking.vendors?.business_name || 'there',
+          supportEmail,
+          supportPhone,
+        }),
+      }));
+    }
 
     if (supportEmail) {
       sends.push(sendResendEmail(resendApiKey, {

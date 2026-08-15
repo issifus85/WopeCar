@@ -123,7 +123,11 @@ export default function VendorHistoryScreen() {
               </View>
               <Text style={styles.reference}>{item.reference}</Text>
               <Text style={styles.dateRange}>{formatDate(item.startDate)} - {formatDate(item.endDate)}</Text>
-              <Text style={styles.earnings}>{formatCurrency(item.earnings, activeCurrency)}</Text>
+              {item.payoutPending ? (
+                <Text style={styles.payoutPending}>Payout: Pending - Contact WopeCar Support</Text>
+              ) : (
+                <Text style={styles.earnings}>Payout: {formatCurrency(item.earnings, activeCurrency)}</Text>
+              )}
             </View>
           )}
         />
@@ -252,6 +256,12 @@ function createStyles(colors) {
       fontFamily: FONTS.bold,
       fontSize: 15,
       color: colors.textPrimary,
+      marginTop: 2,
+    },
+    payoutPending: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 13,
+      color: colors.warning,
       marginTop: 2,
     },
   });

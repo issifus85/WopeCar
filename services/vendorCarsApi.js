@@ -13,6 +13,21 @@ const FEATURE_BY_SLUG = new Map(CAR_FEATURES.map((f) => [f.slug, f]));
 const STATUS_TO_LOCAL = { pending: 'Pending', active: 'Active', inactive: 'Inactive' };
 const STATUS_TO_ROW = { Pending: 'pending', Active: 'active', Inactive: 'inactive' };
 
+// Every column normalizeVendorCar() below actually reads, explicitly - not
+// `select('*')` - so payout_per_day (admin-only, see cars_restrict_vendor_
+// payout_update trigger) never reaches this vendor-facing module even
+// transiently, matching the same guarantee getVendorBookings() already
+// established in services/supabaseApi.js for renter_id. Used by
+// getMyCars/createCar/updateCarListing below.
+const VENDOR_CAR_SELECT = `
+  id, name, make, model, year, type, vehicle_class, drive_type, energy_source,
+  location, price_per_day, description, transmission, seats, doors, baggage,
+  features, regional_addons, vetting_date, vetting_time, images, status,
+  min_booking_days, advance_notice, booking_window, insurance_policy_number,
+  created_at, discount_enabled, discount_type, discount_value,
+  discount_starts_at, discount_ends_at, length_of_stay_discounts
+`;
+
 // Adapts a Supabase `cars` row to the exact shape VendorContext.addCar()
 // always produced locally, so My Fleet/Car Management/Edit Listing need no
 // changes. type/vehicleClass round-trip label<->slug (the wizard's pickers
@@ -206,14 +221,14 @@ export async function getOrCreateVendor() {
 export async function createCar(fields) {
   const vendor = await getOrCreateVendor();
   const row = { ...mapFieldsToRow(fields), vendor_id: vendor.id, status: 'pending' };
-  const { data, error } = await supabase.from('cars').insert(row).select().single();
+  const { data, error } = await supabase.from('cars').insert(row).select(VENDOR_CAR_SELECT).single();
   if (error) throw error;
   return normalizeVendorCar(data);
 }
 
 export async function updateCarListing(carId, patch) {
   const row = mapFieldsToRow(patch);
-  const { data, error } = await supabase.from('cars').update(row).eq('id', carId).select().single();
+  const { data, error } = await supabase.from('cars').update(row).eq('id', carId).select(VENDOR_CAR_SELECT).single();
   if (error) throw error;
   return normalizeVendorCar(data);
 }
@@ -230,7 +245,7 @@ export async function getMyCars() {
   if (!vendor) return [];
   const { data, error } = await supabase
     .from('cars')
-    .select('*')
+    .select(VENDOR_CAR_SELECT)
     .eq('vendor_id', vendor.id)
     .order('created_at', { ascending: false });
   if (error) throw error;

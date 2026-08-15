@@ -68,6 +68,19 @@ export async function getUserBookings(userId) {
  * expected to use for a vendor's booking list, rather than in the database.
  * A raw `select('*')` against `bookings` as this same vendor would still
  * return renter_id - this function is the guarantee, not RLS.
+ *
+ * Same guarantee now also covers the client-paid amounts and WopeCar's own
+ * commission (rental_cost/addons_cost/delivery_fee/security_deposit/
+ * total_cost/wopecar_margin) - a vendor sees only their own locked-in
+ * payout for each booking (vendor_payout_per_day/vendor_payout_total,
+ * stamped server-side at booking creation by the
+ * bookings_compute_vendor_payout trigger), never what the client paid.
+ * There's also a column-masking `vendor_bookings_view` (same exclusions)
+ * for defense-in-depth against a raw REST call bypassing this function
+ * entirely - not used here since PostgREST's embedded `cars(*)` join
+ * through a view is unverified in this project; this explicit list against
+ * the base table is the same proven-working pattern already used for
+ * renter_id above, just extended.
  */
 export async function getVendorBookings(vendorId) {
   const { data, error } = await supabase
@@ -76,7 +89,7 @@ export async function getVendorBookings(vendorId) {
       id, booking_ref, car_id, vendor_id,
       start_date, end_date, pickup_time, return_time,
       pickup_location, return_location, drive_type, addon_names,
-      rental_cost, addons_cost, delivery_fee, security_deposit, total_cost,
+      billable_days, vendor_payout_per_day, vendor_payout_total,
       status, payment_ref, payment_status, vendor_accepted,
       created_at, updated_at,
       cars(*)

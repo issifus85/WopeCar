@@ -108,7 +108,7 @@ export default function CheckoutPaymentScreen() {
     const wopeCareDailyRate = wopeCarePlanId ? calculateWopeCareDailyRate(car.pricePerDay, wopeCarePlanId) : 0;
     const wopeCareCost = wopeCarePlanId ? calculateWopeCareCost(car.pricePerDay, wopeCarePlanId, pricing.billableDays) : 0;
     const wopeCareCoverage = wopeCarePlanId ? WOPECARE_PLANS[wopeCarePlanId].coverage : 0;
-    return { rentalCost, addonsCost, deliveryFee, securityDeposit, promoDiscountAmount, wopeCarePlanId, wopeCareDailyRate, wopeCareCost, wopeCareCoverage };
+    return { rentalCost, addonsCost, deliveryFee, securityDeposit, promoDiscountAmount, wopeCarePlanId, wopeCareDailyRate, wopeCareCost, wopeCareCoverage, billableDays: pricing.billableDays };
   };
 
   const handlePay = async () => {
@@ -123,7 +123,7 @@ export default function CheckoutPaymentScreen() {
       // charge a card with no booking ever created; that's now structurally
       // impossible, since a Supabase write failure can only happen here,
       // before Paystack is ever called.
-      const { rentalCost, addonsCost, deliveryFee, securityDeposit, promoDiscountAmount, wopeCarePlanId, wopeCareDailyRate, wopeCareCost, wopeCareCoverage } = await buildPricingBreakdown();
+      const { rentalCost, addonsCost, deliveryFee, securityDeposit, promoDiscountAmount, wopeCarePlanId, wopeCareDailyRate, wopeCareCost, wopeCareCoverage, billableDays } = await buildPricingBreakdown();
 
       // Redeemed (uses_count incremented) here, immediately before the
       // booking that actually spends it gets created - not back on the
@@ -161,6 +161,12 @@ export default function CheckoutPaymentScreen() {
         wopecare_total_cost: wopeCareCost,
         wopecare_coverage: wopeCareCoverage,
         total_cost: draft.totalCost,
+        // vendor_payout_per_day/vendor_payout_total/wopecar_margin are
+        // NOT set here - the bookings_compute_vendor_payout trigger stamps
+        // them server-side from the car's admin-only payout_per_day, so
+        // this device (the renter's own) never fetches or handles that
+        // rate at all. billable_days is just a plain day count, not money.
+        billable_days: billableDays,
         status: 'pending',
         payment_status: 'unpaid',
       });

@@ -2,6 +2,21 @@ import supabase from './supabase';
 import { getVendorProfile } from './vendorCarsApi';
 import { getVendorBookings, sendBookingCancelledEmail, sendBookingConfirmedEmail } from './supabaseApi';
 
+// Same explicit-column guarantee as getVendorBookings() in supabaseApi.js -
+// used by acceptBookingRequest/declineBookingRequest below instead of
+// `select('*')`, so a booking's raw update/fetch response passing through
+// this vendor-facing module never carries renter_id/total_cost/rental_cost/
+// wopecar_margin etc. even transiently, not just omits them from the UI.
+const VENDOR_BOOKING_SELECT = `
+  id, booking_ref, car_id, vendor_id,
+  start_date, end_date, pickup_time, return_time,
+  pickup_location, return_location, drive_type, addon_names,
+  billable_days, vendor_payout_per_day, vendor_payout_total,
+  status, payment_ref, payment_status, vendor_accepted,
+  created_at, updated_at,
+  cars(name)
+`;
+
 // bookings.status ('pending'/'confirmed'/'completed'/'cancelled') plus
 // vendor_accepted (null until the vendor responds) together decide the
 // vendor-facing status word, matching the shape VendorContext's screens
@@ -15,10 +30,17 @@ function vendorStatusFor(row) {
   return 'Requested';
 }
 
-// "Earnings" here means the vendor's own take - rental + add-ons, not the
-// renter-facing total (which also includes the refundable security deposit
-// and, for self-drive, WopeCar's own delivery fee - neither of those is the
-// vendor's money).
+// "Earnings" here means the vendor's own payout - GHS vendor_payout_per_day
+// x billable_days, stamped server-side at booking creation by the
+// bookings_compute_vendor_payout trigger from the car's admin-set
+// payout_per_day (see supabase migration
+// compute_vendor_payout_on_booking_insert). Never the renter-facing total -
+// this vendor-facing surface must never carry rental_cost/addons_cost/
+// total_cost/wopecar_margin at all, not just avoid displaying them (see
+// getVendorBookings()'s doc comment in services/supabaseApi.js).
+// payoutPending is true when admin hasn't set a payout rate for this car
+// yet (payout_per_day was 0 at booking time) - the UI shows "Pending"
+// instead of a misleading "GHS 0".
 function normalizeVendorBooking(row) {
   return {
     id: row.id,
@@ -29,7 +51,9 @@ function normalizeVendorBooking(row) {
     endDate: row.end_date,
     pickupTime: row.pickup_time,
     returnTime: row.return_time,
-    earnings: Number(row.rental_cost ?? 0) + Number(row.addons_cost ?? 0),
+    earnings: Number(row.vendor_payout_total ?? 0),
+    payoutPerDay: Number(row.vendor_payout_per_day ?? 0),
+    payoutPending: !(Number(row.vendor_payout_per_day ?? 0) > 0),
     status: vendorStatusFor(row),
     vendorAccepted: row.vendor_accepted,
     createdAt: row.created_at,
@@ -66,7 +90,7 @@ export async function acceptBookingRequest(bookingId) {
     .from('bookings')
     .update({ status: 'confirmed', vendor_accepted: true })
     .eq('id', bookingId)
-    .select('*, cars(name)')
+    .select(VENDOR_BOOKING_SELECT)
     .single();
   if (error) throw error;
   sendBookingConfirmedEmail(bookingId).catch(() => {});
@@ -93,7 +117,7 @@ export async function declineBookingRequest(bookingId, reason) {
 
   sendBookingCancelledEmail(bookingId, reason).catch(() => {});
 
-  const { data, error: fetchError } = await supabase.from('bookings').select('*, cars(name)').eq('id', bookingId).single();
+  const { data, error: fetchError } = await supabase.from('bookings').select(VENDOR_BOOKING_SELECT).eq('id', bookingId).single();
   if (fetchError) throw fetchError;
   return normalizeVendorBooking(data);
 }

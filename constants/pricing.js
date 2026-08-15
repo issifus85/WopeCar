@@ -495,3 +495,24 @@ export function calculateWopeCareDailyRate(pricePerDay, plan) {
   if (plan === 'none' || !plan) return 0;
   return Math.round(pricePerDay * WOPECARE_PLANS[plan].rate * 100) / 100;
 }
+
+// --- Vendor payout (admin-set, per car, hidden from the vendor entirely) --
+// A car's payout_per_day (cars.payout_per_day, admin-only - see
+// components/ui/RichTextEditor.tsx's sibling fields in wopecar-admin's
+// CarFormModal for where it's set) is what WopeCar commits to pay the
+// vendor per rental day, independent of what the renter is charged.
+// `days` should be the same billableDays calculateRentalPricing() already
+// computed for this booking, matching the WopeCare functions above -
+// never a naive calendar-day count.
+export function calculateVendorPayout(payoutPerDay, days) {
+  if (!payoutPerDay || payoutPerDay <= 0) return 0;
+  return Math.round(payoutPerDay * days * 100) / 100;
+}
+
+// WopeCar's commission on a booking - the full client total (bookings.
+// total_cost: rental + add-ons + delivery fee + security deposit +
+// WopeCare) minus what the vendor is paid out. Matches the business rule
+// as specified: "WopeCar margin = client total − vendor payout total".
+export function calculateWopeCarMargin(clientTotal, vendorPayout) {
+  return Math.round((clientTotal - vendorPayout) * 100) / 100;
+}
