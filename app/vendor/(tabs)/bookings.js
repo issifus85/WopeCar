@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, FlatList, ActivityIndicator, Alert } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../../constants/theme';
 import { useAppTheme } from '../../../contexts/ThemeContext';
@@ -20,9 +21,16 @@ export default function VendorBookingsScreen() {
   const { colors } = useAppTheme();
   const { activeCurrency } = useCurrency();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { bookingRequests, respondToBookingRequest, isLoading } = useVendor();
+  const { bookingRequests, respondToBookingRequest, refreshBookings, isLoading } = useVendor();
   const [acceptTarget, setAcceptTarget] = useState(null);
   const [declineTarget, setDeclineTarget] = useState(null);
+
+  // Picks up a new booking request that arrived while this tab was already
+  // open (VendorContext's own load() only runs once, on mount) - same fix
+  // as BookingsContext's refreshBookings() on the renter side.
+  useFocusEffect(useCallback(() => {
+    refreshBookings();
+  }, [refreshBookings]));
   const [isResponding, setIsResponding] = useState(false);
 
   const handleAcceptConfirm = async () => {

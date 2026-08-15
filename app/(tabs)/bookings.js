@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { StyleSheet, Text, View, FlatList, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
@@ -61,8 +62,15 @@ export default function BookingsScreen() {
   const { colors } = useAppTheme();
   const { activeCurrency } = useCurrency();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { bookings, isLoading } = useBookings();
+  const { bookings, isLoading, refreshBookings } = useBookings();
   const [activeTab, setActiveTab] = useState('Pending');
+
+  // Picks up a vendor's accept/decline (or any other server-side status
+  // change) that happened while this tab was already mounted - see
+  // BookingsContext's refreshBookings() doc comment.
+  useFocusEffect(useCallback(() => {
+    refreshBookings();
+  }, [refreshBookings]));
 
   if (isLoading) {
     return (

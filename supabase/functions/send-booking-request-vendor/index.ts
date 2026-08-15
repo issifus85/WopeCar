@@ -4,10 +4,14 @@
 // their own JWT (must be the renter who owns the booking), then use
 // service_role for the actual read + outbound email.
 //
-// Deliberately excludes the client's contact info (email/phone) from the
-// vendor-facing email - only their first name and the booking's own
-// details, since the vendor doesn't need to reach the client directly
-// outside the app.
+// Deliberately excludes the client's contact info (email/phone) AND the
+// client's rental total from the vendor-facing email - only their first
+// name and the booking's own trip details, since a vendor never sees what
+// the client paid (see the vendor payout system - PROJECT.md 6.12). Shows
+// "Expected Payout" (vendor_payout_total, stamped server-side at booking
+// creation) instead, only when it's actually set - a car with no
+// payout_per_day yet just omits the amount row entirely rather than
+// showing a misleading GHS 0.00.
 //
 // Deploy with: supabase functions deploy send-booking-request-vendor
 // Reuses the same RESEND_API_KEY secret as the other booking emails.
@@ -40,6 +44,10 @@ function escapeHtml(value: unknown) {
 
 // deno-lint-ignore no-explicit-any
 function buildEmailHtml({ booking, car, renterFirstName }: any) {
+  const payoutTotal = Number(booking.vendor_payout_total ?? 0);
+  const payoutRow = payoutTotal > 0
+    ? `<tr><td style="padding:6px 0;color:#5b6b6c;">Expected Payout</td><td style="padding:6px 0;text-align:right;color:#154B59;font-weight:bold;">${formatCurrency(payoutTotal)}</td></tr>`
+    : '';
   return `
   <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#f5f5f5;padding:32px 16px;">
     <div style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;">
@@ -64,7 +72,7 @@ function buildEmailHtml({ booking, car, renterFirstName }: any) {
           <tr><td style="padding:6px 0;color:#5b6b6c;">Pickup location</td><td style="padding:6px 0;text-align:right;color:#154B59;">${escapeHtml(booking.pickup_location)}</td></tr>
           <tr><td style="padding:6px 0;color:#5b6b6c;">Drive type</td><td style="padding:6px 0;text-align:right;color:#154B59;">${escapeHtml(booking.drive_type)}</td></tr>
           <tr><td style="padding:6px 0;color:#5b6b6c;">Booking ref</td><td style="padding:6px 0;text-align:right;color:#154B59;">${escapeHtml(booking.booking_ref)}</td></tr>
-          <tr><td style="padding:6px 0;color:#5b6b6c;">Rental total</td><td style="padding:6px 0;text-align:right;color:#154B59;">${formatCurrency(booking.rental_cost)}</td></tr>
+          ${payoutRow}
         </table>
 
         <div style="text-align:center;">

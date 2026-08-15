@@ -61,9 +61,18 @@ export function BookingsProvider({ children }) {
   // matching id (fresher/authoritative); local-only rows with no Supabase
   // counterpart (pre-cutover bookings, or Supabase temporarily
   // unreachable) are kept as-is rather than dropped.
-  useEffect(() => {
-    if (!user) return;
-    getUserBookings(user.id)
+  //
+  // Exposed as refreshBookings() below - this used to only run once, keyed
+  // on [user], so a vendor accepting/declining while the renter's app was
+  // already open (no re-login, no reload) never showed up: the booking
+  // list and detail screen kept whatever status was fetched at mount for
+  // the rest of the session. Screens now call refreshBookings() from their
+  // own useFocusEffect (app/(tabs)/bookings.js, app/booking/[id].js), the
+  // same "re-sync on focus" convention already used there for inspections/
+  // rental agreements.
+  const refreshBookings = useCallback(() => {
+    if (!user) return Promise.resolve();
+    return getUserBookings(user.id)
       .then((rows) => {
         const remote = rows.map(normalizeSupabaseBooking);
         const remoteIds = new Set(remote.map((b) => b.id));
@@ -75,6 +84,10 @@ export function BookingsProvider({ children }) {
       })
       .catch(() => {}); // best-effort - local state already loaded independently above
   }, [user]);
+
+  useEffect(() => {
+    refreshBookings();
+  }, [refreshBookings]);
 
   const addBooking = useCallback((booking) => {
     setBookings(prev => {
@@ -120,7 +133,7 @@ export function BookingsProvider({ children }) {
   }, []);
 
   return (
-    <BookingsContext.Provider value={{ bookings, isLoading, addBooking, updateBooking, cancelBooking }}>
+    <BookingsContext.Provider value={{ bookings, isLoading, addBooking, updateBooking, cancelBooking, refreshBookings }}>
       {children}
     </BookingsContext.Provider>
   );

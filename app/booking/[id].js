@@ -113,7 +113,7 @@ export default function BookingDetailScreen() {
   const { activeCurrency } = useCurrency();
   const { settings } = useSettings();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { bookings, updateBooking, cancelBooking } = useBookings();
+  const { bookings, updateBooking, cancelBooking, refreshBookings } = useBookings();
   const { conversations, notifyBookingEvent } = useInbox();
 
   // A custom headerLeft, not just the default native-stack back button -
@@ -184,6 +184,13 @@ export default function BookingDetailScreen() {
   const [myReview, setMyReview] = useState(undefined);
 
   useFocusEffect(useCallback(() => {
+    // Picks up a vendor's accept/decline (or any other server-side status
+    // change) that happened while this screen was already mounted - see
+    // BookingsContext's refreshBookings() doc comment. Runs unconditionally
+    // (not gated on booking?.id) since the whole point is re-deriving
+    // `booking` itself from fresh data, not just its sub-resources below.
+    refreshBookings();
+
     if (!booking?.id) {
       setPreInspection(null);
       setPostInspection(null);
@@ -197,7 +204,8 @@ export default function BookingDetailScreen() {
     if (booking.status === 'Completed') {
       getMyReviewForBooking(booking.id).then(setMyReview).catch(() => setMyReview(null));
     }
-  }, [booking?.id, booking?.status]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [booking?.id, booking?.status, refreshBookings]));
 
   const handleInspectionPress = (type, inspection) => {
     if (inspection?.status === 'submitted') {
