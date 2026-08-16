@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, ScrollView, Animated } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
@@ -15,6 +15,14 @@ const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
+const SHORT_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// e.g. "Mon 17 Aug" - used by the 24hr rental note below, distinct from
+// the calendar grid's 2-letter WEEKDAYS and the month-nav's full MONTH_NAMES.
+function formatShortDate(date) {
+  return `${SHORT_WEEKDAYS[date.getDay()]} ${date.getDate()} ${SHORT_MONTHS[date.getMonth()]}`;
+}
 
 function stripTime(date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -38,6 +46,43 @@ function buildMonthGrid(viewMonth) {
   for (let i = 0; i < startWeekday; i++) cells.push(null);
   for (let day = 1; day <= daysInMonth; day++) cells.push(new Date(year, month, day));
   return cells;
+}
+
+/**
+ * Explains the 24hr rental cycle (self-drive only - chauffeur bookings are
+ * calculated per day, not per 24hr, so callers gate this out for those).
+ * Mounts fresh each time the calendar goes from a partial to a full date
+ * range (the parent's `{tempStart && tempEnd && <RentalHoursNote .../>}`
+ * conditional unmounts it otherwise), so a plain mount-time fade-in via
+ * Animated.timing covers "animate in when dates are selected" without
+ * needing to track selection state changes itself.
+ */
+function RentalHoursNote({ days, startDate, returnDate, styles, colors }) {
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(opacity, {
+      toValue: 1,
+      duration: 250,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  const dayWord = days === 1 ? 'day' : 'days';
+
+  return (
+    <Animated.View style={[styles.hoursNoteCard, { opacity }]}>
+      <Ionicons name="information-circle-outline" size={20} color={colors.teal} style={styles.hoursNoteIcon} />
+      <View style={styles.hoursNoteTextWrap}>
+        <Text style={styles.hoursNoteTitle}>How your rental days work</Text>
+        <Text style={styles.hoursNoteBody}>
+          {`You've selected ${days} ${dayWord}. With a 24-hour rental, if you pick up at 8:00 AM on ${formatShortDate(startDate)}, your car must be returned by 8:00 AM on ${formatShortDate(returnDate)} to use your full ${days} ${dayWord}.`}
+        </Text>
+        <Text style={styles.hoursNoteBody}>You&apos;ll set your exact pickup time on the next screen.</Text>
+        <Text style={styles.hoursNoteFootnote}>Returning late may incur additional charges.</Text>
+      </View>
+    </Animated.View>
+  );
 }
 
 export default function CheckoutDatesScreen() {
@@ -149,6 +194,11 @@ export default function CheckoutDatesScreen() {
     ? Math.round((tempEnd - tempStart) / (1000 * 60 * 60 * 24)) + 1
     : 0;
   const isBelowMinimum = tempStart && tempEnd && selectedDays < minDays;
+  // Return date = end date + 1 day - a 24hr rental returns the morning
+  // AFTER the last rental day, not on the last day itself.
+  const returnDate = tempEnd ? new Date(tempEnd) : null;
+  if (returnDate) returnDate.setDate(returnDate.getDate() + 1);
+  const showHoursNote = tempStart && tempEnd && car.drivenBy !== 'Chauffeur';
 
   return (
     <View style={styles.container}>
@@ -240,6 +290,10 @@ export default function CheckoutDatesScreen() {
                 : `${selectedDays} day rental selected`}
             </Text>
           </View>
+        )}
+
+        {showHoursNote && (
+          <RentalHoursNote days={selectedDays} startDate={tempStart} returnDate={returnDate} styles={styles} colors={colors} />
         )}
       </ScrollView>
 
@@ -393,6 +447,41 @@ function createStyles(colors) {
   summaryTextWarning: {
     color: colors.error,
     flex: 1,
+  },
+  hoursNoteCard: {
+    flexDirection: 'row',
+    backgroundColor: colors.highlight,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.teal,
+    borderRadius: 10,
+    padding: 14,
+    marginTop: 12,
+  },
+  hoursNoteIcon: {
+    marginRight: 10,
+    marginTop: 1,
+  },
+  hoursNoteTextWrap: {
+    flex: 1,
+  },
+  hoursNoteTitle: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 14,
+    color: colors.textPrimary,
+    marginBottom: 6,
+  },
+  hoursNoteBody: {
+    fontFamily: FONTS.regular,
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.textBody,
+    marginBottom: 8,
+  },
+  hoursNoteFootnote: {
+    fontFamily: FONTS.regular,
+    fontSize: 12,
+    color: colors.textMuted,
+    marginBottom: 0,
   },
   });
 }
