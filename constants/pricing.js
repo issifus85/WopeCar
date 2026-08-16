@@ -195,7 +195,36 @@ const SECURITY_DEPOSIT_THRESHOLD = 2000;
 const SECURITY_DEPOSIT_FLAT = 500;
 const SECURITY_DEPOSIT_PERCENT = 0.25;
 
-export function calculateSecurityDeposit(subtotal) {
+// Admin > Settings > Business Rules > "Chauffeur Security Deposit" - real and
+// live-editable (app_settings.chauffeur_security_deposit), same
+// stale-while-revalidate pattern as getSelfDriveDeliveryFee() above. Unlike
+// self-drive (25% of subtotal, or a flat SECURITY_DEPOSIT_FLAT below the
+// threshold), a chauffeured booking always takes this one flat amount
+// regardless of trip cost - there's no vehicle handed over unsupervised, so
+// the deposit only needs to cover minor incidental costs, not damage risk.
+export const CHAUFFEUR_SECURITY_DEPOSIT = 500;
+
+let cachedChauffeurSecurityDeposit = CHAUFFEUR_SECURITY_DEPOSIT;
+let hasFetchedChauffeurSecurityDeposit = false;
+
+export function getChauffeurSecurityDeposit() {
+  if (!hasFetchedChauffeurSecurityDeposit) {
+    hasFetchedChauffeurSecurityDeposit = true;
+    import('../services/supabase')
+      .then(({ getAppSetting }) => getAppSetting('chauffeur_security_deposit'))
+      .then((value) => {
+        if (typeof value === 'number' && value >= 0) cachedChauffeurSecurityDeposit = value;
+      })
+      .catch(() => {
+        // Keep the hardcoded default - never let a settings-fetch failure
+        // block checkout.
+      });
+  }
+  return cachedChauffeurSecurityDeposit;
+}
+
+export function calculateSecurityDeposit(subtotal, drivenBy) {
+  if (drivenBy === 'Chauffeur') return getChauffeurSecurityDeposit();
   return subtotal < SECURITY_DEPOSIT_THRESHOLD ? SECURITY_DEPOSIT_FLAT : subtotal * SECURITY_DEPOSIT_PERCENT;
 }
 

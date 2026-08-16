@@ -300,7 +300,7 @@ export default function BookingDetailScreen() {
     const subtotal = rentalCost + addonsCost;
     const isSelfDrive = car.drivenBy === 'Self-drive';
     const deliveryFee = isSelfDrive ? getSelfDriveDeliveryFee() : 0;
-    const securityDeposit = calculateSecurityDeposit(subtotal);
+    const securityDeposit = calculateSecurityDeposit(subtotal, car.drivenBy);
     return subtotal + deliveryFee + securityDeposit + recomputedWopeCareCost;
   }, [car, pricing, days, booking, originalDays, recomputedWopeCareCost]);
 

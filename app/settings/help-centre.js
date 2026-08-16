@@ -69,11 +69,11 @@ const FAQS = [
   },
   {
     question: 'Are there other costs aside from the rental amount?',
-    answer: 'Yes. Self-drive bookings include a security deposit and delivery fee. Chauffeured services include a driver allowance and accommodation where applicable.',
+    answer: 'Yes. Self-drive bookings include a security deposit and delivery fee. Chauffeured services include a flat GHS 500 security deposit, driver allowance, and accommodation where applicable.',
   },
   {
     question: 'What is a security deposit?',
-    answer: 'This fee is refundable when the vehicle is returned in the same condition as it was given (washed, fueled, and without any physical damage). It is 25% of the rental amount or a flat fee of GHS 500, depending on the type of car and the rental period.',
+    answer: 'This fee is refundable when the vehicle is returned in the same condition as it was given (washed, fueled, and without any physical damage). For self-drive bookings, it is 25% of the rental amount or a flat fee of GHS 500, whichever applies based on the rental period. For chauffeured bookings, it is always a flat GHS 500.',
   },
   {
     question: 'Where can I charge my EV?',

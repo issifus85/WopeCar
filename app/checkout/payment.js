@@ -94,7 +94,7 @@ export default function CheckoutPaymentScreen() {
     ), 0);
     const subtotal = rentalCost + addonsCost;
     const deliveryFee = car.drivenBy === 'Self-drive' ? getSelfDriveDeliveryFee() : 0;
-    const securityDeposit = calculateSecurityDeposit(subtotal);
+    const securityDeposit = calculateSecurityDeposit(subtotal, car.drivenBy);
     // Same reactive formula as checkout/summary.js - recomputed against this
     // trip's actual subtotal rather than trusting a stored amount.
     const promoDiscountAmount = draft.promoCode

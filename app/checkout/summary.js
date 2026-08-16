@@ -98,7 +98,7 @@ export default function CheckoutSummaryScreen() {
   }, 0);
   const subtotal = rentalCost + addonsCost;
   const deliveryFee = isSelfDrive ? getSelfDriveDeliveryFee() : 0;
-  const securityDeposit = calculateSecurityDeposit(subtotal);
+  const securityDeposit = calculateSecurityDeposit(subtotal, car?.drivenBy);
 
   // Recomputed live from this screen's own `days` (not trusted from
   // draft.wopeCareDetails, a snapshot taken back on the addons screen) so

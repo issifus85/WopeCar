@@ -34,6 +34,7 @@ const BUSINESS_KEYS = [
   { key: 'security_deposit_flat', label: 'Security Deposit — Flat (GHS)' },
   { key: 'security_deposit_threshold', label: 'Security Deposit Threshold (GHS)' },
   { key: 'security_deposit_percentage', label: 'Security Deposit — Percentage (0–1)' },
+  { key: 'chauffeur_security_deposit', label: 'Chauffeur Security Deposit — Flat (GHS)' },
   { key: 'min_booking_days_self_drive', label: 'Min Booking Days — Self-Drive' },
   { key: 'min_booking_days_chauffeur', label: 'Min Booking Days — Chauffeur' },
   { key: 'booking_window_months', label: 'Booking Window (months)' },
