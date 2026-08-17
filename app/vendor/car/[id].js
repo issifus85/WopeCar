@@ -174,6 +174,14 @@ export default function VendorCarManagementScreen() {
             colors={colors}
           />
           <Row
+            icon="document-text-outline"
+            label="Compliance Documents"
+            subtitle="Roadworthy cert., insurance, and policy number"
+            onPress={() => router.push(`/vendor/car/documents/${car.id}`)}
+            styles={styles}
+            colors={colors}
+          />
+          <Row
             icon="receipt-outline"
             label="View Bookings"
             subtitle="This car's booking history"
