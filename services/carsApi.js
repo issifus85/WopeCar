@@ -328,21 +328,40 @@ export async function fetchCarById(id) {
 }
 
 /**
+ * Booked dates come from the get_booked_dates_for_cars() RPC (derived
+ * straight from `bookings` - status <> 'cancelled' and payment_status =
+ * 'paid', the exact same definition the bookings_no_overlapping_paid_dates
+ * exclude constraint uses), NOT from the `availability` table's 'booked'
+ * rows. Those rows only ever got written by a best-effort client call
+ * (the old markDatesBooked(), fired after payment succeeded) - audited the
+ * live table and found 5 of 10 real paid bookings never got written there
+ * at all, which is exactly how a renter could pay for an already-booked
+ * date: the calendar showed it open because nothing had ever marked it
+ * taken. Vendor-set manual blocks have no equivalent in `bookings`, so
+ * `availability`'s 'blocked' rows are still the real, correct source for
+ * those - only the booked half of this moved off that table.
+ */
+async function fetchBookedDatesForCar(id) {
+  const { data, error } = await supabase.rpc('get_booked_dates_for_cars', { p_car_ids: [id] });
+  if (error) throw error;
+  return (data ?? []).map((row) => row.date);
+}
+
+async function fetchBlockedDatesForCar(id) {
+  const { data, error } = await supabase.from('availability').select('date').eq('car_id', id).eq('status', 'blocked');
+  if (error) throw error;
+  return (data ?? []).map((row) => row.date);
+}
+
+/**
  * Returns this car's booked/blocked date ranges as [{start: Date, end:
- * Date}], collapsing the `availability` table's one-row-per-date shape into
- * the range shape app/checkout/dates.js already expects - so that call site
- * needs no changes. Will be empty for every migrated car (no bravo_car_dates
- * import this phase - matches Laravel's own "advisory only" behavior today,
- * since nothing currently enforces availability at booking-creation time
- * either way).
+ * Date}], collapsing the merged booked+blocked ISO dates into the range
+ * shape app/checkout/dates.js already expects - so that call site needs no
+ * changes.
  */
 export async function fetchCarAvailability(id) {
-  const { data, error } = await supabase
-    .from('availability')
-    .select('date, status')
-    .eq('car_id', id)
-    .order('date', { ascending: true });
-  if (error) throw error;
+  const [booked, blocked] = await Promise.all([fetchBookedDatesForCar(id), fetchBlockedDatesForCar(id)]);
+  const isoDates = Array.from(new Set([...booked, ...blocked])).sort();
 
   const ranges = [];
   let rangeStart = null;
@@ -350,8 +369,8 @@ export async function fetchCarAvailability(id) {
 
   const toDate = (isoDate) => new Date(`${isoDate}T00:00:00`);
 
-  for (const row of data) {
-    const d = toDate(row.date);
+  for (const iso of isoDates) {
+    const d = toDate(iso);
     if (rangeStart && prevDate && d - prevDate === 86400000) {
       prevDate = d;
       continue;
@@ -366,24 +385,14 @@ export async function fetchCarAvailability(id) {
 }
 
 /**
- * Same underlying `availability` table as fetchCarAvailability(), but kept
- * as separate ISO-date sets by status rather than collapsed into ranges -
- * for callers that need to tell a real booking apart from a vendor-set
- * block (the admin per-car availability screen, and the read-only calendar
- * on the renter-facing car details screen), not just "is this date takeable
- * or not" like app/checkout/dates.js.
+ * Same booked/blocked sources as fetchCarAvailability(), but kept as
+ * separate ISO-date sets rather than collapsed into ranges - for callers
+ * that need to tell a real booking apart from a vendor-set block (the
+ * admin per-car availability screen, and the read-only calendar on the
+ * renter-facing car details screen), not just "is this date takeable or
+ * not" like app/checkout/dates.js.
  */
 export async function fetchCarAvailabilityByStatus(id) {
-  const { data, error } = await supabase
-    .from('availability')
-    .select('date, status')
-    .eq('car_id', id);
-  if (error) throw error;
-
-  const bookedDates = new Set();
-  const blockedDates = new Set();
-  (data ?? []).forEach((row) => {
-    (row.status === 'booked' ? bookedDates : blockedDates).add(row.date);
-  });
-  return { bookedDates, blockedDates };
+  const [booked, blocked] = await Promise.all([fetchBookedDatesForCar(id), fetchBlockedDatesForCar(id)]);
+  return { bookedDates: new Set(booked), blockedDates: new Set(blocked) };
 }

@@ -18,7 +18,7 @@ import {
 import { fetchCarById } from '../../services/carsApi';
 import { getDatePriceMap } from '../../services/carPricingApi';
 import { redeemPromoCode } from '../../services/promoApi';
-import { createBooking, updateBooking as confirmSupabaseBooking, uploadBookingDocument, linkExistingBookingDocument, markDatesBooked, sendBookingConfirmationEmail, sendBookingRequestVendorEmail } from '../../services/supabaseApi';
+import { createBooking, updateBooking as confirmSupabaseBooking, uploadBookingDocument, linkExistingBookingDocument, sendBookingConfirmationEmail, sendBookingRequestVendorEmail } from '../../services/supabaseApi';
 import { payWithPaystack } from '../../services/paystackCheckout';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCheckout } from '../../contexts/CheckoutContext';
@@ -243,7 +243,6 @@ export default function CheckoutPaymentScreen() {
         throw lastConfirmError;
       }
 
-      await markDatesBooked(carId, toISODate(draft.startDate), toISODate(draft.endDate)).catch(() => {});
       sendBookingConfirmationEmail(confirmed.id).catch(() => {});
       sendBookingRequestVendorEmail(confirmed.id).catch(() => {});
 

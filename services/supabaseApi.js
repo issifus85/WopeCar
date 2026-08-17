@@ -165,32 +165,11 @@ export async function linkExistingBookingDocument(userId, bookingId, type, fileP
 }
 
 /**
- * Marks every date in [startDate, endDate] as booked for a car, so
- * carsApi.js's fetchCarAvailability() (which reads this same table) greys
- * them out for future bookings. Best-effort by design: called after a
- * booking is already confirmed, and a failure here shouldn't undo or block
- * that - matches the "advisory, not a hard lock" behavior this app has
- * always had around availability (see fetchCarAvailability's own doc
- * comment), just now actually populated instead of always empty.
- */
-export async function markDatesBooked(carId, startDate, endDate) {
-  const dates = [];
-  const cursor = new Date(`${startDate}T00:00:00`);
-  const end = new Date(`${endDate}T00:00:00`);
-  while (cursor <= end) {
-    dates.push({ car_id: carId, date: cursor.toISOString().slice(0, 10), status: 'booked' });
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  const { error } = await supabase.from('availability').insert(dates);
-  if (error) throw error;
-}
-
-/**
  * Sends the real booking-confirmation email (Resend, via the
- * send-booking-confirmation Edge Function) - best-effort by design, same
- * spirit as markDatesBooked above: called after a booking is already
- * created and paid for, so a failed send shouldn't undo or block that or
- * surface as a checkout error. The function re-fetches the booking
+ * send-booking-confirmation Edge Function) - best-effort by design: called
+ * after a booking is already created and paid for, so a failed send
+ * shouldn't undo or block that or surface as a checkout error. The
+ * function re-fetches the booking
  * server-side scoped to the caller's own renter_id (never trusts a client-
  * supplied HTML/cost breakdown), so nothing but the id needs to be passed.
  */
