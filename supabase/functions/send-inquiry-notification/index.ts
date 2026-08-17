@@ -39,11 +39,6 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-function formatDate(dateStr: string | null) {
-  if (!dateStr) return 'Not specified';
-  return new Date(`${dateStr}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
 function escapeHtml(value: unknown) {
   return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
 }
@@ -72,15 +67,13 @@ function buildEmailHtml({ inquiry, car, heading, intro, ctaHref, ctaLabel }: any
         ${car ? `
         <div style="background:#f5f5f5;border-radius:12px;padding:16px;margin-bottom:16px;">
           <div style="font-size:16px;font-weight:bold;color:#154B59;">${escapeHtml(car.name)}</div>
+          ${car.vendor?.business_name ? `<div style="font-size:13px;color:#5b6b6c;margin-top:2px;">Hosted by ${escapeHtml(car.vendor.business_name)}</div>` : ''}
         </div>` : ''}
 
         <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px;">
           <tr><td style="padding:6px 0;color:#5b6b6c;">Name</td><td style="padding:6px 0;text-align:right;color:#154B59;">${escapeHtml(inquiry.full_name)}</td></tr>
           <tr><td style="padding:6px 0;color:#5b6b6c;">Email</td><td style="padding:6px 0;text-align:right;color:#154B59;">${escapeHtml(inquiry.email)}</td></tr>
           <tr><td style="padding:6px 0;color:#5b6b6c;">Phone</td><td style="padding:6px 0;text-align:right;color:#154B59;">${escapeHtml(inquiry.phone || 'Not provided')}</td></tr>
-          ${car ? `
-          <tr><td style="padding:6px 0;color:#5b6b6c;">Trip start</td><td style="padding:6px 0;text-align:right;color:#154B59;">${formatDate(inquiry.start_date)}</td></tr>
-          <tr><td style="padding:6px 0;color:#5b6b6c;">Trip end</td><td style="padding:6px 0;text-align:right;color:#154B59;">${formatDate(inquiry.end_date)}</td></tr>` : ''}
         </table>
 
         ${inquiry.message ? `
@@ -130,7 +123,7 @@ Deno.serve(async (req) => {
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
     const { data: inquiry, error: inquiryError } = await adminClient
       .from('booking_inquiries')
-      .select('*, car:cars(name)')
+      .select('*, car:cars(name, vendor:vendors(business_name))')
       .eq('id', inquiryId)
       .maybeSingle();
     if (inquiryError || !inquiry) {
