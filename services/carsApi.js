@@ -1,5 +1,5 @@
 import supabase from './supabase';
-import { CAR_FEATURES } from '../constants/vehicleCatalog';
+import { CAR_FEATURES, GHANA_CITIES_BY_REGION, GHANA_REGIONS } from '../constants/vehicleCatalog';
 
 const FEATURE_BY_SLUG = new Map(CAR_FEATURES.map((f) => [f.slug, f]));
 
@@ -177,6 +177,31 @@ function sortByRatingDesc(cars) {
   });
 }
 
+// Region name -> id, fetched once and cached for fetchCars()'s location
+// resolution below (mirrors wopecar-website's lib/data/cars.ts equivalent).
+let regionIdByNameCache = null;
+async function getRegionIdByName() {
+  if (!regionIdByNameCache) {
+    const { data } = await supabase.from('regions').select('id, name');
+    regionIdByNameCache = new Map((data ?? []).map((r) => [r.name, r.id]));
+  }
+  return regionIdByNameCache;
+}
+
+// A location term (e.g. from data/cars.js's QUICK_FILTERS 'Accra'/'Kumasi'
+// pills, or the search box) that names a known Ghana region or city -
+// resolved to that region's name so fetchCars() can also match by
+// cars.region_id, not just an ilike substring against cars.location. Same
+// two-level city<->region gap the website's search had (see
+// wopecar-website/lib/ghana-locations.ts) - a car tagged just "Kumasi"
+// wouldn't match a search for "Ashanti" via ilike alone, and vice versa.
+function resolveLocationRegionName(term) {
+  const lower = term.toLowerCase();
+  const regionMatch = GHANA_REGIONS.find((r) => r.toLowerCase() === lower);
+  if (regionMatch) return regionMatch;
+  return Object.entries(GHANA_CITIES_BY_REGION).find(([, cities]) => cities.some((c) => c.toLowerCase() === lower))?.[0] ?? null;
+}
+
 /**
  * Supported filters: type (string or string[]), driveType (string or
  * string[]), vehicleClass (string or string[]), seats (number or number[]),
@@ -217,9 +242,24 @@ export async function fetchCars(params = {}) {
   if (params.location) {
     // OR'd substring matches, e.g. ['Accra', 'Kumasi'] -> cars in Accra OR
     // Kumasi - each term needs its own %...% ilike, PostgREST's .or() takes
-    // a single comma-joined filter-list string rather than an array.
+    // a single comma-joined filter-list string rather than an array. Also
+    // OR in a region_id match for any term naming a known region/city (see
+    // resolveLocationRegionName above), so "Kumasi" also finds a car tagged
+    // just "Ashanti Region" and vice versa - cars.region_id is kept in sync
+    // with cars.location by the set_car_region_id_from_location DB trigger
+    // (migration 0062), so this is the same authoritative column that fix
+    // relies on, not a second guess at the data.
     const locations = Array.isArray(params.location) ? params.location : [params.location];
-    query = query.or(locations.map((loc) => `location.ilike.%${loc}%`).join(','));
+    const orParts = locations.map((loc) => `location.ilike.%${loc}%`);
+    const regionNames = [...new Set(locations.map(resolveLocationRegionName).filter(Boolean))];
+    if (regionNames.length) {
+      const regionIdByName = await getRegionIdByName();
+      for (const name of regionNames) {
+        const id = regionIdByName.get(name);
+        if (id) orParts.push(`region_id.eq.${id}`);
+      }
+    }
+    query = query.or(orParts.join(','));
   }
   if (params.minPrice) query = query.gte('price_per_day', params.minPrice);
   if (params.maxPrice) query = query.lte('price_per_day', params.maxPrice);

@@ -5,9 +5,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../../constants/theme';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 import { useAddCar } from '../../../contexts/AddCarContext';
+import { GHANA_REGIONS } from '../../../constants/vehicleCatalog';
 import VendorWizardHeader from '../../../components/VendorWizardHeader';
 import CheckoutFooterButton from '../../../components/CheckoutFooterButton';
 import LocationSearchModal from '../../../components/LocationSearchModal';
+import SearchableOptionModal from '../../../components/SearchableOptionModal';
 
 export default function AddCarLocationScreen() {
   const router = useRouter();
@@ -15,9 +17,10 @@ export default function AddCarLocationScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { draft, updateDraft } = useAddCar();
   const [locationModalOpen, setLocationModalOpen] = useState(false);
+  const [regionModalOpen, setRegionModalOpen] = useState(false);
 
   const price = Number(draft.pricePerDay);
-  const isValid = !!draft.location && draft.pricePerDay.toString().trim().length > 0 && price > 0;
+  const isValid = !!draft.region && !!draft.location && draft.pricePerDay.toString().trim().length > 0 && price > 0;
 
   const handleContinue = () => {
     router.push('/vendor/add-car/regional');
@@ -32,11 +35,19 @@ export default function AddCarLocationScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Text style={styles.label}>Vehicle Location</Text>
+        <Text style={styles.label}>Region</Text>
+        <TouchableOpacity style={styles.locationButton} onPress={() => setRegionModalOpen(true)}>
+          <Ionicons name="map-outline" size={18} color={colors.teal} />
+          <Text style={[styles.locationButtonText, !draft.region && styles.locationPlaceholder]} numberOfLines={1}>
+            {draft.region || 'Select region'}
+          </Text>
+        </TouchableOpacity>
+
+        <Text style={[styles.label, styles.labelSpaced]}>City / Area</Text>
         <TouchableOpacity style={styles.locationButton} onPress={() => setLocationModalOpen(true)}>
           <Ionicons name="location-outline" size={18} color={colors.teal} />
           <Text style={[styles.locationButtonText, !draft.location && styles.locationPlaceholder]} numberOfLines={1}>
-            {draft.location || 'Search for a region or city...'}
+            {draft.location || 'Search for a city or area...'}
           </Text>
         </TouchableOpacity>
         <Text style={styles.hint}>This confirms which region and city your car is based in.</Text>
@@ -57,9 +68,17 @@ export default function AddCarLocationScreen() {
 
       <LocationSearchModal
         visible={locationModalOpen}
-        title="Vehicle Location"
+        title="City / Area"
         onClose={() => setLocationModalOpen(false)}
         onSelect={(description) => updateDraft({ location: description })}
+      />
+      <SearchableOptionModal
+        visible={regionModalOpen}
+        title="Select Region"
+        options={GHANA_REGIONS}
+        value={draft.region}
+        onSelect={(region) => updateDraft({ region })}
+        onClose={() => setRegionModalOpen(false)}
       />
     </View>
   );

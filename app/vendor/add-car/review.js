@@ -9,6 +9,7 @@ import { formatCurrency } from '../../../constants/pricing';
 import { useAddCar } from '../../../contexts/AddCarContext';
 import { useVendor } from '../../../contexts/VendorContext';
 import { uploadCarDocument } from '../../../services/documentsApi';
+import { joinLocation } from '../../../constants/vehicleCatalog';
 import VendorWizardHeader from '../../../components/VendorWizardHeader';
 import CheckoutFooterButton from '../../../components/CheckoutFooterButton';
 import ConfirmModal from '../../../components/ConfirmModal';
@@ -51,7 +52,7 @@ export default function AddCarReviewScreen() {
         year: draft.year,
         drivenBy: draft.drivenBy,
         energySource: draft.energySource,
-        location: draft.location,
+        location: joinLocation(draft.region, draft.location),
         pricePerDay: Number(draft.pricePerDay),
         regionalAddons: enabledRegions.map((r) => ({ name: r.name, price: Number(r.price), type: 'per_day' })),
         vettingAppointment: { date: draft.vettingDate, time: draft.vettingTime },
@@ -121,7 +122,7 @@ export default function AddCarReviewScreen() {
 
         <Text style={[styles.sectionTitle, styles.sectionSpaced]}>Location & Pricing</Text>
         <View style={styles.card}>
-          <SummaryRow label="Location" value={draft.location} styles={styles} />
+          <SummaryRow label="Location" value={joinLocation(draft.region, draft.location)} styles={styles} />
           <SummaryRow label="Price per Day" value={`${formatCurrency(Number(draft.pricePerDay), activeCurrency)}/day`} styles={styles} />
         </View>
 

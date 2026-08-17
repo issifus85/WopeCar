@@ -33,6 +33,7 @@ const EMPTY_DRAFT = {
   baggage: '',
   features: [],
   description: DESCRIPTION_TEMPLATE,
+  region: '',
   location: '',
   pricePerDay: '',
   // {name, price, type:'per_day'}[] - same shape car.regionalAddons already

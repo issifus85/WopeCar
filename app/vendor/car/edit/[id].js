@@ -13,6 +13,8 @@ import {
   GHANA_REGIONS,
   VEHICLE_TYPES,
   VEHICLE_CLASSES,
+  joinLocation,
+  splitLocation,
 } from '../../../../constants/vehicleCatalog';
 import VendorHeader from '../../../../components/VendorHeader';
 import CheckoutFooterButton from '../../../../components/CheckoutFooterButton';
@@ -57,7 +59,7 @@ export default function VendorEditListingScreen() {
 
   const car = cars.find((c) => c.id === id);
 
-  const [pickerOpen, setPickerOpen] = useState(null); // 'make' | 'model' | 'year' | 'type' | 'vehicleClass' | null
+  const [pickerOpen, setPickerOpen] = useState(null); // 'make' | 'model' | 'year' | 'type' | 'vehicleClass' | 'region' | null
   const [locationModalOpen, setLocationModalOpen] = useState(false);
 
   // VendorContext loads its data asynchronously (from SecureStore/localStorage),
@@ -81,6 +83,7 @@ export default function VendorEditListingScreen() {
   const [baggage, setBaggage] = useState('');
   const [features, setFeatures] = useState([]);
   const [description, setDescription] = useState('');
+  const [region, setRegion] = useState('');
   const [location, setLocation] = useState('');
   const [pricePerDay, setPricePerDay] = useState('');
   const [regionalAddons, setRegionalAddons] = useState([]);
@@ -103,7 +106,9 @@ export default function VendorEditListingScreen() {
     setBaggage(car.baggage != null ? String(car.baggage) : '');
     setFeatures(car.features ?? []);
     setDescription(car.description ?? '');
-    setLocation(car.location ?? '');
+    const split = splitLocation(car.location);
+    setRegion(split.region);
+    setLocation(split.city);
     setPricePerDay(car.pricePerDay != null ? String(car.pricePerDay) : '');
     setRegionalAddons(car.regionalAddons ?? []);
     setOffersRegionalAddons((car.regionalAddons ?? []).length > 0);
@@ -163,7 +168,7 @@ export default function VendorEditListingScreen() {
   };
 
   const price = Number(pricePerDay);
-  const isValid = !!make && !!model && !!year && !!type && !!vehicleClass && !!drivenBy && !!energySource && !!location && pricePerDay.trim().length > 0 && price > 0;
+  const isValid = !!make && !!model && !!year && !!type && !!vehicleClass && !!drivenBy && !!energySource && !!region && !!location && pricePerDay.trim().length > 0 && price > 0;
 
   const handleSave = async () => {
     const enabledRegions = offersRegionalAddons ? regionalAddons.filter((r) => Number(r.price) > 0) : [];
@@ -184,7 +189,7 @@ export default function VendorEditListingScreen() {
         baggage: baggage ? Number(baggage) : null,
         features,
         description: description.trim(),
-        location,
+        location: joinLocation(region, location),
         pricePerDay: price,
         regionalAddons: enabledRegions.map((r) => ({ name: r.name, price: Number(r.price), type: 'per_day' })),
       });
@@ -377,12 +382,20 @@ export default function VendorEditListingScreen() {
           </View>
 
           <Text style={[styles.sectionTitle, styles.sectionSpaced]}>Location & Pricing</Text>
+          <PickerField
+            label="Region"
+            value={region}
+            placeholder="Select region"
+            onPress={() => setPickerOpen('region')}
+            styles={styles}
+            colors={colors}
+          />
           <View style={styles.field}>
-            <Text style={styles.label}>Vehicle Location</Text>
+            <Text style={styles.label}>City / Area</Text>
             <TouchableOpacity style={styles.locationButton} onPress={() => setLocationModalOpen(true)}>
               <Ionicons name="location-outline" size={18} color={colors.teal} />
               <Text style={[styles.locationButtonText, !location && styles.locationPlaceholder]} numberOfLines={1}>
-                {location || 'Search for a region or city...'}
+                {location || 'Search for a city or area...'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -495,9 +508,17 @@ export default function VendorEditListingScreen() {
         onSelect={(newVehicleClass) => setVehicleClass(newVehicleClass)}
         onClose={() => setPickerOpen(null)}
       />
+      <SearchableOptionModal
+        visible={pickerOpen === 'region'}
+        title="Select Region"
+        options={GHANA_REGIONS}
+        value={region}
+        onSelect={(newRegion) => setRegion(newRegion)}
+        onClose={() => setPickerOpen(null)}
+      />
       <LocationSearchModal
         visible={locationModalOpen}
-        title="Vehicle Location"
+        title="City / Area"
         onClose={() => setLocationModalOpen(false)}
         onSelect={(description) => setLocation(description)}
       />

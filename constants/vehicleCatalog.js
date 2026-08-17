@@ -46,6 +46,54 @@ export const GHANA_REGIONS = [
   'Upper East', 'Upper West', 'Volta', 'Western', 'Western North',
 ];
 
+// City/area suggestions per region for the vendor/admin car edit forms'
+// location picker - same 16 region names as GHANA_REGIONS above (kept
+// separate since that export is also used unrelatedly for the
+// regional-addons fee toggle list). Admins/vendors can still search any
+// address via LocationSearchModal's Places search; this only feeds the
+// SearchableOptionModal region picker, matching wopecar-admin's equivalent
+// (lib/constants/vehicleCatalog.ts's GHANA_CITIES_BY_REGION).
+export const GHANA_CITIES_BY_REGION = {
+  'Greater Accra': ['Accra', 'Osu', 'Labone', 'Cantonments', 'East Legon', 'Tema', 'Madina', 'Adenta', 'Dansoman', 'Achimota', 'Spintex', 'Teshie', 'Labadi', 'Kaneshie', 'Airport Residential'],
+  Ashanti: ['Kumasi', 'Adum', 'Suame', 'Bantama', 'Asokwa', 'Ejisu', 'Bekwai', 'Mampong', 'Obuasi', 'Konongo'],
+  Western: ['Takoradi', 'Sekondi', 'Tarkwa', 'Axim', 'Prestea', 'Elubo', 'Shama'],
+  'Western North': ['Sefwi Wiawso', 'Bibiani', 'Juaboso', 'Enchi', 'Dadieso'],
+  Central: ['Cape Coast', 'Elmina', 'Winneba', 'Mankessim', 'Saltpond', 'Swedru', 'Assin Fosu', 'Dunkwa'],
+  Eastern: ['Koforidua', 'Nkawkaw', 'Suhum', 'Akim Oda', 'Nsawam', 'Aburi', 'Akosombo', 'Somanya', 'Kade'],
+  Volta: ['Ho', 'Hohoe', 'Keta', 'Aflao', 'Denu', 'Sogakope', 'Kpando'],
+  Oti: ['Dambai', 'Nkwanta', 'Worawora', 'Kpassa'],
+  Bono: ['Sunyani', 'Berekum', 'Dormaa Ahenkro', 'Wenchi'],
+  'Bono East': ['Techiman', 'Kintampo', 'Atebubu', 'Nkoranza'],
+  Ahafo: ['Goaso', 'Bechem', 'Duayaw Nkwanta'],
+  Northern: ['Tamale', 'Yendi', 'Savelugu', 'Tolon', 'Bimbilla'],
+  Savannah: ['Damongo', 'Bole', 'Salaga', 'Buipe'],
+  'North East': ['Nalerigu', 'Gambaga', 'Walewale', 'Bunkpurugu'],
+  'Upper East': ['Bolgatanga', 'Bawku', 'Navrongo', 'Zebilla'],
+  'Upper West': ['Wa', 'Lawra', 'Nandom', 'Jirapa'],
+};
+
+// Best-effort split of a legacy free-text location into {region, city} for
+// form prefill - exact region-name substring match, same rule as the DB
+// trigger's primary branch (set_car_region_id_from_location, migration
+// 0062). Returns region: '' when nothing matches, so the vendor/admin picks
+// one explicitly rather than silently guessing wrong.
+export function splitLocation(location) {
+  if (!location) return { region: '', city: '' };
+  const matched = GHANA_REGIONS.find((r) => location.toLowerCase().includes(r.toLowerCase()));
+  if (!matched) return { region: '', city: location };
+  const city = location
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part && !part.toLowerCase().includes(matched.toLowerCase()))
+    .join(', ');
+  return { region: matched, city };
+}
+
+export function joinLocation(region, city) {
+  if (region && city) return `${city}, ${region}`;
+  return city || region;
+}
+
 // Same taxonomy renters filter by (components/FilterModal.js's Vehicle Class
 // section, sent as attrs[25][] in services/carsApi.js) - moved here so the
 // vendor-side picker and the renter-side filter share one source instead of
