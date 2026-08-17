@@ -170,7 +170,7 @@ export default function VendorEditListingScreen() {
     setIsSaving(true);
     try {
       await updateCar(car.id, {
-        name: `${make} ${model} ${year}`,
+        name: `${make} ${model}`,
         make,
         model,
         year,

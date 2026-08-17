@@ -171,7 +171,7 @@ export default function AdminEditCarScreen() {
     setSaveError(null);
     try {
       await updateCar(car, {
-        name: `${make} ${model} ${year}`,
+        name: `${make} ${model}`,
         make,
         model,
         year: Number(year),

@@ -45,7 +45,7 @@ export default function AddCarReviewScreen() {
     setIsSubmitting(true);
     try {
       const car = await addCar({
-        name: `${draft.make} ${draft.model} ${draft.year}`,
+        name: `${draft.make} ${draft.model}`,
         make: draft.make,
         model: draft.model,
         year: draft.year,
