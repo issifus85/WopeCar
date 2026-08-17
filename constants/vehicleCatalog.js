@@ -5,9 +5,9 @@ import { CATEGORIES } from '../data/cars';
 // market. Used to power the searchable Make/Model pickers in
 // app/vendor/add-car/index.js.
 export const VEHICLE_MAKES = [
-  { make: 'Toyota', models: ['Camry', 'Corolla', 'Corolla Cross', 'RAV4', 'Highlander', 'Land Cruiser', 'Land Cruiser Prado', 'Hilux', 'Hiace', 'Yaris', 'Avalon', 'Sienna'] },
-  { make: 'Hyundai', models: ['Elantra', 'Tucson', 'Santa Fe', 'Sonata', 'Accent', 'i10', 'i20', 'Creta', 'Palisade', 'Venue'] },
-  { make: 'Kia', models: ['Sportage', 'Picanto', 'Rio', 'Sorento', 'Sonet', 'Seltos', 'Cerato', 'Soul'] },
+  { make: 'Toyota', models: ['Camry', 'Corolla', 'Corolla Cross', 'RAV4', 'Highlander', 'Land Cruiser', 'Land Cruiser Prado', 'Hilux', 'Hiace', 'Yaris', 'Avalon', 'Sienna', '4-Runner', 'Fortuner'] },
+  { make: 'Hyundai', models: ['Elantra', 'Tucson', 'Santa Fe', 'Sonata', 'Accent', 'i10', 'i20', 'Creta', 'Palisade', 'Venue', 'H1', 'ix35'] },
+  { make: 'Kia', models: ['Sportage', 'Picanto', 'Rio', 'Sorento', 'Sonet', 'Seltos', 'Cerato', 'Soul', 'Forte'] },
   { make: 'Nissan', models: ['Altima', 'Sentra', 'X-Trail', 'Rogue', 'Pathfinder', 'Navara', 'Patrol', 'Micra', 'Qashqai'] },
   { make: 'Honda', models: ['Civic', 'Accord', 'CR-V', 'HR-V', 'Pilot', 'City', 'Fit'] },
   { make: 'Ford', models: ['Focus', 'Fusion', 'Explorer', 'Escape', 'Ranger', 'EcoSport', 'Everest'] },
@@ -23,6 +23,8 @@ export const VEHICLE_MAKES = [
   { make: 'Lexus', models: ['RX', 'ES', 'NX', 'GX', 'LX'] },
   { make: 'Peugeot', models: ['301', '3008', '5008', 'Partner'] },
   { make: 'Renault', models: ['Duster', 'Logan', 'Sandero', 'Koleos'] },
+  { make: 'Infiniti', models: ['QX80', 'QX60', 'QX50', 'Q50', 'Q60'] },
+  { make: 'Kantanka', models: ['Onantefo'] },
 ];
 
 export function getModelsForMake(make) {
