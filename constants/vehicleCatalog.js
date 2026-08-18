@@ -12,7 +12,7 @@ export const VEHICLE_MAKES = [
   { make: 'Honda', models: ['Civic', 'Accord', 'CR-V', 'HR-V', 'Pilot', 'City', 'Fit'] },
   { make: 'Ford', models: ['Focus', 'Fusion', 'Explorer', 'Escape', 'Ranger', 'EcoSport', 'Everest'] },
   { make: 'Chevrolet', models: ['Cruze', 'Malibu', 'Captiva', 'Trailblazer', 'Spark'] },
-  { make: 'Mercedes-Benz', models: ['C-Class', 'E-Class', 'S-Class', 'GLE', 'GLC', 'GLA', 'Sprinter'] },
+  { make: 'Mercedes-Benz', models: ['A-Class', 'B-Class', 'C-Class', 'E-Class', 'S-Class', 'CLA', 'CLS', 'GLA', 'GLB', 'GLC', 'GLK', 'GLE', 'GLS', 'ML-Class', 'GL-Class', 'G-Class', 'Sprinter', 'Vito', 'Viano', 'V-Class'] },
   { make: 'BMW', models: ['3 Series', '5 Series', 'X1', 'X3', 'X5'] },
   { make: 'Volkswagen', models: ['Golf', 'Passat', 'Jetta', 'Polo', 'Tiguan', 'Touareg'] },
   { make: 'Suzuki', models: ['Swift', 'Vitara', 'Jimny', 'Baleno', 'Ertiga'] },
