@@ -8,6 +8,7 @@ import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import * as bookingsApi from '../../services/bookingsApi';
+import { viewQuickbooksInvoice, viewQuickbooksReceipt } from '../../services/quickbooksApi';
 
 const STATUS_META = {
   paid: { label: 'Paid', tone: 'success' },
@@ -65,8 +66,12 @@ function buildReceiptText({ payment, meta, currency, userName }) {
 }
 
 function ReceiptModal({ payment, currency, userName, onClose, styles, colors }) {
+  const [openingDocument, setOpeningDocument] = useState(null); // 'invoice' | 'receipt' | null
+
   if (!payment) return null;
   const meta = STATUS_META[payment.status] ?? { label: payment.status, tone: 'neutral' };
+  const hasQuickbooksReceipt = payment.invoiceStatus === 'paid';
+  const hasQuickbooksInvoice = payment.invoiceStatus === 'paid' || payment.invoiceStatus === 'unpaid';
 
   const handleShare = async () => {
     const message = buildReceiptText({ payment, meta, currency, userName });
@@ -85,6 +90,17 @@ function ReceiptModal({ payment, currency, userName, onClose, styles, colors }) 
           // Nothing more we can do here.
         }
       }
+    }
+  };
+
+  const handleViewDocument = async (kind) => {
+    setOpeningDocument(kind);
+    try {
+      await (kind === 'invoice' ? viewQuickbooksInvoice(payment.id) : viewQuickbooksReceipt(payment.id));
+    } catch (e) {
+      Alert.alert('Could not open', e.message || 'Something went wrong. Please try again.');
+    } finally {
+      setOpeningDocument(null);
     }
   };
 
@@ -132,10 +148,45 @@ function ReceiptModal({ payment, currency, userName, onClose, styles, colors }) 
             <Text style={styles.sheetValue}>{payment.gateway ?? 'N/A'}</Text>
           </View>
 
-          <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
-            <Ionicons name="share-outline" size={16} color={colors.white} />
-            <Text style={styles.shareButtonText}>Share / Download</Text>
-          </TouchableOpacity>
+          {hasQuickbooksInvoice ? (
+            <>
+              <TouchableOpacity
+                style={styles.shareButton}
+                onPress={() => handleViewDocument('invoice')}
+                disabled={openingDocument !== null}
+              >
+                {openingDocument === 'invoice' ? (
+                  <ActivityIndicator size="small" color={colors.white} />
+                ) : (
+                  <>
+                    <Ionicons name="document-text-outline" size={16} color={colors.white} />
+                    <Text style={styles.shareButtonText}>View Invoice</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              {hasQuickbooksReceipt && (
+                <TouchableOpacity
+                  style={[styles.shareButton, styles.secondaryButton]}
+                  onPress={() => handleViewDocument('receipt')}
+                  disabled={openingDocument !== null}
+                >
+                  {openingDocument === 'receipt' ? (
+                    <ActivityIndicator size="small" color={colors.teal} />
+                  ) : (
+                    <>
+                      <Ionicons name="receipt-outline" size={16} color={colors.teal} />
+                      <Text style={[styles.shareButtonText, styles.secondaryButtonText]}>View Receipt</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+            </>
+          ) : (
+            <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
+              <Ionicons name="share-outline" size={16} color={colors.white} />
+              <Text style={styles.shareButtonText}>Share / Download</Text>
+            </TouchableOpacity>
+          )}
         </Pressable>
       </Pressable>
     </Modal>
@@ -358,6 +409,13 @@ function createStyles(colors) {
       fontFamily: FONTS.semiBold,
       fontSize: 14,
       color: colors.white,
+    },
+    secondaryButton: {
+      marginTop: 10,
+      backgroundColor: colors.highlight,
+    },
+    secondaryButtonText: {
+      color: colors.teal,
     },
   });
 }

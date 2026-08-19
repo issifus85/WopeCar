@@ -41,8 +41,6 @@ function normalizeSupabaseBooking(row) {
     paystackReference: row.payment_ref,
     status: STATUS_MAP[row.status] ?? 'Pending',
     createdAt: row.created_at,
-    invoiceStatus: row.invoice_status ?? 'not_created',
-    qbInvoiceNumber: row.qb_invoice_number ?? null,
   };
 }
 

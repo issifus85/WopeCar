@@ -23,6 +23,10 @@ function normalizeBookingPayment(raw) {
     startDate: raw.start_date,
     endDate: raw.end_date,
     createdAt: raw.created_at,
+    // Whether a real QuickBooks invoice/receipt exists to view - see
+    // services/quickbooksApi.js. 'paid' means quickbooks-record-payment
+    // has already run (qb_payment_id set), so both PDFs are fetchable.
+    invoiceStatus: raw.invoice_status ?? 'not_created',
   };
 }
 
@@ -38,7 +42,7 @@ export async function getBookings() {
   const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('bookings')
-    .select('id, booking_ref, total_cost, payment_status, start_date, end_date, created_at')
+    .select('id, booking_ref, total_cost, payment_status, start_date, end_date, created_at, invoice_status')
     .eq('renter_id', user.id)
     .order('created_at', { ascending: false });
   if (error) throw error;
