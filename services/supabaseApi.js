@@ -237,3 +237,34 @@ export async function sendBookingConfirmedEmail(bookingId) {
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
 }
+
+/**
+ * Creates the QuickBooks invoice for a freshly-reserved booking
+ * (quickbooks-create-invoice Edge Function) - best-effort, same
+ * fire-and-forget spirit as the booking emails above: called right after
+ * createBooking() succeeds, before any money moves, so a QuickBooks
+ * failure must never block or undo the reservation itself.
+ */
+export async function createQuickbooksInvoice(bookingId) {
+  const { data, error } = await supabase.functions.invoke('quickbooks-create-invoice', {
+    body: { bookingId },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+
+/**
+ * Records the QuickBooks payment against that invoice once Paystack
+ * confirms the charge (quickbooks-record-payment Edge Function), which
+ * also emails the renter their receipt. Best-effort - the charge and the
+ * booking's own payment_status already succeeded by the time this fires.
+ */
+export async function recordQuickbooksPayment(bookingId, paystackReference) {
+  const { data, error } = await supabase.functions.invoke('quickbooks-record-payment', {
+    body: { bookingId, paystackReference },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data;
+}

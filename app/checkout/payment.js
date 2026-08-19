@@ -18,7 +18,7 @@ import {
 import { fetchCarById } from '../../services/carsApi';
 import { getDatePriceMap } from '../../services/carPricingApi';
 import { redeemPromoCode } from '../../services/promoApi';
-import { createBooking, updateBooking as confirmSupabaseBooking, uploadBookingDocument, linkExistingBookingDocument, sendBookingConfirmationEmail, sendBookingRequestVendorEmail } from '../../services/supabaseApi';
+import { createBooking, updateBooking as confirmSupabaseBooking, uploadBookingDocument, linkExistingBookingDocument, sendBookingConfirmationEmail, sendBookingRequestVendorEmail, createQuickbooksInvoice, recordQuickbooksPayment } from '../../services/supabaseApi';
 import { payWithPaystack } from '../../services/paystackCheckout';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCheckout } from '../../contexts/CheckoutContext';
@@ -171,6 +171,8 @@ export default function CheckoutPaymentScreen() {
         payment_status: 'unpaid',
       });
 
+      createQuickbooksInvoice(reserved.id).catch(() => {});
+
       // Best-effort, in parallel: a failed upload shouldn't block the
       // booking itself - same "local state/booking always wins, best-effort
       // sync" spirit as the rest of this app. Uploaded under the booking's
@@ -245,6 +247,7 @@ export default function CheckoutPaymentScreen() {
 
       sendBookingConfirmationEmail(confirmed.id).catch(() => {});
       sendBookingRequestVendorEmail(confirmed.id).catch(() => {});
+      recordQuickbooksPayment(confirmed.id, reference).catch(() => {});
 
       const booking = {
         id: confirmed.id,

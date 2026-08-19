@@ -24,6 +24,7 @@ import { openDirections } from '../../services/mapsLauncher';
 import { getInspection } from '../../services/inspectionsApi';
 import { getRentalAgreement } from '../../services/rentalAgreementApi';
 import { getMyReviewForBooking } from '../../services/reviewsApi';
+import { viewQuickbooksInvoice, viewQuickbooksReceipt } from '../../services/quickbooksApi';
 import { useBookings } from '../../contexts/BookingsContext';
 import { useInbox } from '../../contexts/InboxContext';
 import DateRangeModal, { formatDateShort } from '../../components/DateRangeModal';
@@ -166,6 +167,7 @@ export default function BookingDetailScreen() {
   // Dismissed for this screen visit only - not persisted, so the prompt is
   // free to reappear next time the booking is opened on pickup day.
   const [directionsPromptDismissed, setDirectionsPromptDismissed] = useState(false);
+  const [openingDocument, setOpeningDocument] = useState(null); // 'invoice' | 'receipt' | null
 
   useEffect(() => {
     if (booking?.carId) {
@@ -221,6 +223,17 @@ export default function BookingDetailScreen() {
       return;
     }
     router.push({ pathname: '/rental-agreement/[bookingId]', params: { bookingId: booking.id, localId: booking.id } });
+  };
+
+  const handleViewDocument = async (kind) => {
+    setOpeningDocument(kind);
+    try {
+      await (kind === 'invoice' ? viewQuickbooksInvoice(booking.id) : viewQuickbooksReceipt(booking.id));
+    } catch (e) {
+      Alert.alert('Could not open', e.message || 'Something went wrong. Please try again.');
+    } finally {
+      setOpeningDocument(null);
+    }
   };
 
   const startEditing = () => {
@@ -500,6 +513,60 @@ export default function BookingDetailScreen() {
               )}
             </View>
           </View>
+        </View>
+      )}
+
+      {mode === 'view' && booking.invoiceStatus && booking.invoiceStatus !== 'not_created' && (
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Payment & Receipt</Text>
+          {!!booking.qbInvoiceNumber && (
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>Invoice Number</Text>
+              <Text style={styles.rowValue}>{booking.qbInvoiceNumber}</Text>
+            </View>
+          )}
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Payment Status</Text>
+            <Text style={[styles.rowValue, { color: booking.invoiceStatus === 'paid' ? colors.success : colors.warning }]}>
+              {booking.invoiceStatus === 'paid' ? 'Paid' : 'Unpaid'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => handleViewDocument('invoice')}
+            disabled={openingDocument !== null}
+          >
+            <Text style={styles.rowLabel}>Invoice</Text>
+            <View style={styles.rowValueWithAction}>
+              {openingDocument === 'invoice' ? (
+                <ActivityIndicator size="small" color={colors.teal} />
+              ) : (
+                <>
+                  <Text style={[styles.rowValue, { color: colors.teal }]}>View</Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors.textSubtle} />
+                </>
+              )}
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.row, styles.rowLast]}
+            onPress={() => handleViewDocument('receipt')}
+            disabled={openingDocument !== null || booking.invoiceStatus !== 'paid'}
+          >
+            <Text style={styles.rowLabel}>Receipt</Text>
+            <View style={styles.rowValueWithAction}>
+              {openingDocument === 'receipt' ? (
+                <ActivityIndicator size="small" color={colors.teal} />
+              ) : (
+                <>
+                  <Text style={[styles.rowValue, booking.invoiceStatus !== 'paid' && { color: colors.textSubtle }]}>
+                    {booking.invoiceStatus === 'paid' ? 'View' : 'Available after payment'}
+                  </Text>
+                  {booking.invoiceStatus === 'paid' && <Ionicons name="chevron-forward" size={16} color={colors.textSubtle} />}
+                </>
+              )}
+            </View>
+          </TouchableOpacity>
         </View>
       )}
 
