@@ -406,6 +406,14 @@ export default function CheckoutPaymentScreen() {
         expiresAt: expiresAt.toISOString(),
       });
 
+      // The same car may already be sitting in the plain wishlist (added
+      // from a car card before this checkout ever started) - once it has a
+      // real saved booking with a pending invoice, that wishlist entry is
+      // just a confusing duplicate of the same car in the same cart, so it
+      // comes out here too. Same cleanup handlePay() already does on the
+      // paid path, just triggered a step earlier.
+      removeFromCart(carId);
+
       setSavedExpiry(expiresAt);
     } catch (e) {
       setError(e.message || 'Could not save this booking. Please try again.');
