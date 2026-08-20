@@ -38,7 +38,11 @@ function normalizeMessage(raw) {
     senderName: raw.sender_name,
     senderIsSupport: !!raw.sender_is_support,
     isRead: !!raw.is_read,
+    readAt: raw.read_at ?? null,
     body: raw.body,
+    attachmentType: raw.attachment_type ?? null,
+    attachmentUrl: raw.attachment_url ?? null,
+    attachmentMeta: raw.attachment_meta ?? null,
     createdAt: raw.created_at,
   };
 }
@@ -91,10 +95,20 @@ export async function getMessages(id) {
 }
 
 /**
- * send_conversation_message(p_conversation_id, p_body)
+ * send_conversation_message(p_conversation_id, p_body, p_attachment_type,
+ * p_attachment_url, p_attachment_meta). `attachment` is
+ * `{ type, url, meta } | null` - the shape chatAttachmentsApi.js's
+ * pickAndUploadChatImage/pickAndUploadChatDocument/getCurrentLocationForChat
+ * already return, so callers can pass that result straight through.
  */
-export async function sendMessage(id, body) {
-  const { data, error } = await supabase.rpc('send_conversation_message', { p_conversation_id: id, p_body: body });
+export async function sendMessage(id, body, attachment = null) {
+  const { data, error } = await supabase.rpc('send_conversation_message', {
+    p_conversation_id: id,
+    p_body: body,
+    p_attachment_type: attachment?.type ?? null,
+    p_attachment_url: attachment?.url ?? null,
+    p_attachment_meta: attachment?.meta ?? null,
+  });
   if (error) throw error;
   return normalizeMessage(data);
 }

@@ -7,6 +7,7 @@ import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useInbox } from '../../contexts/InboxContext';
 import MessageThread from '../../components/MessageThread';
+import { pickAndUploadChatImage, pickAndUploadChatDocument, getCurrentLocationForChat } from '../../services/chatAttachmentsApi';
 
 const ROLE_ICONS = { Host: 'home-outline', Driver: 'car-outline', Support: 'headset-outline' };
 
@@ -62,12 +63,35 @@ export default function ConversationScreen() {
   // polled rather than pushed - no websocket infra is wired up for this
   // pass. 5s while this thread is open; the conversation list itself
   // polls separately, less frequently, from InboxContext.
+  //
+  // markConversationRead also fires on every tick, not just the mount-only
+  // call above - without this, a message the other party sends while this
+  // screen stays open would never actually get marked read (last_read_at
+  // only advances when this is called), so their "Read" receipt would
+  // never flip even though the thread is sitting open in front of the
+  // viewer right now. Cheap and idempotent (just bumps a timestamp).
   useEffect(() => {
     if (!isServerConversation) return;
     syncMessages(id);
-    const interval = setInterval(() => syncMessages(id), 5000);
+    markConversationRead(id);
+    const interval = setInterval(() => {
+      syncMessages(id);
+      markConversationRead(id);
+    }, 5000);
     return () => clearInterval(interval);
-  }, [id, isServerConversation, syncMessages]);
+  }, [id, isServerConversation, syncMessages, markConversationRead]);
+
+  const handleAttach = async (kind) => {
+    let attachment = null;
+    if (kind === 'camera' || kind === 'library') {
+      attachment = await pickAndUploadChatImage(id, kind);
+    } else if (kind === 'document') {
+      attachment = await pickAndUploadChatDocument(id);
+    } else if (kind === 'location') {
+      attachment = await getCurrentLocationForChat();
+    }
+    if (attachment) sendMessage(id, '', attachment);
+  };
 
   if (!conversation) {
     return (
@@ -98,6 +122,7 @@ export default function ConversationScreen() {
       <MessageThread
         messages={messages}
         onSend={(text) => sendMessage(id, text)}
+        onAttach={handleAttach}
         pinnedSummary={conversation.pinnedSummary}
       />
     </View>

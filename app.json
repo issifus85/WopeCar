@@ -43,14 +43,14 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "WopeCar accesses your photos so you can attach license and inspection documents.",
-          "cameraPermission": "WopeCar uses your camera to capture vehicle inspection photos."
+          "photosPermission": "WopeCar accesses your photos so you can attach license/inspection documents and share photos in chat.",
+          "cameraPermission": "WopeCar uses your camera to capture vehicle inspection photos and take photos to share in chat."
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "WopeCar uses your location to tag where vehicle inspection photos were taken."
+          "locationWhenInUsePermission": "WopeCar uses your location to tag inspection photos and let you share your location in chat."
         }
       ],
       "expo-video",

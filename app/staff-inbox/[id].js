@@ -6,6 +6,7 @@ import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import * as conversationsApi from '../../services/conversationsApi';
+import { pickAndUploadChatImage, pickAndUploadChatDocument, getCurrentLocationForChat } from '../../services/chatAttachmentsApi';
 import MessageThread from '../../components/MessageThread';
 import InviteParticipantModal from '../../components/InviteParticipantModal';
 
@@ -45,24 +46,41 @@ export default function StaffConversationScreen() {
     conversationsApi.getMessages(id).then(setMessages).catch(() => {});
   }, [id]);
 
+  // markConversationRead fires on every poll tick, not just once on mount
+  // (see the sibling comment in app/inbox/[id].js) - without this, a
+  // message the customer sends while a staffer has this thread open would
+  // never get marked read, since last_read_at only advances when this is
+  // called.
   useEffect(() => {
     loadMeta();
     loadMessages();
-    const interval = setInterval(loadMessages, MESSAGE_POLL_MS);
+    conversationsApi.markConversationRead(id).catch(() => {});
+    const interval = setInterval(() => {
+      loadMessages();
+      conversationsApi.markConversationRead(id).catch(() => {});
+    }, MESSAGE_POLL_MS);
     return () => clearInterval(interval);
   }, [id, loadMeta, loadMessages]);
 
-  useEffect(() => {
-    conversationsApi.markConversationRead(id).catch(() => {});
-  }, [id]);
-
-  const handleSend = (text) => {
-    conversationsApi.sendMessage(id, text)
+  const handleSend = (text, attachment = null) => {
+    conversationsApi.sendMessage(id, text || null, attachment)
       .then(() => {
         loadMessages();
         loadMeta();
       })
       .catch(() => {});
+  };
+
+  const handleAttach = async (kind) => {
+    let attachment = null;
+    if (kind === 'camera' || kind === 'library') {
+      attachment = await pickAndUploadChatImage(id, kind);
+    } else if (kind === 'document') {
+      attachment = await pickAndUploadChatDocument(id);
+    } else if (kind === 'location') {
+      attachment = await getCurrentLocationForChat();
+    }
+    if (attachment) handleSend('', attachment);
   };
 
   const threadMessages = useMemo(() => messages.map((m) => ({
@@ -71,7 +89,11 @@ export default function StaffConversationScreen() {
     senderId: m.senderId === user?.id ? 'me' : m.senderId,
     senderName: m.senderName,
     text: m.body,
+    attachmentType: m.attachmentType ?? null,
+    attachmentUrl: m.attachmentUrl ?? null,
+    attachmentMeta: m.attachmentMeta ?? null,
     createdAt: m.createdAt,
+    readAt: m.readAt ?? null,
     isRead: !!m.isRead,
     isSending: typeof m.id === 'string' && m.id.startsWith('pending-'),
   })), [messages, user]);
@@ -126,6 +148,7 @@ export default function StaffConversationScreen() {
       <MessageThread
         messages={threadMessages}
         onSend={handleSend}
+        onAttach={handleAttach}
         pinnedSummary={conversation.pinnedSummary}
         emptyStateText="No messages yet."
       />

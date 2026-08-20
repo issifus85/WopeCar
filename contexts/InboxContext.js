@@ -303,9 +303,14 @@ export function InboxProvider({ children }) {
     return `${SERVER_CONVERSATION_PREFIX}${rawId}`;
   }, [syncServerConversations]);
 
-  const sendMessage = useCallback((conversationId, text) => {
+  // `attachment` is `{ type, url, meta } | null` - the shape
+  // chatAttachmentsApi.js's pick/upload helpers return, passed straight
+  // through to conversationsApi.sendMessage. `text` may be empty when an
+  // attachment carries the whole message (no caption) - the trimmed-empty
+  // early-return below only applies when there's no attachment either.
+  const sendMessage = useCallback((conversationId, text, attachment = null) => {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed && !attachment) return;
     const now = new Date().toISOString();
 
     if (isServerConversationId(conversationId)) {
@@ -316,7 +321,10 @@ export function InboxProvider({ children }) {
         senderId: user?.id,
         senderName: user?.name,
         senderIsSupport: !!user?.isSupport,
-        body: trimmed,
+        body: trimmed || null,
+        attachmentType: attachment?.type ?? null,
+        attachmentUrl: attachment?.url ?? null,
+        attachmentMeta: attachment?.meta ?? null,
         createdAt: now,
       };
       setServerMessagesByConversationId((prev) => ({
@@ -324,7 +332,7 @@ export function InboxProvider({ children }) {
         [rawId]: [...(prev[rawId] ?? []), optimistic],
       }));
 
-      conversationsApi.sendMessage(rawId, trimmed)
+      conversationsApi.sendMessage(rawId, trimmed || null, attachment)
         .then((confirmed) => {
           // Swap the optimistic placeholder for the real, server-assigned
           // message as soon as the send confirms, rather than waiting for
@@ -384,8 +392,14 @@ export function InboxProvider({ children }) {
           senderName: m.senderName,
           senderIsSupport: m.senderIsSupport,
           text: m.body,
+          attachmentType: m.attachmentType ?? null,
+          attachmentUrl: m.attachmentUrl ?? null,
+          attachmentMeta: m.attachmentMeta ?? null,
           createdAt: m.createdAt,
-          readAt: null,
+          // Was hardcoded null - list_conversation_messages now returns a
+          // real read_at timestamp (migration 0066_chat_attachments) for
+          // the "Read · 3:45 PM" receipt; this used to silently discard it.
+          readAt: m.readAt ?? null,
           isRead: !!m.isRead,
           isSending: typeof m.id === 'string' && m.id.startsWith('pending-'),
         }))
