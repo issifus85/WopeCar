@@ -12,20 +12,25 @@ const DRIVE_TYPES = [
   { value: 'Self-drive', label: 'Self-drive or Chauffeur' },
 ];
 
-// The `value` thresholds (0, 200, 500, 1000) are always raw GHS - they're
-// sent straight through to fetchCars() as minPrice/maxPrice against
-// cars.price_per_day (stored in GHS, see app/(tabs)/index.js), so they
-// must never be converted. Only the displayed label goes through
-// formatCurrency() with whatever currency is active, same as every price
-// shown elsewhere in the app - was hardcoded to "$" regardless of the
-// selected currency before this.
+// The `value` thresholds are always raw GHS - they're sent straight
+// through to fetchCars() as minPrice/maxPrice against cars.price_per_day
+// (stored in GHS, see app/(tabs)/index.js), so they must never be
+// converted. Only the displayed label goes through formatCurrency() with
+// whatever currency is active.
+//
+// Breakpoints (1000/1500/2500) chosen from the real fleet's price
+// distribution, not guessed: as of 2026-08-20, 68 active cars ranged
+// GHS 650-18,000 (median ~1,225) with roughly even clusters of
+// 18/28/17/5 cars across these 4 buckets. The old $200/$500/$1,000
+// breakpoints were all below the cheapest car in the fleet (GHS 650),
+// so "Under $200" through "$500-$1,000" were permanently-empty filters.
 function getPriceRanges(currency) {
   return [
     { value: null, label: 'Any' },
-    { value: '0;200', label: `Under ${formatCurrency(200, currency)}` },
-    { value: '200;500', label: `${formatCurrency(200, currency)} - ${formatCurrency(500, currency)}` },
-    { value: '500;1000', label: `${formatCurrency(500, currency)} - ${formatCurrency(1000, currency)}` },
-    { value: '1000;999999', label: `${formatCurrency(1000, currency)}+` },
+    { value: '0;1000', label: `Under ${formatCurrency(1000, currency)}` },
+    { value: '1000;1500', label: `${formatCurrency(1000, currency)} - ${formatCurrency(1500, currency)}` },
+    { value: '1500;2500', label: `${formatCurrency(1500, currency)} - ${formatCurrency(2500, currency)}` },
+    { value: '2500;999999', label: `${formatCurrency(2500, currency)}+` },
   ];
 }
 
