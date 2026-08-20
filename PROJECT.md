@@ -279,6 +279,8 @@ export function useBookings() {
 | Bookings | `wopecar_local_bookings` | `services/bookingsStorage.js` | `contexts/BookingsContext.js` |
 | Settings | `wopecar_settings` | `services/settingsStorage.js` | `contexts/SettingsContext.js` |
 
+`CartContext`/`cartStorage.js` actually cover two related-but-distinct domains under one Context (both live on the Cart tab, so splitting them into separate Contexts would've meant two separate hooks/providers for what's UI-wise a single screen): the original `cartIds` (a wishlist of car ids, `wopecar_cart_cars`) and `savedBookings` (full checkout drafts saved via Save & Pay Later, `wopecar_cart_saved_bookings` — see [6.13](#613-save--pay-later-saved-bookings)). Same read/write/get/set shape as the table above, just two key/state pairs instead of one.
+
 Auth token uses the read/write half of this pattern only (`services/tokenStorage.js`, key `wopecar_auth_token`) — no Context needed since `AuthContext` holds the *user object*, not the token.
 
 ### 6.3 Multi-step draft flow pattern
@@ -423,6 +425,21 @@ WopeCar takes a platform fee on every booking: the renter pays `bookings.total_c
 
 **Known gap, same shape as WopeCare's above**: wopecar-admin's `modifyBooking()` (`lib/api/bookings.ts`) recomputes `rental_cost`/`total_cost` when an admin changes a booking's dates, but does **not** recompute `vendor_payout_total`/`wopecar_margin` against the new trip length — those stay frozen at whatever the original `bookings_compute_vendor_payout` insert-time trigger computed. Not fixed here, flagged for the same reason the pre-existing WopeCare gap above is flagged rather than silently left.
 
+### 6.13 Save & Pay Later (saved bookings)
+
+`checkout/payment.js`'s Terms checkbox gates two mutually-exclusive actions: checked → Pay Now is enabled and Save & Pay Later hides (the renter is committed to paying); unchecked → the reverse, a ghost teal-outlined "Save & Pay Later" button (`CheckoutFooterButton`'s optional `secondaryLabel`/`onSecondaryPress`/`secondaryVisible` props — every other checkout screen omits them and is unaffected) saves the full draft into `CartContext.savedBookings` instead of paying.
+
+**No Supabase booking or QuickBooks invoice exists at this point** — those still only get created inside `handlePay()`, when the renter actually commits to paying (see [6.6](#66-paystack-payment-flow)/the QuickBooks integration memory). A saved draft is purely local: `{ id, carId, carName, carImage, carPricePerDay, startDate, endDate, totalDays, pickupTime, returnTime, pickupLocation, returnLocation, driveType, addons, wopeCare: {plan, totalCost}, deliveryFee, securityDeposit, rentalCost, addonsCost, totalCost, form, licenseFront/Back, proofOfAddress, savedAt, expiresAt (savedAt + 24h), remindedAt (set once the 2h-before-expiry local push fires) }`, built from the exact same `buildPricingBreakdown()` `handlePay()` itself uses — never a separately-derived guess. Saving replaces any earlier saved draft for the same car (`saveBookingDraft` in `CartContext.js`), so a renter can only ever have one hold per car.
+
+- **Success feedback**: `ConfirmModal` (not a bespoke modal — `confirmLabel`/`cancelLabel` map onto "Go to Cart"/"Continue Browsing", both of which just dismiss and navigate).
+- **Expiry**: `CartContext`'s `pruneAndRemind()` drops any saved booking past `expiresAt` and fires a one-time local push (`services/pushNotifications.js`) when a booking enters its final 2 hours — scanned on mount and on `AppState` → `'active'`, same convention as InboxContext's trip reminders ([6.10](#610-unified-inbox--notifications)), no ticking interval while the app stays open. `remindedAt` lives on the booking itself so a restart within that 2h window can't double-fire it.
+- **Cart tab** (`app/(tabs)/cart.js`): saved bookings render above the pre-existing car wishlist, each a `SavedBookingCard` (thumbnail/dates/days/cost/color-coded countdown — grey → orange under 6h → red under 2h — via a plain `hoursUntil()` computation re-evaluated every render, not a stored value) with Complete Payment and a `ConfirmModal`-guarded Remove. A card past its own `expiresAt` renders its expired variant (icon/copy/"Search Again") even before the next prune cycle removes it from `CartContext`'s array — this is a real-time per-render check, independent of the mount/foreground prune timing.
+- **Resume**: Complete Payment calls `startCheckout(carId)` + `updateDraft(...)` (restoring every field except license documents' upload state, which round-trip as-is) then pushes straight to `checkout/payment.js?resumedBookingId=...`, skipping the other 6 steps. Payment.js looks up that id in `savedBookings` to show a "Resuming saved booking — expires [time]" banner, and removes it from `CartContext` only once the resumed payment actually succeeds (not on save, not on visiting the screen).
+- **Cart badge**: `FloatingTabBar` reads `useCart().savedBookings.length` and renders a teal badge on the `cart` route specifically — safe to call unconditionally even though the same bar also renders the vendor/admin tab groups, since `CartProvider` wraps the whole app and neither of those groups has a route named `cart`.
+- **Home banner**: a dismissible "You have a saved booking" banner for the nearest-expiring saved booking, sitting after `combinedBar` (not between `header` and `combinedBar` — that bar's `-22` negative top margin is load-bearing for tucking it under the teal header, inserting anything between them breaks that overlap). Dismiss is a plain `useState`, not persisted — Home stays mounted across tab switches (React Navigation doesn't unmount inactive tabs), so this already satisfies "for this session" without needing a Context.
+
+**Explicitly deferred, not built**: the QuickBooks-invoice-on-save / booking-status-enum / admin-visibility follow-on (flagged mid-build as needing real architecture decisions — a new Supabase booking status, and QuickBooks calls routed through Edge Functions rather than the originally-proposed Next.js API route — before it can be built safely).
+
 ---
 
 ## 7. Business Rules & Constants Reference
@@ -522,7 +539,7 @@ Explicitly deferred, not oversights — flagged here so future work doesn't acci
 | `(tabs)/index.js` | `/` | Home — car search, date/filter, list/tile toggle |
 | `(tabs)/favorites.js` | `/favorites` | Saved cars |
 | `(tabs)/bookings.js` | `/bookings` | Status-grouped booking list (Pending/Confirmed/Cancelled) |
-| `(tabs)/cart.js` | `/cart` | Cart before checkout |
+| `(tabs)/cart.js` | `/cart` | Car wishlist + saved bookings (Save & Pay Later) — see [6.13](#613-save--pay-later-saved-bookings) |
 | `(tabs)/profile.js` | `/profile` | Profile hub, links to Account/Inbox/Documents/Terms/Privacy/Settings |
 | `car/[id].js` | `/car/:id` | Car detail |
 | `booking/[id].js` | `/booking/:id` | Booking detail, modify, cancel |
