@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import { AppState } from 'react-native';
 import * as cartStorage from '../services/cartStorage';
 import { sendLocalPushNotification } from '../services/pushNotifications';
+import { voidQuickbooksPendingInvoice } from '../services/supabaseApi';
 
 const CartContext = createContext(null);
 
@@ -25,6 +26,14 @@ function pruneAndRemind(bookings) {
     const msLeft = new Date(booking.expiresAt).getTime() - now;
     if (msLeft <= 0) {
       changed = true;
+      // Fire-and-forget: voids the real QuickBooks invoice + sends the
+      // "your booking expired" email (quickbooks-void-invoice). The
+      // invoice may not exist yet if the fire-and-forget create call
+      // from handleSaveToCart hasn't landed - that function degrades
+      // gracefully and just marks the row resolved either way.
+      if (booking.pendingInvoiceId) {
+        voidQuickbooksPendingInvoice(booking.pendingInvoiceId).catch(() => {});
+      }
       continue;
     }
     if (!booking.remindedAt && msLeft <= REMINDER_WINDOW_MS) {

@@ -259,12 +259,93 @@ export async function createQuickbooksInvoice(bookingId) {
  * confirms the charge (quickbooks-record-payment Edge Function), which
  * also emails the renter their receipt. Best-effort - the charge and the
  * booking's own payment_status already succeeded by the time this fires.
+ *
+ * `resolvePendingInvoiceId` is passed when this payment is completing a
+ * resumed "Save & Pay Later" draft - the Edge Function marks that
+ * pending_invoices row resolution: 'paid' in the same call, since a raw
+ * client update to pending_invoices past its initial insert isn't allowed
+ * by RLS (migration 0065) and must go through service role instead.
  */
-export async function recordQuickbooksPayment(bookingId, paystackReference) {
+export async function recordQuickbooksPayment(bookingId, paystackReference, resolvePendingInvoiceId) {
   const { data, error } = await supabase.functions.invoke('quickbooks-record-payment', {
-    body: { bookingId, paystackReference },
+    body: { bookingId, paystackReference, resolvePendingInvoiceId },
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
+  return data;
+}
+
+/**
+ * Inserts a row into `pending_invoices` (migration 0065) - the "Save & Pay
+ * Later" cart draft that gets its own real, unpaid QuickBooks invoice
+ * (createQuickbooksPendingInvoice, called separately, right after this
+ * succeeds). Same booking_ref generation + unique-violation retry as
+ * createBooking(), since this row needs its own reference before any real
+ * `bookings` row exists.
+ */
+export async function createPendingInvoiceRow(rowData) {
+  const maxAttempts = 5;
+  let lastError;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const { data, error } = await supabase
+      .from('pending_invoices')
+      .insert({ ...rowData, booking_ref: generateBookingRef() })
+      .select()
+      .single();
+
+    if (!error) return data;
+    if (error.code !== '23505') throw error;
+    lastError = error;
+  }
+
+  throw lastError;
+}
+
+/**
+ * Creates the unpaid QuickBooks invoice for a pending_invoices row
+ * (quickbooks-create-pending-invoice Edge Function) and emails it to the
+ * renter. Fire-and-forget, called right after createPendingInvoiceRow()
+ * succeeds - same posture as createQuickbooksInvoice above.
+ */
+export async function createQuickbooksPendingInvoice(pendingInvoiceId) {
+  const { data, error } = await supabase.functions.invoke('quickbooks-create-pending-invoice', {
+    body: { pendingInvoiceId },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+
+/**
+ * Voids the QuickBooks invoice for an expired pending_invoices row and
+ * marks it resolved (quickbooks-void-invoice Edge Function). Called by
+ * CartContext's expiry prune when a saved booking's 24h hold passes with
+ * no payment.
+ */
+export async function voidQuickbooksPendingInvoice(pendingInvoiceId) {
+  const { data, error } = await supabase.functions.invoke('quickbooks-void-invoice', {
+    body: { pendingInvoiceId },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+
+/**
+ * Reads back the QuickBooks refs a pending_invoices row already carries
+ * (renter's own row - allowed by pending_invoices_renter_select). Used by
+ * checkout/payment.js's resume-and-pay path to reuse the invoice created
+ * at Save & Pay Later time instead of creating a duplicate one - the
+ * create call is fire-and-forget so this can still legitimately be null
+ * if the renter resumes and pays within moments of saving.
+ */
+export async function getPendingInvoiceQuickbooksRef(pendingInvoiceId) {
+  const { data, error } = await supabase
+    .from('pending_invoices')
+    .select('qb_invoice_id, qb_invoice_number, qb_customer_id')
+    .eq('id', pendingInvoiceId)
+    .maybeSingle();
+  if (error) throw error;
   return data;
 }

@@ -71,6 +71,12 @@ function SavedBookingCard({ booking, onCompletePayment, onRemove, onSearchAgain,
         </TouchableOpacity>
       </View>
 
+      {!!booking.bookingRef && (
+        <View style={styles.statusBadge}>
+          <Text style={styles.statusBadgeText}>⏳ Payment Pending · {booking.bookingRef}</Text>
+        </View>
+      )}
+
       <View style={styles.countdownRow}>
         <Ionicons name="time-outline" size={14} color={countdownColor} />
         <Text style={[styles.countdownText, { color: countdownColor }]}>{countdownLabel}</Text>
@@ -353,6 +359,19 @@ function createStyles(colors) {
       fontSize: 18,
       color: colors.textPrimary,
       marginTop: 4,
+    },
+    statusBadge: {
+      alignSelf: 'flex-start',
+      backgroundColor: colors.warningBg,
+      borderRadius: 6,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      marginTop: 10,
+    },
+    statusBadgeText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 11,
+      color: colors.warning,
     },
     countdownRow: {
       flexDirection: 'row',

@@ -18,7 +18,19 @@ import {
 import { fetchCarById } from '../../services/carsApi';
 import { getDatePriceMap } from '../../services/carPricingApi';
 import { redeemPromoCode } from '../../services/promoApi';
-import { createBooking, updateBooking as confirmSupabaseBooking, uploadBookingDocument, linkExistingBookingDocument, sendBookingConfirmationEmail, sendBookingRequestVendorEmail, createQuickbooksInvoice, recordQuickbooksPayment } from '../../services/supabaseApi';
+import {
+  createBooking,
+  updateBooking as confirmSupabaseBooking,
+  uploadBookingDocument,
+  linkExistingBookingDocument,
+  sendBookingConfirmationEmail,
+  sendBookingRequestVendorEmail,
+  createQuickbooksInvoice,
+  recordQuickbooksPayment,
+  createPendingInvoiceRow,
+  createQuickbooksPendingInvoice,
+  getPendingInvoiceQuickbooksRef,
+} from '../../services/supabaseApi';
 import { payWithPaystack } from '../../services/paystackCheckout';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCheckout } from '../../contexts/CheckoutContext';
@@ -151,6 +163,17 @@ export default function CheckoutPaymentScreen() {
         promoCode = redeemed.code;
       }
 
+      // Resuming a saved booking that already has a real (unpaid)
+      // QuickBooks invoice from Save & Pay Later time - read it back before
+      // reserving, so the reservation below can reuse the same invoice
+      // instead of quickbooks-create-invoice minting a duplicate for the
+      // same trip. Fire-and-forget invoice creation at save time means this
+      // can legitimately still be null (not landed yet) - degrades to the
+      // normal fresh-invoice path below either way.
+      const reusedInvoiceRef = resumedBooking?.pendingInvoiceId
+        ? await getPendingInvoiceQuickbooksRef(resumedBooking.pendingInvoiceId).catch(() => null)
+        : null;
+
       const reserved = await createBooking({
         renter_id: user.id,
         car_id: carId,
@@ -185,7 +208,16 @@ export default function CheckoutPaymentScreen() {
         payment_status: 'unpaid',
       });
 
-      createQuickbooksInvoice(reserved.id).catch(() => {});
+      if (reusedInvoiceRef?.qb_invoice_id) {
+        confirmSupabaseBooking(reserved.id, {
+          qb_invoice_id: reusedInvoiceRef.qb_invoice_id,
+          qb_invoice_number: reusedInvoiceRef.qb_invoice_number,
+          qb_customer_id: reusedInvoiceRef.qb_customer_id,
+          invoice_status: 'unpaid',
+        }).catch(() => {});
+      } else {
+        createQuickbooksInvoice(reserved.id).catch(() => {});
+      }
 
       // Best-effort, in parallel: a failed upload shouldn't block the
       // booking itself - same "local state/booking always wins, best-effort
@@ -261,7 +293,7 @@ export default function CheckoutPaymentScreen() {
 
       sendBookingConfirmationEmail(confirmed.id).catch(() => {});
       sendBookingRequestVendorEmail(confirmed.id).catch(() => {});
-      recordQuickbooksPayment(confirmed.id, reference).catch(() => {});
+      recordQuickbooksPayment(confirmed.id, reference, resumedBooking?.pendingInvoiceId).catch(() => {});
 
       const booking = {
         id: confirmed.id,
@@ -301,19 +333,52 @@ export default function CheckoutPaymentScreen() {
   };
 
   // Lets a renter back out of paying right now without losing the 6
-  // screens of checkout progress - purely local (CartContext/cartStorage),
-  // same as the rest of the cart. No Supabase booking or QuickBooks
-  // invoice exists yet at this point; those still only get created once
-  // the renter actually resumes and pays (handlePay above).
+  // screens of checkout progress - the local saved-booking card
+  // (CartContext/cartStorage) same as before, PLUS a real pending_invoices
+  // row (migration 0065) that gets its own unpaid QuickBooks invoice
+  // (quickbooks-create-pending-invoice, fire-and-forget - a QuickBooks
+  // failure must never block the save itself, same posture as handlePay's
+  // own createQuickbooksInvoice call). No `bookings` row exists yet at this
+  // point; that still only gets created once the renter actually resumes
+  // and pays (handlePay above).
   const handleSaveToCart = async () => {
     setIsSaving(true);
     setError(null);
     try {
-      const { rentalCost, addonsCost, deliveryFee, securityDeposit, wopeCarePlanId, wopeCareCost, billableDays } = await buildPricingBreakdown();
+      const { rentalCost, addonsCost, deliveryFee, securityDeposit, wopeCarePlanId, wopeCareDailyRate, wopeCareCost, billableDays } = await buildPricingBreakdown();
       const expiresAt = new Date(Date.now() + SAVED_BOOKING_HOLD_MS);
+
+      const pendingInvoice = await createPendingInvoiceRow({
+        renter_id: user.id,
+        car_id: carId,
+        vendor_id: car.vendorId,
+        start_date: draft.startDate,
+        end_date: draft.endDate,
+        pickup_time: draft.pickupTime,
+        return_time: draft.returnTime,
+        pickup_location: draft.pickupLocation,
+        return_location: draft.returnLocation,
+        drive_type: car.drivenBy,
+        addon_names: draft.addons.map((a) => a.name),
+        addon_days: draft.addons.map((a) => a.days),
+        billable_days: billableDays,
+        rental_cost: rentalCost,
+        addons_cost: addonsCost,
+        delivery_fee: deliveryFee,
+        security_deposit: securityDeposit,
+        wopecare_plan: wopeCarePlanId ?? 'none',
+        wopecare_daily_rate: wopeCareDailyRate,
+        wopecare_total_cost: wopeCareCost,
+        total_cost: draft.totalCost,
+        expires_at: expiresAt.toISOString(),
+      });
+
+      createQuickbooksPendingInvoice(pendingInvoice.id).catch(() => {});
 
       saveBookingDraft({
         id: `saved-${carId}-${Date.now()}`,
+        pendingInvoiceId: pendingInvoice.id,
+        bookingRef: pendingInvoice.booking_ref,
         carId: String(carId),
         carName: car.name,
         carImage: car.image,
