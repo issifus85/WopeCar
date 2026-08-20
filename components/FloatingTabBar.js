@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../contexts/ThemeContext';
+import { useCart } from '../contexts/CartContext';
 import { FONTS } from '../constants/theme';
 
 // Instagram-style floating pill nav, shared by every bottom tab bar in the
@@ -23,6 +24,12 @@ export default function FloatingTabBar({ state, descriptors, navigation }) {
   const { colors, isDark } = useAppTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors, insets]);
+  // Only the renter (tabs) group has a "cart" route - useCart() is safe to
+  // call unconditionally here since CartProvider wraps the whole app
+  // (including the vendor/admin tab groups this same bar also renders for),
+  // the badge itself just never matches a route name there.
+  const { savedBookings } = useCart();
+  const cartBadgeCount = savedBookings.length;
 
   return (
     <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 16) }]} pointerEvents="box-none">
@@ -52,6 +59,11 @@ export default function FloatingTabBar({ state, descriptors, navigation }) {
             >
               <View style={[styles.iconWrap, isFocused && styles.iconWrapActive]}>
                 {icon}
+                {route.name === 'cart' && cartBadgeCount > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText} numberOfLines={1}>{cartBadgeCount}</Text>
+                  </View>
+                )}
               </View>
               <Text style={[styles.label, { color }]} numberOfLines={1}>
                 {options.title ?? route.name}
@@ -98,6 +110,7 @@ function createStyles(colors) {
     // width/height so it stays centered on the icon regardless of exactly
     // how wide/tall a given tab's icon glyph renders.
     iconWrap: {
+      position: 'relative',
       paddingHorizontal: 14,
       paddingVertical: 6,
       borderRadius: 18,
@@ -106,6 +119,23 @@ function createStyles(colors) {
     },
     iconWrapActive: {
       backgroundColor: colors.highlight,
+    },
+    badge: {
+      position: 'absolute',
+      top: 0,
+      right: 4,
+      minWidth: 16,
+      height: 16,
+      paddingHorizontal: 3,
+      borderRadius: 8,
+      backgroundColor: colors.teal,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    badgeText: {
+      fontFamily: FONTS.bold,
+      fontSize: 9,
+      color: colors.white,
     },
     label: {
       fontFamily: FONTS.medium,

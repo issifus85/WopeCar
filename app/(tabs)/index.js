@@ -8,6 +8,7 @@ import { fetchCars } from '../../services/carsApi';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useCart } from '../../contexts/CartContext';
 import DateRangeModal, { formatDateShort } from '../../components/DateRangeModal';
 import { toISODate } from '../../services/vendorCalendar';
 import SortModal, { SORT_OPTIONS } from '../../components/SortModal';
@@ -22,6 +23,14 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { currencies, activeCurrency, setCurrency } = useCurrency();
+  const { savedBookings } = useCart();
+  // Reset only on remount, not persisted - dismissing hides the banner for
+  // the rest of this app session without touching the underlying saved
+  // booking, same "session, not the data" distinction the spec calls for.
+  // Home stays mounted while switching tabs (React Navigation doesn't
+  // unmount inactive tab screens), so this naturally survives tab
+  // switches, just not a full app restart.
+  const [isCartBannerDismissed, setIsCartBannerDismissed] = useState(false);
   const [isCurrencyModalVisible, setIsCurrencyModalVisible] = useState(false);
   const [cars, setCars] = useState([]);
   const [total, setTotal] = useState(0);
@@ -184,6 +193,14 @@ export default function HomeScreen() {
     );
   };
 
+  const nearestSavedBooking = savedBookings.length
+    ? [...savedBookings].sort((a, b) => new Date(a.expiresAt) - new Date(b.expiresAt))[0]
+    : null;
+  const showCartBanner = !!nearestSavedBooking && !isCartBannerDismissed;
+  const cartBannerHoursLeft = nearestSavedBooking
+    ? Math.max(0, Math.round((new Date(nearestSavedBooking.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60)))
+    : 0;
+
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + 8 }]} />
@@ -217,6 +234,29 @@ export default function HomeScreen() {
           />
         </TouchableOpacity>
       </View>
+
+      {showCartBanner && (
+        <View style={styles.cartBanner}>
+          <View style={styles.cartBannerTopRow}>
+            <Ionicons name="cart-outline" size={18} color={colors.teal} />
+            <Text style={styles.cartBannerTitle} numberOfLines={1}>
+              You have a saved booking — {nearestSavedBooking.carName}
+            </Text>
+            <TouchableOpacity onPress={() => setIsCartBannerDismissed(true)} hitSlop={8}>
+              <Ionicons name="close" size={16} color={colors.textSubtle} />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.cartBannerBottomRow}>
+            <Text style={styles.cartBannerSubtitle}>
+              Expires in {cartBannerHoursLeft} {cartBannerHoursLeft === 1 ? 'hour' : 'hours'}
+            </Text>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/cart')} style={styles.cartBannerAction}>
+              <Text style={styles.cartBannerActionText}>Complete Payment</Text>
+              <Ionicons name="arrow-forward" size={13} color={colors.teal} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {isSearchExpanded && (
         <Animated.View
@@ -418,6 +458,47 @@ function createStyles(colors) {
       paddingBottom: 12,
       borderBottomLeftRadius: 28,
       borderBottomRightRadius: 28,
+    },
+    cartBanner: {
+      backgroundColor: colors.highlight,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.teal,
+      marginHorizontal: 20,
+      marginTop: 12,
+      padding: 12,
+    },
+    cartBannerTopRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    cartBannerBottomRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 8,
+    },
+    cartBannerTitle: {
+      flex: 1,
+      fontFamily: FONTS.semiBold,
+      fontSize: 12.5,
+      color: colors.textPrimary,
+    },
+    cartBannerSubtitle: {
+      fontFamily: FONTS.regular,
+      fontSize: 11.5,
+      color: colors.textSubtle,
+    },
+    cartBannerAction: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+    },
+    cartBannerActionText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 12,
+      color: colors.teal,
     },
     combinedBar: {
       flexDirection: 'row',

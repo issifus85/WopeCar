@@ -41,16 +41,21 @@ function toISODate(value) {
 }
 
 export default function CheckoutPaymentScreen() {
-  const { carId } = useLocalSearchParams();
+  const { carId, resumedBookingId } = useLocalSearchParams();
   const router = useRouter();
   const { colors } = useAppTheme();
   const { activeCurrency } = useCurrency();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { draft, resetCheckout } = useCheckout();
   const { addBooking } = useBookings();
-  const { removeFromCart, saveBookingDraft } = useCart();
+  const { removeFromCart, saveBookingDraft, savedBookings, removeSavedBooking } = useCart();
   const { notifyBookingEvent } = useInbox();
   const { user } = useAuth();
+
+  // Set when this screen was reached via Cart's "Complete Payment" (skips
+  // straight here from checkout/(tabs)/cart.js, bypassing the other 6
+  // steps) rather than the normal end of the checkout flow.
+  const resumedBooking = resumedBookingId ? savedBookings.find(b => b.id === resumedBookingId) : null;
 
   const [car, setCar] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -284,6 +289,7 @@ export default function CheckoutPaymentScreen() {
       };
       addBooking(booking);
       removeFromCart(carId);
+      if (resumedBookingId) removeSavedBooking(resumedBookingId);
       notifyBookingEvent('booking_created', booking);
 
       resetCheckout();
@@ -366,6 +372,15 @@ export default function CheckoutPaymentScreen() {
       <CheckoutHeader title="Payment" step={7} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {!!resumedBooking && (
+          <View style={styles.resumeBanner}>
+            <Ionicons name="time-outline" size={16} color={colors.teal} />
+            <Text style={styles.resumeBannerText}>
+              Resuming saved booking — expires {formatExpiry(new Date(resumedBooking.expiresAt))}
+            </Text>
+          </View>
+        )}
+
         <View style={styles.paystackBadge}>
           <Text style={styles.paystackText}>Paystack</Text>
         </View>
@@ -457,6 +472,23 @@ function createStyles(colors) {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    resumeBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: colors.highlight,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.teal,
+      padding: 12,
+      marginBottom: 16,
+    },
+    resumeBannerText: {
+      flex: 1,
+      fontFamily: FONTS.medium,
+      fontSize: 12.5,
+      color: colors.textPrimary,
     },
     paystackBadge: {
       alignSelf: 'flex-start',
