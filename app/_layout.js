@@ -380,11 +380,11 @@ function RootNavigator({ authRedirectType }) {
           />
           <Stack.Screen
             name="staff-inbox/index"
-            options={{ headerShown: true, title: 'Express Desk', headerBackTitle: 'Account', ...themedHeader }}
+            options={{ headerShown: true, title: 'Ride Support', headerBackTitle: 'Account', ...themedHeader }}
           />
           <Stack.Screen
             name="staff-inbox/[id]"
-            options={{ headerShown: true, title: 'Conversation', headerBackTitle: 'Express Desk', ...themedHeader }}
+            options={{ headerShown: true, title: 'Conversation', headerBackTitle: 'Ride Support', ...themedHeader }}
           />
           <Stack.Screen
             name="documents"

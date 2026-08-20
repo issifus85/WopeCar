@@ -91,7 +91,7 @@ export default function StaffInboxScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Express Desk</Text>
+        <Text style={styles.headerTitle}>Ride Support</Text>
         <Text style={styles.headerSubtitle}>Every client conversation, across all bookings</Text>
       </View>
 

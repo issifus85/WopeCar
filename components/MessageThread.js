@@ -50,7 +50,7 @@ function MessageBubble({ message, styles, colors }) {
 }
 
 // Shared by the customer-facing Inbox thread (app/inbox/[id].js), the
-// Express Desk thread (app/staff-inbox/[id].js), and Vendor Mode's Support
+// Ride Support thread (app/staff-inbox/[id].js), and Vendor Mode's Support
 // tab (app/vendor/(tabs)/support.js) - same bubble list, pinned booking
 // summary, and composer (including the safe-area bottom padding fix for the
 // composer-cutoff bug), so no surface duplicates this. `extraBottomInset`

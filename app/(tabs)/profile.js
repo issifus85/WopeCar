@@ -58,12 +58,12 @@ export default function ProfileScreen() {
     let items = BASE_MENU_ITEMS;
     if (user?.isSupport) {
       const inboxIndex = items.findIndex((item) => item.route === '/inbox');
-      const staffInboxItem = { label: 'Express Desk', icon: 'chatbubble-ellipses-outline', route: '/staff-inbox' };
+      const staffInboxItem = { label: 'Ride Support', icon: 'chatbubble-ellipses-outline', route: '/staff-inbox' };
       items = [...items.slice(0, inboxIndex + 1), staffInboxItem, ...items.slice(inboxIndex + 1)];
     }
-    // Admin Panel sits above every other row, including Express Desk - it's
+    // Admin Panel sits above every other row, including Ride Support - it's
     // a separate, higher-privilege area (role='admin'), not a support-staff
-    // convenience like Express Desk (is_support).
+    // convenience like Ride Support (is_support).
     if (user?.role === 'admin') {
       items = [{ label: 'Admin Panel', icon: 'shield-checkmark-outline', route: '/admin' }, ...items];
     }
