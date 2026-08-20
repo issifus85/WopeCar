@@ -11,7 +11,7 @@ import StarRatingInput from '../../components/StarRatingInput';
 const CATEGORIES = [
   { key: 'cleanliness', label: 'Vehicle Condition & Cleanliness' },
   { key: 'accuracy', label: 'Accuracy vs. Listing' },
-  { key: 'communication', label: 'Vendor Communication' },
+  { key: 'communication', label: 'Support Communication' },
   { key: 'value', label: 'Value for Money' },
   { key: 'convenience', label: 'Pickup & Return Experience' },
 ];
