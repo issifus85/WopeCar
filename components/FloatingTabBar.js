@@ -28,8 +28,12 @@ export default function FloatingTabBar({ state, descriptors, navigation }) {
   // call unconditionally here since CartProvider wraps the whole app
   // (including the vendor/admin tab groups this same bar also renders for),
   // the badge itself just never matches a route name there.
-  const { savedBookings } = useCart();
-  const cartBadgeCount = savedBookings.length;
+  // The Cart tab renders both saved bookings AND the plain wishlist in one
+  // merged list (app/(tabs)/cart.js) - the badge undercounted for however
+  // long it only read savedBookings.length, ignoring any wishlist-only cars
+  // sitting in the same list.
+  const { savedBookings, cartIds } = useCart();
+  const cartBadgeCount = savedBookings.length + cartIds.length;
 
   return (
     <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 16) }]} pointerEvents="box-none">
