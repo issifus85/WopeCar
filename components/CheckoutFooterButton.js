@@ -3,7 +3,11 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 
-export default function CheckoutFooterButton({ label, onPress, disabled }) {
+// secondaryLabel/onSecondaryPress/secondaryVisible are optional - only
+// checkout/payment.js's "Save & Pay Later" uses them today. Every other
+// checkout screen just omits them and gets the original single-button
+// footer, unchanged.
+export default function CheckoutFooterButton({ label, onPress, disabled, secondaryLabel, onSecondaryPress, secondaryVisible }) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -16,6 +20,11 @@ export default function CheckoutFooterButton({ label, onPress, disabled }) {
       >
         <Text style={styles.buttonText}>{label}</Text>
       </TouchableOpacity>
+      {secondaryVisible && !!secondaryLabel && (
+        <TouchableOpacity style={styles.secondaryButton} onPress={onSecondaryPress}>
+          <Text style={styles.secondaryButtonText}>{secondaryLabel}</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -45,6 +54,19 @@ function createStyles(colors) {
     buttonText: {
       fontFamily: FONTS.semiBold,
       color: colors.white,
+      fontSize: 16,
+    },
+    secondaryButton: {
+      marginTop: 12,
+      borderRadius: 12,
+      paddingVertical: 15,
+      alignItems: 'center',
+      borderWidth: 1.5,
+      borderColor: colors.teal,
+    },
+    secondaryButtonText: {
+      fontFamily: FONTS.semiBold,
+      color: colors.teal,
       fontSize: 16,
     },
   });

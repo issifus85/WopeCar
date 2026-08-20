@@ -27,6 +27,13 @@ import { useCart } from '../../contexts/CartContext';
 import { useInbox } from '../../contexts/InboxContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
+import ConfirmModal from '../../components/ConfirmModal';
+
+const SAVED_BOOKING_HOLD_MS = 24 * 60 * 60 * 1000;
+
+function formatExpiry(date) {
+  return date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
 
 function toISODate(value) {
   const d = new Date(value);
@@ -41,15 +48,17 @@ export default function CheckoutPaymentScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { draft, resetCheckout } = useCheckout();
   const { addBooking } = useBookings();
-  const { removeFromCart } = useCart();
+  const { removeFromCart, saveBookingDraft } = useCart();
   const { notifyBookingEvent } = useInbox();
   const { user } = useAuth();
 
   const [car, setCar] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(null);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [savedExpiry, setSavedExpiry] = useState(null);
 
   useEffect(() => {
     fetchCarById(carId)
@@ -285,6 +294,65 @@ export default function CheckoutPaymentScreen() {
     }
   };
 
+  // Lets a renter back out of paying right now without losing the 6
+  // screens of checkout progress - purely local (CartContext/cartStorage),
+  // same as the rest of the cart. No Supabase booking or QuickBooks
+  // invoice exists yet at this point; those still only get created once
+  // the renter actually resumes and pays (handlePay above).
+  const handleSaveToCart = async () => {
+    setIsSaving(true);
+    setError(null);
+    try {
+      const { rentalCost, addonsCost, deliveryFee, securityDeposit, wopeCarePlanId, wopeCareCost, billableDays } = await buildPricingBreakdown();
+      const expiresAt = new Date(Date.now() + SAVED_BOOKING_HOLD_MS);
+
+      saveBookingDraft({
+        id: `saved-${carId}-${Date.now()}`,
+        carId: String(carId),
+        carName: car.name,
+        carImage: car.image,
+        carPricePerDay: car.pricePerDay,
+        startDate: draft.startDate,
+        endDate: draft.endDate,
+        totalDays: billableDays,
+        pickupTime: draft.pickupTime,
+        returnTime: draft.returnTime,
+        pickupLocation: draft.pickupLocation,
+        returnLocation: draft.returnLocation,
+        driveType: car.drivenBy,
+        addons: draft.addons,
+        wopeCare: { plan: wopeCarePlanId ?? 'none', totalCost: wopeCareCost },
+        deliveryFee,
+        securityDeposit,
+        rentalCost,
+        addonsCost,
+        totalCost: draft.totalCost,
+        form: draft.form,
+        licenseFront: draft.licenseFront,
+        licenseBack: draft.licenseBack,
+        proofOfAddress: draft.proofOfAddress,
+        savedAt: new Date().toISOString(),
+        expiresAt: expiresAt.toISOString(),
+      });
+
+      setSavedExpiry(expiresAt);
+    } catch (e) {
+      setError(e.message || 'Could not save this booking. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleGoToCart = () => {
+    setSavedExpiry(null);
+    router.replace('/(tabs)/cart');
+  };
+
+  const handleContinueBrowsing = () => {
+    setSavedExpiry(null);
+    router.replace('/(tabs)');
+  };
+
   if (isLoading || !car) {
     return (
       <View style={styles.centerState}>
@@ -355,6 +423,21 @@ export default function CheckoutPaymentScreen() {
         label={isProcessing ? 'Processing...' : `Pay ${formatCurrency(draft.totalCost, activeCurrency)}`}
         onPress={handlePay}
         disabled={isProcessing || !agreedToTerms}
+        secondaryVisible={!agreedToTerms}
+        secondaryLabel={isSaving ? 'Saving...' : 'Save & Pay Later'}
+        onSecondaryPress={handleSaveToCart}
+      />
+
+      <ConfirmModal
+        visible={!!savedExpiry}
+        title="✅ Booking Saved to Cart"
+        message={savedExpiry
+          ? `Your ${car.name} booking has been saved. Complete payment anytime from your Cart tab.\n\n⏰ Booking held for 24 hours\nExpires: ${formatExpiry(savedExpiry)}`
+          : ''}
+        confirmLabel="Go to Cart"
+        cancelLabel="Continue Browsing"
+        onConfirm={handleGoToCart}
+        onCancel={handleContinueBrowsing}
       />
     </View>
   );

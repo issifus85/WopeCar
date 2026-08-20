@@ -5,11 +5,15 @@ const CartContext = createContext(null);
 
 export function CartProvider({ children }) {
   const [cartIds, setCartIds] = useState([]);
+  const [savedBookings, setSavedBookings] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    cartStorage.getCartIds()
-      .then(setCartIds)
+    Promise.all([cartStorage.getCartIds(), cartStorage.getSavedBookings()])
+      .then(([ids, bookings]) => {
+        setCartIds(ids);
+        setSavedBookings(bookings);
+      })
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -34,8 +38,30 @@ export function CartProvider({ children }) {
     });
   }, []);
 
+  // A renter can only ever have one saved-for-later booking per car at a
+  // time - saving again (e.g. re-entering checkout for the same car)
+  // replaces the earlier draft rather than piling up duplicates.
+  const saveBookingDraft = useCallback((draft) => {
+    setSavedBookings(prev => {
+      const next = [...prev.filter(b => b.carId !== draft.carId), draft];
+      cartStorage.setSavedBookings(next);
+      return next;
+    });
+  }, []);
+
+  const removeSavedBooking = useCallback((id) => {
+    setSavedBookings(prev => {
+      const next = prev.filter(b => b.id !== id);
+      cartStorage.setSavedBookings(next);
+      return next;
+    });
+  }, []);
+
   return (
-    <CartContext.Provider value={{ cartIds, isLoading, isInCart, addToCart, removeFromCart }}>
+    <CartContext.Provider value={{
+      cartIds, savedBookings, isLoading, isInCart, addToCart, removeFromCart,
+      saveBookingDraft, removeSavedBooking,
+    }}>
       {children}
     </CartContext.Provider>
   );
