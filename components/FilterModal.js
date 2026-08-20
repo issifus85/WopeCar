@@ -3,6 +3,8 @@ import { StyleSheet, Text, View, TouchableOpacity, Modal, Pressable, ScrollView 
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
+import { useCurrency } from '../contexts/CurrencyContext';
+import { formatCurrency } from '../constants/pricing';
 import { VEHICLE_CLASSES, VEHICLE_TYPES } from '../constants/vehicleCatalog';
 
 const DRIVE_TYPES = [
@@ -10,13 +12,22 @@ const DRIVE_TYPES = [
   { value: 'Self-drive', label: 'Self-drive or Chauffeur' },
 ];
 
-const PRICE_RANGES = [
-  { value: null, label: 'Any' },
-  { value: '0;200', label: 'Under $200' },
-  { value: '200;500', label: '$200 - $500' },
-  { value: '500;1000', label: '$500 - $1,000' },
-  { value: '1000;999999', label: '$1,000+' },
-];
+// The `value` thresholds (0, 200, 500, 1000) are always raw GHS - they're
+// sent straight through to fetchCars() as minPrice/maxPrice against
+// cars.price_per_day (stored in GHS, see app/(tabs)/index.js), so they
+// must never be converted. Only the displayed label goes through
+// formatCurrency() with whatever currency is active, same as every price
+// shown elsewhere in the app - was hardcoded to "$" regardless of the
+// selected currency before this.
+function getPriceRanges(currency) {
+  return [
+    { value: null, label: 'Any' },
+    { value: '0;200', label: `Under ${formatCurrency(200, currency)}` },
+    { value: '200;500', label: `${formatCurrency(200, currency)} - ${formatCurrency(500, currency)}` },
+    { value: '500;1000', label: `${formatCurrency(500, currency)} - ${formatCurrency(1000, currency)}` },
+    { value: '1000;999999', label: `${formatCurrency(1000, currency)}+` },
+  ];
+}
 
 function toggleValue(list, value) {
   return list.includes(value) ? list.filter(v => v !== value) : [...list, value];
@@ -32,7 +43,9 @@ export default function FilterModal({
   onApply,
 }) {
   const { colors } = useAppTheme();
+  const { activeCurrency } = useCurrency();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const PRICE_RANGES = useMemo(() => getPriceRanges(activeCurrency), [activeCurrency]);
   const [tempDrivenBy, setTempDrivenBy] = useState(drivenBy);
   const [tempPriceRange, setTempPriceRange] = useState(priceRange);
   const [tempVehicleClass, setTempVehicleClass] = useState(vehicleClass);
@@ -111,7 +124,7 @@ export default function FilterModal({
                 const isSelected = tempPriceRange === option.value;
                 return (
                   <TouchableOpacity
-                    key={option.label}
+                    key={String(option.value)}
                     style={[styles.chip, isSelected && styles.chipActive]}
                     onPress={() => setTempPriceRange(option.value)}
                   >
