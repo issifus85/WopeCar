@@ -208,25 +208,6 @@ export default function CheckoutDatesScreen() {
         <Text style={styles.carName}>{car.name}</Text>
         <Text style={styles.carSubtitle}>Choose your pickup and return dates</Text>
 
-        {tempStart && tempEnd && (
-          <View style={[styles.summaryBox, isBelowMinimum && styles.summaryBoxWarning]}>
-            <Ionicons
-              name={isBelowMinimum ? 'alert-circle-outline' : 'calendar-outline'}
-              size={18}
-              color={isBelowMinimum ? colors.error : colors.teal}
-            />
-            <Text style={[styles.summaryText, isBelowMinimum && styles.summaryTextWarning]}>
-              {isBelowMinimum
-                ? `${car.drivenBy} bookings need at least ${minDays} ${minDays === 1 ? 'day' : 'days'} - you've selected ${selectedDays}.`
-                : `${selectedDays} day rental selected`}
-            </Text>
-          </View>
-        )}
-
-        {showHoursNote && (
-          <RentalHoursNote days={selectedDays} startDate={tempStart} returnDate={returnDate} styles={styles} colors={colors} />
-        )}
-
         <View style={styles.legendRow}>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: colors.teal }]} />
@@ -295,6 +276,25 @@ export default function CheckoutDatesScreen() {
             );
           })}
         </View>
+
+        {tempStart && tempEnd && (
+          <View style={[styles.summaryBox, isBelowMinimum && styles.summaryBoxWarning]}>
+            <Ionicons
+              name={isBelowMinimum ? 'alert-circle-outline' : 'calendar-outline'}
+              size={18}
+              color={isBelowMinimum ? colors.error : colors.teal}
+            />
+            <Text style={[styles.summaryText, isBelowMinimum && styles.summaryTextWarning]}>
+              {isBelowMinimum
+                ? `${car.drivenBy} bookings need at least ${minDays} ${minDays === 1 ? 'day' : 'days'} - you've selected ${selectedDays}.`
+                : `${selectedDays} day rental selected`}
+            </Text>
+          </View>
+        )}
+
+        {showHoursNote && (
+          <RentalHoursNote days={selectedDays} startDate={tempStart} returnDate={returnDate} styles={styles} colors={colors} />
+        )}
       </ScrollView>
 
       <CheckoutFooterButton
@@ -434,7 +434,11 @@ function createStyles(colors) {
     backgroundColor: colors.background,
     borderRadius: 10,
     padding: 12,
-    marginBottom: 16,
+    // Tight on purpose - the calendar grid's own trailing empty cells in a
+    // partially-filled last week already read as a gap on their own, so
+    // this box needs to sit close behind the grid rather than adding more
+    // space on top of it.
+    marginTop: 6,
   },
   summaryBoxWarning: {
     backgroundColor: colors.errorBg,
@@ -455,7 +459,7 @@ function createStyles(colors) {
     borderLeftColor: colors.teal,
     borderRadius: 10,
     padding: 14,
-    marginBottom: 16,
+    marginTop: 12,
   },
   hoursNoteIcon: {
     marginRight: 10,
