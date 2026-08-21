@@ -1,6 +1,6 @@
 import supabase, { getCurrentUser } from './supabase';
 
-const VERIFICATION_TYPES = ['license_front', 'license_back', 'proof_of_address'];
+const VERIFICATION_TYPES = ['license_front', 'license_back', 'proof_of_address', 'national_id'];
 const CAR_DOCUMENT_TYPES = ['roadworthy', 'insurance'];
 const SIGNED_URL_TTL_SECONDS = 3600;
 

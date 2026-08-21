@@ -50,8 +50,10 @@ function computeProfileCompletion(profile) {
 // Laravel never exposes the raw driver_license_number to the client, only
 // a masked accessor - matched here even though (see the migration's
 // security note) the column itself isn't encrypted at rest yet, so at
-// least the plaintext number never round-trips back out to the UI.
-function maskLicenseNumber(number) {
+// least the plaintext number never round-trips back out to the UI. Also
+// reused for national_id_number (0068_national_id.sql), same gap and same
+// mitigation.
+function maskIdNumber(number) {
   if (!number) return null;
   const digits = String(number);
   if (digits.length <= 4) return digits;
@@ -79,10 +81,15 @@ function normalizeUser(profile) {
     state: profile.state ?? '',
     country: profile.country ?? '',
     zipCode: profile.zip_code ?? '',
-    driverLicenseNumberMasked: maskLicenseNumber(profile.driver_license_number),
+    driverLicenseNumberMasked: maskIdNumber(profile.driver_license_number),
     driverLicenseExpiry: profile.driver_license_expiry ?? null,
     driverLicenseCountry: profile.driver_license_country ?? '',
     licenseVerificationStatus: profile.license_verification_status ?? 'pending',
+    nationalIdType: profile.national_id_type ?? null,
+    nationalIdNumberMasked: maskIdNumber(profile.national_id_number),
+    nationalIdExpiry: profile.national_id_expiry ?? null,
+    nationalIdStatus: profile.national_id_status ?? 'pending',
+    nationalIdRejectionReason: profile.national_id_rejection_reason ?? null,
     preferredPickupLocation: profile.preferred_pickup_location ?? '',
     emergencyContactName: profile.emergency_contact_name ?? '',
     emergencyContactPhone: profile.emergency_contact_phone ?? '',

@@ -10,13 +10,23 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { uploadDocument } from '../services/documentsApi';
+import OptionPickerModal from '../components/OptionPickerModal';
 
 function getVerificationColors(colors) {
   return {
     verified: { bg: colors.successBg, text: colors.success, label: 'Verified' },
     pending: { bg: colors.warningBg, text: colors.warning, label: 'Pending' },
     expired: { bg: colors.errorBg, text: colors.error, label: 'Expired' },
+    rejected: { bg: colors.errorBg, text: colors.error, label: 'Rejected' },
   };
+}
+
+const NATIONAL_ID_TYPE_LABELS = { ghana_card: 'Ghana Card', passport: 'Passport', voter_id: "Voter's ID" };
+const NATIONAL_ID_TYPE_OPTIONS = Object.values(NATIONAL_ID_TYPE_LABELS);
+function nationalIdTypeToLabel(type) { return NATIONAL_ID_TYPE_LABELS[type] ?? ''; }
+function nationalIdLabelToType(label) {
+  return Object.keys(NATIONAL_ID_TYPE_LABELS).find((key) => NATIONAL_ID_TYPE_LABELS[key] === label) ?? '';
 }
 
 function formatMemberSince(iso) {
@@ -69,6 +79,7 @@ const EMPTY_FORM = {
   firstName: '', lastName: '', nickname: '', email: '', phone: '', birthday: '',
   address: '', city: '', country: '',
   driverLicenseNumber: '', driverLicenseExpiry: '', driverLicenseCountry: '',
+  nationalIdType: '', nationalIdNumber: '', nationalIdExpiry: '',
   preferredPickupLocation: '', emergencyContactName: '', emergencyContactPhone: '',
 };
 
@@ -86,6 +97,9 @@ export default function AccountScreen() {
   const [isPickingAvatar, setIsPickingAvatar] = useState(false); // guards against a double-tap launching two overlapping native pickers, which can leave the picker sheet stuck open and unresponsive
   const [error, setError] = useState(null);
   const [showPhotoSourceModal, setShowPhotoSourceModal] = useState(false);
+  const [isIdTypePickerVisible, setIsIdTypePickerVisible] = useState(false);
+  const [isUploadingIdDoc, setIsUploadingIdDoc] = useState(false);
+  const [isPickingIdDoc, setIsPickingIdDoc] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -124,6 +138,8 @@ export default function AccountScreen() {
       address: user.address, city: user.city, country: user.country,
       driverLicenseNumber: '', driverLicenseExpiry: user.driverLicenseExpiry ?? '',
       driverLicenseCountry: user.driverLicenseCountry,
+      nationalIdType: nationalIdTypeToLabel(user.nationalIdType), nationalIdNumber: '',
+      nationalIdExpiry: user.nationalIdExpiry ?? '',
       preferredPickupLocation: user.preferredPickupLocation,
       emergencyContactName: user.emergencyContactName,
       emergencyContactPhone: user.emergencyContactPhone,
@@ -155,6 +171,9 @@ export default function AccountScreen() {
     if (form.driverLicenseNumber.trim()) payload.driver_license_number = form.driverLicenseNumber;
     if (form.driverLicenseExpiry !== (user.driverLicenseExpiry ?? '')) payload.driver_license_expiry = form.driverLicenseExpiry;
     if (form.driverLicenseCountry !== user.driverLicenseCountry) payload.driver_license_country = form.driverLicenseCountry;
+    if (form.nationalIdType !== nationalIdTypeToLabel(user.nationalIdType)) payload.national_id_type = nationalIdLabelToType(form.nationalIdType) || null;
+    if (form.nationalIdNumber.trim()) payload.national_id_number = form.nationalIdNumber;
+    if (form.nationalIdExpiry !== (user.nationalIdExpiry ?? '')) payload.national_id_expiry = form.nationalIdExpiry || null;
     if (form.preferredPickupLocation !== user.preferredPickupLocation) payload.preferred_pickup_location = form.preferredPickupLocation;
     if (form.emergencyContactName !== user.emergencyContactName) payload.emergency_contact_name = form.emergencyContactName;
     if (form.emergencyContactPhone !== user.emergencyContactPhone) payload.emergency_contact_phone = form.emergencyContactPhone;
@@ -168,7 +187,7 @@ export default function AccountScreen() {
     setIsSaving(true);
     try {
       await updateProfile(dirtyPayload);
-      setForm(prev => ({ ...prev, driverLicenseNumber: '' }));
+      setForm(prev => ({ ...prev, driverLicenseNumber: '', nationalIdNumber: '' }));
     } catch (e) {
       setError(e.message || 'Could not save your changes. Please try again.');
     } finally {
@@ -248,6 +267,29 @@ export default function AccountScreen() {
     pickFromLibrary();
   };
 
+  // Mirrors checkout/form.js's pickImage() - library-only, no camera sheet,
+  // matching this app's existing identity-document upload convention.
+  const handleUploadIdDocument = async () => {
+    if (isPickingIdDoc) return;
+    setIsPickingIdDoc(true);
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission needed', 'Please allow photo library access to upload a copy of your ID.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
+      if (result.canceled || !result.assets?.[0]) return;
+      setIsUploadingIdDoc(true);
+      await uploadDocument('national_id', result.assets[0].uri);
+    } catch (e) {
+      Alert.alert('Could not upload your ID', e.message || 'Please try again.');
+    } finally {
+      setIsPickingIdDoc(false);
+      setIsUploadingIdDoc(false);
+    }
+  };
+
   const handleShareReferral = async () => {
     if (!user?.referralCode) return;
     try {
@@ -279,6 +321,7 @@ export default function AccountScreen() {
 
   const verificationColors = getVerificationColors(colors);
   const verification = verificationColors[user.licenseVerificationStatus] ?? verificationColors.pending;
+  const nationalIdVerification = verificationColors[user.nationalIdStatus] ?? verificationColors.pending;
 
   return (
     <View style={styles.container}>
@@ -391,6 +434,47 @@ export default function AccountScreen() {
           <Text style={styles.hint}>Your licence number is encrypted and stored securely.</Text>
         </Section>
 
+        <Section title="National / Government ID" styles={styles}>
+          <View style={styles.fieldLabelRow}>
+            <Text style={styles.fieldLabel}>Verification Status</Text>
+            <View style={[styles.badge, { backgroundColor: nationalIdVerification.bg }]}>
+              <Text style={[styles.badgeText, { color: nationalIdVerification.text }]}>{nationalIdVerification.label}</Text>
+            </View>
+          </View>
+          {user.nationalIdStatus === 'rejected' && !!user.nationalIdRejectionReason && (
+            <Text style={[styles.hint, { color: colors.error }]}>{user.nationalIdRejectionReason}</Text>
+          )}
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>ID Type</Text>
+            <TouchableOpacity style={styles.input} onPress={() => setIsIdTypePickerVisible(true)}>
+              <Text style={form.nationalIdType ? styles.pickerValueText : styles.pickerPlaceholderText}>
+                {form.nationalIdType || 'Select ID type'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          {!!user.nationalIdNumberMasked && (
+            <Text style={styles.hint}>On file: {user.nationalIdNumberMasked}</Text>
+          )}
+          <Field
+            label={user.nationalIdNumberMasked ? 'Replace ID Number' : 'ID Number'}
+            value={form.nationalIdNumber}
+            onChangeText={updateField('nationalIdNumber')}
+            placeholder="National/government ID number"
+            styles={styles}
+            colors={colors}
+          />
+          <Field label="Expiry Date" value={form.nationalIdExpiry} onChangeText={updateField('nationalIdExpiry')} placeholder="YYYY-MM-DD" styles={styles} colors={colors} />
+          <TouchableOpacity style={styles.uploadButton} onPress={handleUploadIdDocument} disabled={isPickingIdDoc || isUploadingIdDoc}>
+            {isUploadingIdDoc ? (
+              <ActivityIndicator size="small" color={colors.teal} />
+            ) : (
+              <Ionicons name="cloud-upload-outline" size={16} color={colors.teal} />
+            )}
+            <Text style={styles.uploadButtonText}>Upload ID Copy</Text>
+          </TouchableOpacity>
+          <Text style={styles.hint}>This is accessible to admin for identity verification.</Text>
+        </Section>
+
         <Section title="Emergency Contact" styles={styles}>
           <Field label="Contact Name" value={form.emergencyContactName} onChangeText={updateField('emergencyContactName')} placeholder="Optional" styles={styles} colors={colors} />
           <Field label="Contact Phone" value={form.emergencyContactPhone} onChangeText={updateField('emergencyContactPhone')} placeholder="Optional" keyboardType="phone-pad" styles={styles} colors={colors} />
@@ -456,6 +540,15 @@ export default function AccountScreen() {
           </Pressable>
         </View>
       )}
+
+      <OptionPickerModal
+        visible={isIdTypePickerVisible}
+        title="ID Type"
+        options={NATIONAL_ID_TYPE_OPTIONS}
+        value={form.nationalIdType}
+        onSelect={updateField('nationalIdType')}
+        onClose={() => setIsIdTypePickerVisible(false)}
+      />
     </View>
   );
 }
@@ -636,6 +729,32 @@ function createStyles(colors) {
     color: colors.textSubtle,
     marginTop: -6,
     marginBottom: 8,
+  },
+  pickerValueText: {
+    fontFamily: FONTS.regular,
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  pickerPlaceholderText: {
+    fontFamily: FONTS.regular,
+    fontSize: 14,
+    color: colors.textSubtle,
+  },
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: colors.teal,
+    borderRadius: 10,
+    paddingVertical: 11,
+    marginBottom: 8,
+  },
+  uploadButtonText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 13,
+    color: colors.teal,
   },
   badge: {
     paddingHorizontal: 8,

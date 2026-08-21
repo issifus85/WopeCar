@@ -1,6 +1,6 @@
 import supabase from './supabase';
 
-const VERIFICATION_TYPES = ['license_front', 'license_back', 'proof_of_address'];
+const VERIFICATION_TYPES = ['license_front', 'license_back', 'proof_of_address', 'national_id'];
 const SIGNED_URL_TTL_SECONDS = 3600;
 
 async function signedUrlFor(filePath) {

@@ -5,8 +5,9 @@ import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import BadgeStatus from './BadgeStatus';
 import ConfirmModal from '../ConfirmModal';
+import ReasonModal from './ReasonModal';
 import OptionPickerModal from '../OptionPickerModal';
-import { getUserDetail, verifyUser, suspendUser, changeUserRole } from '../../services/adminUsersApi';
+import { getUserDetail, verifyUser, suspendUser, changeUserRole, setUserVerificationStatus } from '../../services/adminUsersApi';
 import { getUserVerificationDocuments } from '../../services/adminDocumentsApi';
 
 const ROLE_TONE = { admin: 'success', vendor: 'warning', renter: 'neutral', suspended: 'error' };
@@ -15,7 +16,9 @@ const VERIFICATION_DOC_LABELS = [
   { type: 'license_front', label: "License - Front" },
   { type: 'license_back', label: "License - Back" },
   { type: 'proof_of_address', label: 'Proof of Address' },
+  { type: 'national_id', label: 'National ID' },
 ];
+const STATUS_TONE = { pending: 'warning', verified: 'success', rejected: 'error' };
 
 function Field({ label, value, styles }) {
   if (!value) return null;
@@ -39,6 +42,9 @@ export default function UserDetailModal({ visible, userId, onClose, onChanged })
   const [error, setError] = useState(null);
   const [docs, setDocs] = useState(null);
   const [isLoadingDocs, setIsLoadingDocs] = useState(true);
+  const [verifyDocTarget, setVerifyDocTarget] = useState(null); // 'license' | 'national_id' | null
+  const [rejectDocTarget, setRejectDocTarget] = useState(null);
+  const [docError, setDocError] = useState(null);
 
   useEffect(() => {
     if (!visible || !userId) return;
@@ -67,6 +73,34 @@ export default function UserDetailModal({ visible, userId, onClose, onChanged })
     } finally {
       setIsSaving(false);
       setPendingAction(null);
+    }
+  };
+
+  const handleVerifyDoc = async () => {
+    if (!verifyDocTarget) return;
+    setDocError(null);
+    try {
+      const updated = await setUserVerificationStatus(userId, verifyDocTarget, 'verified');
+      setDetail((prev) => ({ ...prev, ...updated }));
+      onChanged?.();
+    } catch (e) {
+      setDocError(e.message || 'Could not verify this document.');
+    } finally {
+      setVerifyDocTarget(null);
+    }
+  };
+
+  const handleRejectDoc = async (reason) => {
+    if (!rejectDocTarget) return;
+    setDocError(null);
+    try {
+      const updated = await setUserVerificationStatus(userId, rejectDocTarget, 'rejected', reason);
+      setDetail((prev) => ({ ...prev, ...updated }));
+      onChanged?.();
+    } catch (e) {
+      setDocError(e.message || 'Could not reject this document.');
+    } finally {
+      setRejectDocTarget(null);
     }
   };
 
@@ -119,7 +153,9 @@ export default function UserDetailModal({ visible, userId, onClose, onChanged })
               <Field label="Driver's License" value={detail.driver_license_number} styles={styles} />
               <Field label="License Expiry" value={detail.driver_license_expiry} styles={styles} />
               <Field label="License Country" value={detail.driver_license_country} styles={styles} />
-              <Field label="License Verification" value={detail.license_verification_status} styles={styles} />
+              <Field label="National ID Type" value={detail.national_id_type} styles={styles} />
+              <Field label="National ID Number" value={detail.national_id_number} styles={styles} />
+              <Field label="National ID Expiry" value={detail.national_id_expiry} styles={styles} />
               <Field label="Joined" value={detail.created_at ? new Date(detail.created_at).toLocaleDateString() : null} styles={styles} />
 
               <Text style={styles.docsSectionTitle}>Verification Documents</Text>
@@ -149,6 +185,27 @@ export default function UserDetailModal({ visible, userId, onClose, onChanged })
                   })}
                 </View>
               )}
+
+              {!!docError && <Text style={styles.errorText}>{docError}</Text>}
+
+              <VerificationActionRow
+                label="Driver's Licence"
+                status={detail.license_verification_status}
+                hasDoc={!!(docs?.license_front || docs?.license_back)}
+                onVerify={() => setVerifyDocTarget('license')}
+                onReject={() => setRejectDocTarget('license')}
+                styles={styles}
+                colors={colors}
+              />
+              <VerificationActionRow
+                label="National ID"
+                status={detail.national_id_status}
+                hasDoc={!!docs?.national_id}
+                onVerify={() => setVerifyDocTarget('national_id')}
+                onReject={() => setRejectDocTarget('national_id')}
+                styles={styles}
+                colors={colors}
+              />
 
               {!!error && <Text style={styles.errorText}>{error}</Text>}
 
@@ -206,7 +263,46 @@ export default function UserDetailModal({ visible, userId, onClose, onChanged })
         onSelect={handleRoleChange}
         onClose={() => setIsRolePickerVisible(false)}
       />
+
+      <ConfirmModal
+        visible={!!verifyDocTarget}
+        title="Verify this document?"
+        message="The user will be notified that it's been verified."
+        confirmLabel="Verify"
+        onConfirm={handleVerifyDoc}
+        onCancel={() => setVerifyDocTarget(null)}
+      />
+      <ReasonModal
+        visible={!!rejectDocTarget}
+        title="Reject this document?"
+        subtitle="This reason is sent to the user and they'll be asked to re-upload."
+        placeholder="What's wrong with it..."
+        submitLabel="Reject document"
+        onCancel={() => setRejectDocTarget(null)}
+        onSubmit={handleRejectDoc}
+      />
     </Modal>
+  );
+}
+
+function VerificationActionRow({ label, status, hasDoc, onVerify, onReject, styles, colors }) {
+  return (
+    <View style={styles.verificationRow}>
+      <View style={styles.verificationRowHeader}>
+        <Text style={styles.fieldLabel}>{label}</Text>
+        <BadgeStatus label={status || 'pending'} tone={STATUS_TONE[status] || 'neutral'} />
+      </View>
+      {hasDoc && status !== 'verified' && (
+        <View style={styles.verificationRowActions}>
+          <TouchableOpacity style={styles.verificationRejectButton} onPress={onReject}>
+            <Text style={styles.verificationRejectButtonText}>Reject</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.verificationVerifyButton} onPress={onVerify}>
+            <Text style={styles.verificationVerifyButtonText}>Verify</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -326,6 +422,44 @@ function createStyles(colors) {
       color: colors.error,
       textAlign: 'center',
       marginVertical: 12,
+    },
+    verificationRow: {
+      marginBottom: 12,
+    },
+    verificationRowHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 8,
+    },
+    verificationRowActions: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    verificationRejectButton: {
+      flex: 1,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: colors.error,
+      borderRadius: 8,
+      paddingVertical: 9,
+    },
+    verificationRejectButtonText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 12,
+      color: colors.error,
+    },
+    verificationVerifyButton: {
+      flex: 1,
+      alignItems: 'center',
+      backgroundColor: colors.teal,
+      borderRadius: 8,
+      paddingVertical: 9,
+    },
+    verificationVerifyButtonText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 12,
+      color: colors.white,
     },
     actions: {
       marginTop: 8,

@@ -78,6 +78,42 @@ export async function suspendUser(id) {
   return data;
 }
 
+const USER_STATUS_COLUMN = { license: 'license_verification_status', national_id: 'national_id_status' };
+// Driver's licence has no rejection-reason column (0005_extend_users_profile.sql).
+const USER_REASON_COLUMN = { license: null, national_id: 'national_id_rejection_reason' };
+const USER_DOC_LABEL = { license: "driver's licence", national_id: 'national ID' };
+
+/**
+ * Verify or reject a user's driver's licence or national ID - same real
+ * pattern as the web admin's setUserVerificationStatus()
+ * (wopecar-admin/lib/api/documents.ts): status+reason column update,
+ * notification insert, fire-and-forget send-id-verification-status email.
+ * Previously license_verification_status was only ever displayed as plain
+ * read-only text in UserDetailModal, with no action anywhere that could
+ * actually change it.
+ */
+export async function setUserVerificationStatus(id, field, status, reason) {
+  const reasonColumn = USER_REASON_COLUMN[field];
+  const updates = { [USER_STATUS_COLUMN[field]]: status };
+  if (reasonColumn) updates[reasonColumn] = status === 'rejected' ? reason || null : null;
+
+  const { data, error } = await supabase.from('users').update(updates).eq('id', id).select().single();
+  if (error) throw error;
+
+  const docLabel = USER_DOC_LABEL[field];
+  await notifyUser({
+    userId: id,
+    type: status === 'verified' ? 'id_document_verified' : 'id_document_rejected',
+    title: status === 'verified' ? 'A document was verified' : 'A document needs attention',
+    body: status === 'verified' ? `Your ${docLabel} has been verified.` : reason || `Your ${docLabel} was not approved. Please re-upload it.`,
+  });
+  await supabase.functions
+    .invoke('send-id-verification-status', { body: { userId: id, docLabel, verified: status === 'verified', reason } })
+    .catch(() => {});
+
+  return data;
+}
+
 export async function changeUserRole(id, role) {
   const { data, error } = await supabase.from('users').update({ role }).eq('id', id).select().single();
   if (error) throw error;

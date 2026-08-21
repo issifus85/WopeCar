@@ -13,6 +13,7 @@ const VERIFICATION_TYPES = [
   { type: 'license_front', label: "Driver's License - Front" },
   { type: 'license_back', label: "Driver's License - Back" },
   { type: 'proof_of_address', label: 'Proof of Address' },
+  { type: 'national_id', label: 'National / Government ID' },
 ];
 
 function isExpired(dateString) {
@@ -172,10 +173,15 @@ export default function DocumentsScreen() {
   }
 
   const licenseStatus = isExpired(user?.driverLicenseExpiry) ? 'expired' : (user?.licenseVerificationStatus ?? 'pending');
-  const verificationDocs = VERIFICATION_TYPES.map((config) => ({
-    config: config.type === 'proof_of_address' ? config : { ...config, status: licenseStatus },
-    document: documents.verification.find((d) => d.type === config.type) ?? null,
-  }));
+  const nationalIdStatus = isExpired(user?.nationalIdExpiry) ? 'expired' : (user?.nationalIdStatus ?? 'pending');
+  const verificationDocs = VERIFICATION_TYPES.map((config) => {
+    if (config.type === 'proof_of_address') return { config, document: documents.verification.find((d) => d.type === config.type) ?? null };
+    const status = config.type === 'national_id' ? nationalIdStatus : licenseStatus;
+    return {
+      config: { ...config, status },
+      document: documents.verification.find((d) => d.type === config.type) ?? null,
+    };
+  });
 
   const tripByBooking = groupByBooking(documents.trip);
   const virByBooking = groupByBooking(documents.vir);
