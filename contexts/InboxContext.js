@@ -303,6 +303,17 @@ export function InboxProvider({ children }) {
     return `${SERVER_CONVERSATION_PREFIX}${rawId}`;
   }, [syncServerConversations]);
 
+  // Vendor Mode's Support tab counterpart to startInquiry - used to be a
+  // fixed local-only 'conv-support' id (never touched Supabase, no staff
+  // ever saw it - see migration 0067_vendor_support_conversation.sql).
+  // Idempotent like startInquiry: reuses this vendor's existing support
+  // conversation rather than creating a new one every time the tab mounts.
+  const startVendorSupport = useCallback(async () => {
+    const rawId = await conversationsApi.createVendorSupportConversation();
+    syncServerConversations();
+    return `${SERVER_CONVERSATION_PREFIX}${rawId}`;
+  }, [syncServerConversations]);
+
   // `attachment` is `{ type, url, meta } | null` - the shape
   // chatAttachmentsApi.js's pick/upload helpers return, passed straight
   // through to conversationsApi.sendMessage. `text` may be empty when an
@@ -567,6 +578,7 @@ export function InboxProvider({ children }) {
     getMessages,
     sendMessage,
     startInquiry,
+    startVendorSupport,
     markConversationRead,
     markNotificationRead,
     markAllNotificationsRead,
@@ -579,7 +591,7 @@ export function InboxProvider({ children }) {
     syncServerConversations,
   }), [
     conversations, notifications, isLoading, totalUnreadCount, getMessages, sendMessage,
-    startInquiry, markConversationRead, markNotificationRead, markAllNotificationsRead,
+    startInquiry, startVendorSupport, markConversationRead, markNotificationRead, markAllNotificationsRead,
     markConversationUnread, deleteConversation, markNotificationUnread, deleteNotification, notifyBookingEvent,
     syncMessages, syncServerConversations,
   ]);

@@ -72,6 +72,18 @@ export async function createInquiryConversation(carId) {
 }
 
 /**
+ * create_or_get_vendor_support_conversation() - the vendor-side counterpart
+ * to createInquiryConversation, for Vendor Mode's Support tab. Reuses this
+ * vendor's existing support conversation (no booking_id/car_id anchor)
+ * rather than creating a duplicate every time the tab mounts.
+ */
+export async function createVendorSupportConversation() {
+  const { data, error } = await supabase.rpc('create_or_get_vendor_support_conversation');
+  if (error) throw error;
+  return data;
+}
+
+/**
  * get_conversation(p_conversation_id) - metadata + pinned summary +
  * participants, no messages.
  */
