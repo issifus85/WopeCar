@@ -305,3 +305,37 @@ export async function setBlockedDates(carId, isoDates) {
   }
   return isoDates;
 }
+
+// Which of the vetting wizard's fixed time slots are already taken on a
+// given date - queried live as the vendor picks a date in
+// app/vendor/add-car/vetting.js, so two vendors can't double-book the same
+// slot. Returns [{ time, available }], same shape the Edge Function itself
+// returns (calendar-get-available-slots, wopecar-admin/supabase/functions).
+export async function getAvailableAppointmentSlots(dateISO) {
+  const { data, error } = await supabase.functions.invoke('calendar-get-available-slots', { body: { date: dateISO } });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data.slots;
+}
+
+// Creates the Google Calendar event for a just-submitted listing's vetting
+// appointment - called right after createCar() succeeds (the only point
+// vetting_date/vetting_time exist as real columns), never blocking or
+// failing the submission itself if the calendar isn't reachable yet.
+export async function createCalendarAppointment(carId) {
+  const { data, error } = await supabase.functions.invoke('calendar-create-appointment', { body: { carId } });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+
+// The vendor's own "Withdraw Listing" action - only valid while the car is
+// still 'pending' (also enforced server-side by calendar-cancel-
+// appointment). Cancels the Google Calendar event and sets both
+// appointment_status and cars.status to their cancelled/inactive states.
+export async function withdrawListing(carId) {
+  const { data, error } = await supabase.functions.invoke('calendar-cancel-appointment', { body: { carId, alsoSetInactive: true } });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data;
+}

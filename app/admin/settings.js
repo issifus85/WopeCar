@@ -65,6 +65,8 @@ const CONTACT_KEYS = [
   { key: 'support_phone_2', label: 'Secondary Support Phone' },
   { key: 'support_email', label: 'Support Email' },
   { key: 'support_address', label: 'Office Address' },
+  { key: 'operations_lead_email', label: 'Operations Lead Email (Calendar Invites)' },
+  { key: 'operations_support_email', label: 'Operations Support Email (Calendar CC, optional)' },
 ];
 
 const BROADCAST_TARGETS = [

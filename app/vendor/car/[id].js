@@ -8,6 +8,7 @@ import { useAppTheme } from '../../../contexts/ThemeContext';
 import { useCurrency } from '../../../contexts/CurrencyContext';
 import { formatCurrency } from '../../../constants/pricing';
 import { useVendor } from '../../../contexts/VendorContext';
+import { withdrawListing } from '../../../services/vendorCarsApi';
 import supabase from '../../../services/supabase';
 import VendorHeader from '../../../components/VendorHeader';
 import VendorStatusBadge from '../../../components/VendorStatusBadge';
@@ -75,6 +76,7 @@ export default function VendorCarManagementScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { cars, isLoading, updateCar } = useVendor();
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
   const cancellationPolicySummary = useCancellationPolicySummary();
 
   const car = cars.find((c) => c.id === id);
@@ -110,6 +112,31 @@ export default function VendorCarManagementScreen() {
     } finally {
       setIsTogglingStatus(false);
     }
+  };
+
+  const handleWithdraw = () => {
+    Alert.alert(
+      'Withdraw this listing?',
+      `${car.name} will be removed from review and its vetting appointment cancelled. This can't be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Withdraw',
+          style: 'destructive',
+          onPress: async () => {
+            setIsWithdrawing(true);
+            try {
+              await withdrawListing(car.id);
+              await updateCar(car.id, { status: 'Inactive' });
+            } catch (e) {
+              Alert.alert('Could not withdraw listing', e?.message || 'Please check your connection and try again.');
+            } finally {
+              setIsWithdrawing(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -199,10 +226,22 @@ export default function VendorCarManagementScreen() {
                 `${cancellationPolicySummary}\n\nThis policy applies platform-wide and is set by WopeCar admin — it isn't something you can change per listing.`
               )
             }
-            last
+            last={!isPending}
             styles={styles}
             colors={colors}
           />
+          {isPending && (
+            <Row
+              icon="close-circle-outline"
+              label={isWithdrawing ? 'Withdrawing…' : 'Withdraw Listing'}
+              subtitle="Cancel this submission and its vetting appointment"
+              onPress={isWithdrawing ? undefined : handleWithdraw}
+              right={isWithdrawing ? <ActivityIndicator size="small" color={colors.error} /> : null}
+              last
+              styles={styles}
+              colors={{ ...colors, teal: colors.error }}
+            />
+          )}
         </View>
       </ScrollView>
     </View>

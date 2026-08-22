@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../../constants/theme';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 import { useAddCar } from '../../../contexts/AddCarContext';
 import { WEEKDAYS, MONTH_NAMES, stripTime, toISODate, buildMonthGrid } from '../../../services/vendorCalendar';
+import { getAvailableAppointmentSlots } from '../../../services/vendorCarsApi';
 import VendorWizardHeader from '../../../components/VendorWizardHeader';
 import CheckoutFooterButton from '../../../components/CheckoutFooterButton';
 
@@ -23,6 +24,32 @@ export default function AddCarVettingScreen() {
   const today = useMemo(() => stripTime(new Date()), []);
   const [viewMonth, setViewMonth] = useState(today);
   const cells = useMemo(() => buildMonthGrid(viewMonth), [viewMonth]);
+
+  const [unavailableSlots, setUnavailableSlots] = useState(new Set());
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+
+  // Re-checks live availability whenever the selected date changes, so two
+  // vendors can't double-book the same vetting slot. Clears the currently
+  // selected time if it just became unavailable (e.g. re-entering the
+  // wizard on a date someone else has since taken).
+  useEffect(() => {
+    if (!draft.vettingDate) return;
+    let cancelled = false;
+    setIsLoadingSlots(true);
+    getAvailableAppointmentSlots(draft.vettingDate)
+      .then((slots) => {
+        if (cancelled) return;
+        const taken = new Set(slots.filter((s) => !s.available).map((s) => s.time));
+        setUnavailableSlots(taken);
+        if (draft.vettingTime && taken.has(draft.vettingTime)) {
+          updateDraft({ vettingTime: '' });
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setIsLoadingSlots(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.vettingDate]);
 
   const isValid = !!draft.vettingDate && !!draft.vettingTime;
 
@@ -114,17 +141,22 @@ export default function AddCarVettingScreen() {
           </View>
         </View>
 
-        <Text style={[styles.label, styles.labelSpaced]}>Time</Text>
+        <View style={[styles.labelRow, styles.labelSpaced]}>
+          <Text style={styles.label}>Time</Text>
+          {isLoadingSlots && <ActivityIndicator size="small" color={colors.teal} />}
+        </View>
         <View style={styles.slotGrid}>
           {TIME_SLOTS.map((slot) => {
             const active = draft.vettingTime === slot;
+            const isTaken = unavailableSlots.has(slot);
             return (
               <TouchableOpacity
                 key={slot}
-                style={[styles.slot, active && styles.slotActive]}
+                style={[styles.slot, active && styles.slotActive, isTaken && styles.slotDisabled]}
                 onPress={() => updateDraft({ vettingTime: slot })}
+                disabled={isTaken}
               >
-                <Text style={[styles.slotText, active && styles.slotTextActive]}>{slot}</Text>
+                <Text style={[styles.slotText, active && styles.slotTextActive, isTaken && styles.slotTextDisabled]}>{slot}</Text>
               </TouchableOpacity>
             );
           })}
@@ -170,6 +202,11 @@ function createStyles(colors) {
       fontSize: 13,
       color: colors.textPrimary,
       marginBottom: 10,
+    },
+    labelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
     },
     labelSpaced: {
       marginTop: 20,
@@ -258,6 +295,10 @@ function createStyles(colors) {
       backgroundColor: colors.teal,
       borderColor: colors.teal,
     },
+    slotDisabled: {
+      backgroundColor: colors.divider,
+      borderColor: colors.divider,
+    },
     slotText: {
       fontFamily: FONTS.medium,
       fontSize: 12,
@@ -266,6 +307,9 @@ function createStyles(colors) {
     slotTextActive: {
       fontFamily: FONTS.semiBold,
       color: colors.white,
+    },
+    slotTextDisabled: {
+      color: colors.disabled,
     },
   });
 }

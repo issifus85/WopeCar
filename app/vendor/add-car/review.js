@@ -9,6 +9,7 @@ import { formatCurrency } from '../../../constants/pricing';
 import { useAddCar } from '../../../contexts/AddCarContext';
 import { useVendor } from '../../../contexts/VendorContext';
 import { uploadCarDocument } from '../../../services/documentsApi';
+import { createCalendarAppointment } from '../../../services/vendorCarsApi';
 import { joinLocation } from '../../../constants/vehicleCatalog';
 import VendorWizardHeader from '../../../components/VendorWizardHeader';
 import CheckoutFooterButton from '../../../components/CheckoutFooterButton';
@@ -73,6 +74,13 @@ export default function AddCarReviewScreen() {
         uploadCarDocument(car.id, 'roadworthy', draft.roadworthyDocUri, draft.roadworthyExpiryDate),
         uploadCarDocument(car.id, 'insurance', draft.insuranceDocUri, draft.insuranceExpiryDate),
       ]);
+
+      // Best-effort - the listing itself (and its vetting_date/time) is
+      // already saved either way. A Google Calendar hiccup here (e.g. the
+      // calendar hasn't been shared with the service account yet) must
+      // never block or fail the submission Ops can retry from the
+      // Appointments tab.
+      createCalendarAppointment(car.id).catch(() => {});
 
       setShowSubmitted(true);
     } catch (e) {
@@ -176,7 +184,7 @@ export default function AddCarReviewScreen() {
       <ConfirmModal
         visible={showSubmitted}
         title="Submitted for Review"
-        message="Your car has been added as Pending. We'll be in touch to confirm your vetting appointment, and your listing will go live once it's approved."
+        message="Your car has been added as Pending and a calendar invite for your vetting appointment has been sent to your email. Your listing will go live once it's approved."
         confirmLabel="Done"
         cancelLabel={null}
         onConfirm={handleDone}

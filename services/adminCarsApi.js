@@ -42,6 +42,14 @@ async function setStatusAndNotify(car, status, { title, body }) {
     body,
   });
 
+  // Cancels this car's Google Calendar vetting event (reject/deactivate,
+  // both land here as status='inactive') - alsoSetInactive: false since
+  // this function already set cars.status and already notified above, so
+  // calendar-cancel-appointment skips its own redundant notification.
+  if (status === 'inactive') {
+    supabase.functions.invoke('calendar-cancel-appointment', { body: { carId: car.id, alsoSetInactive: false } }).catch(() => {});
+  }
+
   return data;
 }
 
