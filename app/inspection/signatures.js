@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useInspection } from '../../contexts/InspectionContext';
-import { syncInspection, uploadInspectionSignature, submitInspection } from '../../services/inspectionsApi';
+import { syncInspection, uploadInspectionSignature, submitInspection, generateInspectionReport } from '../../services/inspectionsApi';
 import InspectionHeader from '../../components/InspectionHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 import SignaturePad from '../../components/SignaturePad';
@@ -120,6 +120,11 @@ export default function InspectionSignaturesScreen() {
 
       await submitInspection(inspectionId);
       updateDraft({ pendingSync: false });
+
+      // Best-effort - the inspection is already submitted and viewable
+      // in-app either way. A PDF-generation hiccup must never block the
+      // confirmation the user already earned by completing the wizard.
+      generateInspectionReport(inspectionId).catch(() => {});
 
       Alert.alert(
         'Inspection Submitted',

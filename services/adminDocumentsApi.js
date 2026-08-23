@@ -42,3 +42,29 @@ export async function getUserVerificationDocuments(userId) {
   );
   return Object.fromEntries(entries);
 }
+
+const EMPTY_INSPECTION_STATUS = { status: null, reportPdfPath: null, submittedAt: null };
+
+/**
+ * A booking's pre/post inspection status, for the admin booking detail
+ * screen - previously not surfaced anywhere in mobile admin either.
+ * Mirrors wopecar-admin's getBookingInspections() exactly.
+ */
+export async function getBookingInspections(bookingId) {
+  const { data, error } = await supabase
+    .from('vehicle_inspections')
+    .select('type, status, report_pdf_path, submitted_at')
+    .eq('booking_id', bookingId);
+  if (error) throw error;
+
+  const byType = {};
+  (data ?? []).forEach((row) => {
+    byType[row.type] = { status: row.status, reportPdfPath: row.report_pdf_path, submittedAt: row.submitted_at };
+  });
+
+  return { pre: byType.pre ?? EMPTY_INSPECTION_STATUS, post: byType.post ?? EMPTY_INSPECTION_STATUS };
+}
+
+export async function getInspectionReportSignedUrl(filePath) {
+  return signedUrlFor(filePath);
+}

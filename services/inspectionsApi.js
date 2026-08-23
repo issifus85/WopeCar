@@ -171,3 +171,14 @@ export async function submitInspection(inspectionId) {
 
   return fetchById(inspectionId);
 }
+
+/**
+ * Generates the PDF report + sends it to renter/vendor/admin. Call
+ * fire-and-forget right after submitInspection() succeeds - a failure here
+ * must never block the confirmation the user already earned by completing
+ * the wizard (mirrors createCalendarAppointment's fire-and-forget shape).
+ */
+export async function generateInspectionReport(inspectionId) {
+  const { error } = await supabase.functions.invoke('generate-inspection-report', { body: { inspectionId } });
+  if (error) throw error;
+}

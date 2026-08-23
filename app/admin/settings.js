@@ -67,6 +67,7 @@ const CONTACT_KEYS = [
   { key: 'support_address', label: 'Office Address' },
   { key: 'operations_lead_email', label: 'Operations Lead Email (Calendar Invites)' },
   { key: 'operations_support_email', label: 'Operations Support Email (Calendar CC, optional)' },
+  { key: 'fleet_ops_email', label: 'Fleet Ops Email (Inspection Report Bcc)' },
 ];
 
 const BROADCAST_TARGETS = [

@@ -14,7 +14,7 @@ import {
   getBooking, confirmBooking, cancelBooking, markBookingPaid, markBookingCompleted,
   modifyBooking, recomputeBookingCost,
 } from '../../../services/adminBookingsApi';
-import { getUserVerificationDocuments } from '../../../services/adminDocumentsApi';
+import { getUserVerificationDocuments, getBookingInspections, getInspectionReportSignedUrl } from '../../../services/adminDocumentsApi';
 
 const VERIFICATION_DOC_LABELS = [
   { type: 'license_front', label: "License - Front" },
@@ -66,6 +66,79 @@ function VerificationDocsSection({ renterId, styles, colors }) {
             );
           })}
         </View>
+      )}
+    </View>
+  );
+}
+
+const INSPECTION_ROWS = [
+  { type: 'pre', label: 'Pre-Rental' },
+  { type: 'post', label: 'Post-Rental' },
+];
+const EMPTY_INSPECTION_STATUS = { status: null, reportPdfPath: null, submittedAt: null };
+
+function inspectionBadgeLabel(status) {
+  if (status === 'submitted') return 'Submitted';
+  if (status === 'draft') return 'In Progress';
+  return 'Not Started';
+}
+
+/**
+ * Previously this screen had zero inspection references at all - admin had
+ * no way to tell whether pre/post inspections were even started, let alone
+ * open the generated report. Tapping a row opens the already-built native
+ * report screen (faster for triage); the document icon opens the PDF
+ * artifact directly, for when the admin wants to forward/save it.
+ */
+function InspectionReportsSection({ bookingId, router, styles, colors }) {
+  const [inspections, setInspections] = useState(null);
+  const [openingType, setOpeningType] = useState(null);
+
+  useEffect(() => {
+    if (!bookingId) return;
+    getBookingInspections(bookingId)
+      .then(setInspections)
+      .catch(() => setInspections({ pre: EMPTY_INSPECTION_STATUS, post: EMPTY_INSPECTION_STATUS }));
+  }, [bookingId]);
+
+  if (!bookingId) return null;
+
+  const handleOpenPdf = async (type, path) => {
+    setOpeningType(type);
+    try {
+      const url = await getInspectionReportSignedUrl(path);
+      if (url) Linking.openURL(url);
+    } finally {
+      setOpeningType(null);
+    }
+  };
+
+  return (
+    <View style={styles.section}>
+      <SectionHeading>Inspection Reports</SectionHeading>
+      {!inspections ? (
+        <ActivityIndicator color={colors.teal} style={{ marginVertical: 8 }} />
+      ) : (
+        INSPECTION_ROWS.map(({ type, label }) => {
+          const data = inspections[type] ?? EMPTY_INSPECTION_STATUS;
+          return (
+            <TouchableOpacity
+              key={type}
+              style={styles.row}
+              onPress={() => router.push({ pathname: '/inspection/report', params: { bookingId, type } })}
+            >
+              <Text style={styles.rowLabel}>{label}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={styles.rowValue}>{inspectionBadgeLabel(data.status)}</Text>
+                {!!data.reportPdfPath && (
+                  <TouchableOpacity onPress={() => handleOpenPdf(type, data.reportPdfPath)} disabled={openingType === type}>
+                    <Ionicons name="document-text-outline" size={18} color={colors.teal} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </TouchableOpacity>
+          );
+        })
       )}
     </View>
   );
@@ -247,6 +320,8 @@ export default function AdminBookingDetailScreen() {
             </View>
 
             <VerificationDocsSection renterId={booking.renter?.id} styles={styles} colors={colors} />
+
+            <InspectionReportsSection bookingId={booking.id} router={router} styles={styles} colors={colors} />
 
             <View style={styles.section}>
               <SectionHeading>Car</SectionHeading>
