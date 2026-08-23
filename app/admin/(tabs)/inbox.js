@@ -1,5 +1,15 @@
-// Admin Panel's Support Inbox entry point - reuses the exact same Express
-// Desk screen (app/staff-inbox/index.js) rather than duplicating it, since
-// is_support() already grants admins the same scope:'all' access support
-// staff have. Rows still navigate to /staff-inbox/[id] for the detail view.
-export { default } from '../../staff-inbox/index';
+import ConversationListScreen from '../../../components/admin/ConversationListScreen';
+
+// Admin Panel's Inbox tab - general support conversations only (no
+// booking or car anchor). Previously a bare re-export of the same screen
+// as Ride Support (app/staff-inbox/index.js); the two now genuinely
+// diverge in data, sharing only ConversationListScreen.
+export default function AdminInboxScreen() {
+  return (
+    <ConversationListScreen
+      category="general"
+      title="Inbox"
+      subtitle="General support conversations, not tied to a specific booking or car."
+    />
+  );
+}

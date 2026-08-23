@@ -48,12 +48,17 @@ function normalizeMessage(raw) {
 }
 
 /**
- * list_conversations(p_scope) - default: only conversations the caller
- * participates in. scope:'all' (support-only) lists every conversation,
- * for the Staff Inbox.
+ * list_conversations(p_scope, p_category) - default scope: only conversations
+ * the caller participates in. scope:'all' (support-only) lists every
+ * conversation, for the admin conversation screens. category:'general' (no
+ * booking/car anchor - Inbox) or 'support_ops' (booking/inquiry anchored -
+ * Ride Support) further narrows scope:'all'; omitted/null returns both.
  */
-export async function getConversations({ scope } = {}) {
-  const { data, error } = await supabase.rpc('list_conversations', { p_scope: scope ?? 'mine' });
+export async function getConversations({ scope, category } = {}) {
+  const { data, error } = await supabase.rpc('list_conversations', {
+    p_scope: scope ?? 'mine',
+    p_category: category ?? null,
+  });
   if (error) throw error;
   return (data ?? []).map(normalizeConversation);
 }
