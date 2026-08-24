@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
-import supabase from '../services/supabase';
+import supabase, { edgeFunctionErrorMessage } from '../services/supabase';
 import * as bookingsStorage from '../services/bookingsStorage';
 import { getUserBookings, sendBookingCancelledEmail } from '../services/supabaseApi';
 import { useAuth } from './AuthContext';
@@ -114,7 +114,7 @@ export function BookingsProvider({ children }) {
   const cancelBooking = useCallback(async (id) => {
     if (isSupabaseBookingId(id)) {
       const { data: result, error } = await supabase.functions.invoke('cancel-booking', { body: { bookingId: id } });
-      if (error) throw error;
+      if (error) throw new Error(await edgeFunctionErrorMessage(error));
       if (result?.error) throw new Error(result.error);
 
       if (result.refunded) {

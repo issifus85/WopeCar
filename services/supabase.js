@@ -113,3 +113,25 @@ export async function getAppSetting(key) {
   if (error) throw error;
   return data?.value ?? null;
 }
+
+/**
+ * supabase.functions.invoke()'s error for a non-2xx response is a
+ * FunctionsHttpError whose .message is hardcoded to the generic
+ * "Edge Function returned a non-2xx status code" - the Edge Function's own
+ * {error: "..."} JSON body (the actually useful part) is only reachable via
+ * error.context, the raw Response object. Callers doing `if (error) throw
+ * error` were surfacing that generic text to users with no way to tell
+ * "session expired" from "not authorized" from a real server bug. Use this
+ * instead of throwing `error` directly wherever functions.invoke()'s result
+ * is shown to a user.
+ */
+export async function edgeFunctionErrorMessage(error) {
+  try {
+    const body = await error?.context?.json();
+    if (body?.error) return body.error;
+  } catch {
+    // context wasn't JSON (e.g. a network-level failure with no response) -
+    // fall through to the generic message below.
+  }
+  return error?.message || 'Something went wrong. Please try again.';
+}

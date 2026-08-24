@@ -46,7 +46,11 @@ const TIME_SLOTS = [
 
 function formatDate(date) {
   if (!date) return '';
-  return new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  // A plain date-only string ("2026-08-07") parses as UTC midnight; on a
+  // device west of UTC, toLocaleDateString then renders a day early. Same
+  // fix already used elsewhere in this app for this exact class of bug.
+  const value = typeof date === 'string' && date.length === 10 ? `${date}T00:00:00` : date;
+  return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 // inspection is undefined while its GET is still in flight, null once
@@ -784,9 +788,17 @@ export default function BookingDetailScreen() {
 
           {mode === 'view' && (
             <>
-              <TouchableOpacity style={styles.secondaryButton} onPress={() => setIsCancelModalVisible(true)}>
-                <Text style={styles.secondaryButtonTextDanger}>Cancel Booking</Text>
-              </TouchableOpacity>
+              {/* cancel-booking (the Edge Function this button calls) only
+                  allows a renter to self-cancel a still-'pending' booking -
+                  once confirmed, cancellation is admin-only (same rule as
+                  everywhere else in this app). Showing this button for a
+                  confirmed booking meant it always failed; "Message
+                  Support" above is the real path once confirmed. */}
+              {booking.status !== 'Confirmed' && (
+                <TouchableOpacity style={styles.secondaryButton} onPress={() => setIsCancelModalVisible(true)}>
+                  <Text style={styles.secondaryButtonTextDanger}>Cancel Booking</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity style={styles.primaryButton} onPress={startEditing}>
                 <Text style={styles.primaryButtonText}>Modify Booking</Text>
               </TouchableOpacity>

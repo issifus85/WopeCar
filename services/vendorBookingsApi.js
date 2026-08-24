@@ -1,4 +1,4 @@
-import supabase from './supabase';
+import supabase, { edgeFunctionErrorMessage } from './supabase';
 import { getVendorProfile } from './vendorCarsApi';
 import { getVendorBookings, sendBookingCancelledEmail, sendBookingConfirmedEmail } from './supabaseApi';
 
@@ -112,7 +112,7 @@ export async function declineBookingRequest(bookingId, reason) {
   const { data: result, error } = await supabase.functions.invoke('cancel-booking', {
     body: { bookingId, reason },
   });
-  if (error) throw error;
+  if (error) throw new Error(await edgeFunctionErrorMessage(error));
   if (result?.error) throw new Error(result.error);
 
   sendBookingCancelledEmail(bookingId, reason).catch(() => {});

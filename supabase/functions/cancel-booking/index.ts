@@ -237,6 +237,21 @@ Deno.serve(async (req) => {
       await adminClient.functions.invoke('send-push-notification', { body: { notifications: pushNotifications } }).catch(() => {});
     }
 
+    // QuickBooks credit note - fire-and-forget, errors logged not thrown: a
+    // QuickBooks failure must never undo or fail a cancellation that
+    // already succeeded above.
+    if (refundAmount > 0) {
+      try {
+        await fetch(`${supabaseUrl}/functions/v1/quickbooks-credit-note`, {
+          method: 'POST',
+          headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bookingId: booking.id, refundAmount, reason: reason || 'Booking cancellation refund' }),
+        });
+      } catch (e) {
+        console.error('QuickBooks credit note failed:', e);
+      }
+    }
+
     return jsonResponse({ success: true, refunded: refundProcessed, refundAmount, refundPercentage, refundError });
   } catch (e) {
     return jsonResponse({ error: e instanceof Error ? e.message : 'Unexpected error.' }, 500);
