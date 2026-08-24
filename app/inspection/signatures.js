@@ -130,7 +130,21 @@ export default function InspectionSignaturesScreen() {
         'Inspection Submitted',
         'The inspection report has been saved and is available in Documents.',
         [
-          { text: 'View Report', onPress: () => router.push({ pathname: '/inspection/report', params: { bookingId, type } }) },
+          {
+            text: 'View Report',
+            onPress: () => {
+              resetInspection();
+              // Same dismissTo-before-navigating shape as "Done" below - the
+              // wizard is 5 screens deep on top of Booking Detail, so a bare
+              // push here would leave the report screen's back button
+              // popping back into the (already-submitted) wizard instead of
+              // Booking Detail. Collapse the wizard first, then push the
+              // report on top of Booking Detail, so back from the report
+              // lands where the user actually expects.
+              router.dismissTo(`/booking/${localId}`);
+              router.push({ pathname: '/inspection/report', params: { bookingId, type } });
+            },
+          },
           {
             text: 'Done',
             onPress: () => {
