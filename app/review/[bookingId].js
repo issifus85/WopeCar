@@ -44,9 +44,19 @@ export default function ReviewScreen() {
           .from('bookings')
           .select('id, renter_id, car_id, vendor_id, status, cars(name, images)')
           .eq('id', bookingId)
-          .single();
+          .maybeSingle();
         if (error) throw error;
         if (cancelled) return;
+        if (!data) {
+          // .single() throws PostgREST's raw "Cannot coerce the result to a
+          // single JSON object" for this same zero-row case - not a
+          // constraint violation (bookings.id is a PK, reviews has a unique
+          // booking_id), just a stale bookingId reaching this screen (e.g.
+          // BookingsContext's local cache outliving the server-side row).
+          setLoadError('This booking is no longer available.');
+          setIsLoading(false);
+          return;
+        }
         // RLS lets admin (and a vendor, for their own car's bookings) read
         // any booking, not just the renter's own - this app has no renter-
         // review-writing path for anyone but the actual renter, so catch
