@@ -58,9 +58,21 @@ export function BookingsProvider({ children }) {
   // Refreshes Supabase-sourced bookings (real cross-device state - e.g. a
   // vendor accepting/declining, which only ever happens server-side) and
   // merges them with whatever's in local storage. Supabase rows win on a
-  // matching id (fresher/authoritative); local-only rows with no Supabase
-  // counterpart (pre-cutover bookings, or Supabase temporarily
-  // unreachable) are kept as-is rather than dropped.
+  // matching id (fresher/authoritative); getUserBookings has no .limit()
+  // and is scoped to renter_id, so a *successful* fetch is always the
+  // user's complete, authoritative booking set - anything previously
+  // cached under a real Supabase id (isSupabaseBookingId) that's no longer
+  // in that set genuinely no longer exists/is no longer visible (deleted,
+  // reassigned, test-data reset, ...) and gets dropped here, not kept.
+  // Only true pre-cutover local-only bookings (local-<timestamp> ids, see
+  // isSupabaseBookingId above) survive a merge with no remote counterpart -
+  // those never had a server row to begin with.
+  //
+  // This isn't just cosmetic: a stale-but-kept booking id used to reach
+  // screens keyed off it (e.g. app/review/[bookingId].js) and throw
+  // PostgREST's raw "Cannot coerce the result to a single JSON object"
+  // when the id resolved to zero rows there - the id itself was long dead,
+  // this merge was just never told to let it go.
   //
   // Exposed as refreshBookings() below - this used to only run once, keyed
   // on [user], so a vendor accepting/declining while the renter's app was
@@ -77,7 +89,8 @@ export function BookingsProvider({ children }) {
         const remote = rows.map(normalizeSupabaseBooking);
         const remoteIds = new Set(remote.map((b) => b.id));
         setBookings((prev) => {
-          const merged = [...remote, ...prev.filter((b) => !remoteIds.has(b.id))];
+          const preCutoverLocalOnly = prev.filter((b) => !isSupabaseBookingId(b.id) && !remoteIds.has(b.id));
+          const merged = [...remote, ...preCutoverLocalOnly];
           bookingsStorage.setBookings(merged);
           return merged;
         });
