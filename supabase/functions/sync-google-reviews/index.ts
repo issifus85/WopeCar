@@ -13,14 +13,24 @@
 // no pagination. Re-running this is safe (upsert on external_id, built
 // from placeId+review time - Google doesn't expose a stable review ID).
 //
-// Caller must be an admin - identified from their own JWT, then role
-// verified via service_role before anything runs.
+// Fired daily by a pg_cron job (see migration
+// 0092_add_google_reviews_sync_cron.sql), not by an admin session - no
+// admin UI ever called this (it was previously gated on a live admin JWT,
+// which a cron job can't provide), so it had silently never run again
+// after the one-time manual backfill on 2026-08-05. Re-gated the same way
+// send-document-expiry-reminders and send-vetting-appointment-reminders
+// are: verify_jwt off, no per-request identity check, because the only
+// inputs this function trusts are its own project secrets (never the
+// caller) and it only writes Google's own already-public review content -
+// there is nothing a malicious caller could inject or steal by invoking
+// this early.
 //
 // Requires two secrets set on the project:
 //   GOOGLE_PLACES_API_KEY - a Google Cloud API key with Places API enabled
 //   GOOGLE_PLACE_ID       - WopeCar's Google Business Profile Place ID
+//   (ChIJW8gSKveU2w8RPPeTI780EFI - see wopecar_website_google_reviews memory)
 //
-// Deploy with: supabase functions deploy sync-google-reviews
+// Deploy with: supabase functions deploy sync-google-reviews --no-verify-jwt
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -50,30 +60,12 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return jsonResponse({ error: 'Missing Authorization header.' }, 401);
-    }
-
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const googleApiKey = Deno.env.get('GOOGLE_PLACES_API_KEY');
     const placeId = Deno.env.get('GOOGLE_PLACE_ID');
 
-    const callerClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: getUserError } = await callerClient.auth.getUser();
-    if (getUserError || !user) {
-      return jsonResponse({ error: 'Invalid or expired session.' }, 401);
-    }
-
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
-    const { data: callerProfile } = await adminClient.from('users').select('role').eq('id', user.id).maybeSingle();
-    if (callerProfile?.role !== 'admin') {
-      return jsonResponse({ error: 'Not authorized.' }, 403);
-    }
 
     if (!googleApiKey || !placeId) {
       return jsonResponse({ error: 'GOOGLE_PLACES_API_KEY and GOOGLE_PLACE_ID must both be set as project secrets.' }, 500);
