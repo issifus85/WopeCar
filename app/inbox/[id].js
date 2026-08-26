@@ -90,7 +90,7 @@ export default function ConversationScreen() {
     } else if (kind === 'location') {
       attachment = await getCurrentLocationForChat();
     }
-    if (attachment) sendMessage(id, '', attachment);
+    if (attachment) await sendMessage(id, '', attachment);
   };
 
   if (!conversation) {

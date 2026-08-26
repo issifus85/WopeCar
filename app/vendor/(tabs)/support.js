@@ -54,7 +54,7 @@ export default function VendorSupportScreen() {
     } else if (kind === 'location') {
       attachment = await getCurrentLocationForChat();
     }
-    if (attachment) sendMessage(conversationId, '', attachment);
+    if (attachment) await sendMessage(conversationId, '', attachment);
   };
 
   if (!conversationId) {

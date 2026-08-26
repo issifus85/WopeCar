@@ -343,7 +343,11 @@ export function InboxProvider({ children }) {
         [rawId]: [...(prev[rawId] ?? []), optimistic],
       }));
 
-      conversationsApi.sendMessage(rawId, trimmed || null, attachment)
+      // Returned (not fire-and-forget) so callers - MessageThread's
+      // handleSend, via each screen's onSend/onAttach - can catch a real
+      // failure and tell the user, instead of the message just silently
+      // vanishing with the optimistic bubble.
+      return conversationsApi.sendMessage(rawId, trimmed || null, attachment)
         .then((confirmed) => {
           // Swap the optimistic placeholder for the real, server-assigned
           // message as soon as the send confirms, rather than waiting for
@@ -358,15 +362,16 @@ export function InboxProvider({ children }) {
           });
           syncServerConversations();
         })
-        .catch(() => {
+        .catch((e) => {
           // Never sent - drop the placeholder rather than leaving a bubble
-          // stuck rendering forever.
+          // stuck rendering forever, then re-throw so the caller can show a
+          // real error instead of the send failing silently.
           setServerMessagesByConversationId((prev) => ({
             ...prev,
             [rawId]: (prev[rawId] ?? []).filter((m) => m.id !== optimistic.id),
           }));
+          throw e;
         });
-      return;
     }
 
     const message = {

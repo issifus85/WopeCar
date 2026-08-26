@@ -212,10 +212,22 @@ export default function MessageThread({
     return () => clearTimeout(timer);
   }, [messages.length]);
 
-  const handleSend = () => {
-    if (!draft.trim()) return;
-    onSend(draft);
+  const handleSend = async () => {
+    const text = draft.trim();
+    if (!text) return;
     setDraft('');
+    setAttachError(null);
+    try {
+      await onSend(text);
+    } catch (e) {
+      // Restore the draft so the failed message isn't lost - onSend's own
+      // implementations (InboxContext.sendMessage, staff-inbox's
+      // handleSend) already drop the optimistic bubble on failure, so
+      // without this the message would otherwise just vanish with no
+      // feedback and no way to retry short of retyping it.
+      setDraft(text);
+      setAttachError(e?.message || 'Message not sent. Please try again.');
+    }
   };
 
   const handleAttach = async (kind) => {

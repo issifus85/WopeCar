@@ -62,13 +62,15 @@ export default function StaffConversationScreen() {
     return () => clearInterval(interval);
   }, [id, loadMeta, loadMessages]);
 
+  // Returned (not fire-and-forget) so MessageThread's handleSend/handleAttach
+  // can catch a real failure and show it, instead of a send failing with no
+  // feedback at all - previously the .catch(() => {}) here swallowed it.
   const handleSend = (text, attachment = null) => {
-    conversationsApi.sendMessage(id, text || null, attachment)
+    return conversationsApi.sendMessage(id, text || null, attachment)
       .then(() => {
         loadMessages();
         loadMeta();
-      })
-      .catch(() => {});
+      });
   };
 
   const handleAttach = async (kind) => {
@@ -80,7 +82,7 @@ export default function StaffConversationScreen() {
     } else if (kind === 'location') {
       attachment = await getCurrentLocationForChat();
     }
-    if (attachment) handleSend('', attachment);
+    if (attachment) await handleSend('', attachment);
   };
 
   const threadMessages = useMemo(() => messages.map((m) => ({
