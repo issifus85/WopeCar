@@ -6,14 +6,28 @@ import { registerPushToken } from '../services/pushNotifications';
 
 const AuthContext = createContext(null);
 
+// getCurrentUser() calls supabase.auth.getUser() - a real network round-trip
+// with no built-in timeout - so a single dropped request (poor
+// connectivity, the app backgrounding mid-request) could otherwise leave
+// this hanging forever: not rejecting (so .catch/.finally never run), just
+// never settling. Since this gates the whole app's initial render, that
+// would look exactly like a permanently stuck loading screen everywhere,
+// not just here. 12s comfortably covers a slow mobile network without
+// making a genuine failure feel broken.
+function withTimeout(promise, fallback, ms = 12000) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const refresh = useCallback(() => {
     setIsLoading(true);
-    return authApi
-      .getCurrentUser()
+    return withTimeout(authApi.getCurrentUser(), null)
       .then(setUser)
       .catch(() => setUser(null))
       .finally(() => setIsLoading(false));
