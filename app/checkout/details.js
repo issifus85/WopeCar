@@ -1,26 +1,34 @@
-import { useState, useMemo } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
+import { useState, useEffect, useMemo } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCheckout } from '../../contexts/CheckoutContext';
+import { fetchCarById } from '../../services/carsApi';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 import LocationSearchModal from '../../components/LocationSearchModal';
 
-const TIME_SLOTS = [
+const SELF_DRIVE_SLOTS = [
   '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
   '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM',
 ];
 
-function TimeSlotPicker({ label, value, onChange, styles }) {
+// Chauffeur bookings get a wider window on both ends (a driver can start
+// earlier and finish later than a self-drive handover requires) - the
+// self-drive list is untouched, just extended at either end rather than
+// redefined, so the two stay obviously in sync if the base hours ever move.
+const CHAUFFEUR_PICKUP_SLOTS = ['5:30 AM', '6:00 AM', '7:00 AM', ...SELF_DRIVE_SLOTS];
+const CHAUFFEUR_RETURN_SLOTS = [...SELF_DRIVE_SLOTS, '7:00 PM', '8:00 PM', '8:30 PM'];
+
+function TimeSlotPicker({ label, value, onChange, slots, styles }) {
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
       <View style={styles.slotGrid}>
-        {TIME_SLOTS.map((slot) => (
+        {slots.map((slot) => (
           <TouchableOpacity
             key={slot}
             style={[styles.slot, value === slot && styles.slotActive]}
@@ -43,6 +51,23 @@ export default function CheckoutDetailsScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user } = useAuth();
   const { draft, updateDraft } = useCheckout();
+
+  const [car, setCar] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    setIsLoading(true);
+    setError(null);
+    fetchCarById(carId)
+      .then(setCar)
+      .catch(() => setError('Could not load this car. Please try again.'))
+      .finally(() => setIsLoading(false));
+  }, [carId]);
+
+  const isChauffeur = car?.drivenBy === 'Chauffeur';
+  const pickupSlots = isChauffeur ? CHAUFFEUR_PICKUP_SLOTS : SELF_DRIVE_SLOTS;
+  const returnSlots = isChauffeur ? CHAUFFEUR_RETURN_SLOTS : SELF_DRIVE_SLOTS;
 
   const [pickupTime, setPickupTime] = useState(draft.pickupTime);
   const [returnTime, setReturnTime] = useState(draft.returnTime);
@@ -75,13 +100,29 @@ export default function CheckoutDetailsScreen() {
     router.push({ pathname: '/checkout/addons', params: { carId } });
   };
 
+  if (isLoading) {
+    return (
+      <View style={styles.centerState}>
+        <ActivityIndicator size="large" color={colors.teal} />
+      </View>
+    );
+  }
+
+  if (error || !car) {
+    return (
+      <View style={styles.centerState}>
+        <Text style={styles.errorText}>{error ?? 'Car not found'}</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <CheckoutHeader title="Pickup & Return" step={2} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <TimeSlotPicker label="Pickup Time" value={pickupTime} onChange={setPickupTime} styles={styles} />
-        <TimeSlotPicker label="Return Time" value={returnTime} onChange={setReturnTime} styles={styles} />
+        <TimeSlotPicker label="Pickup Time" value={pickupTime} onChange={setPickupTime} slots={pickupSlots} styles={styles} />
+        <TimeSlotPicker label="Return Time" value={returnTime} onChange={setReturnTime} slots={returnSlots} styles={styles} />
 
         <View style={styles.field}>
           <Text style={styles.label}>Vehicle Delivery Location</Text>
@@ -136,6 +177,18 @@ function createStyles(colors) {
   container: {
     flex: 1,
     backgroundColor: colors.surface,
+  },
+  centerState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontFamily: FONTS.regular,
+    fontSize: 14,
+    color: colors.textMuted,
+    textAlign: 'center',
   },
   scrollContent: {
     padding: 20,
