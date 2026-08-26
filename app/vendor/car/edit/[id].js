@@ -88,6 +88,12 @@ export default function VendorEditListingScreen() {
   const [pricePerDay, setPricePerDay] = useState('');
   const [regionalAddons, setRegionalAddons] = useState([]);
   const [offersRegionalAddons, setOffersRegionalAddons] = useState(false);
+  // Split out of car.regionalAddons on load (see the effect below) - kept
+  // separate from `regionalAddons` while editing for the same reason
+  // CarDiscountEditor keeps tier rows separate from committed state: a
+  // half-typed row (name but no price yet) isn't a valid add-on yet.
+  const [customDestinations, setCustomDestinations] = useState([]);
+  const [customErrors, setCustomErrors] = useState({});
   const [isInitialized, setIsInitialized] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -110,8 +116,12 @@ export default function VendorEditListingScreen() {
     setRegion(split.region);
     setLocation(split.city);
     setPricePerDay(car.pricePerDay != null ? String(car.pricePerDay) : '');
-    setRegionalAddons(car.regionalAddons ?? []);
-    setOffersRegionalAddons((car.regionalAddons ?? []).length > 0);
+    const rawAddons = car.regionalAddons ?? [];
+    setRegionalAddons(rawAddons.filter((a) => GHANA_REGIONS.includes(a.name)));
+    setCustomDestinations(
+      rawAddons.filter((a) => !GHANA_REGIONS.includes(a.name)).map((a) => ({ name: a.name, price: String(a.price ?? '') }))
+    );
+    setOffersRegionalAddons(rawAddons.length > 0);
     setIsInitialized(true);
   }, [car, isInitialized]);
 
@@ -167,10 +177,58 @@ export default function VendorEditListingScreen() {
     setRegionalAddons(regionalAddons.map((r) => (r.name === region ? { ...r, price } : r)));
   };
 
+  const addCustomDestination = () => {
+    setCustomErrors({});
+    setCustomDestinations([...customDestinations, { name: '', price: '' }]);
+  };
+  const updateCustomDestination = (index, patch) => {
+    setCustomErrors({});
+    setCustomDestinations(customDestinations.map((d, i) => (i === index ? { ...d, ...patch } : d)));
+  };
+  const removeCustomDestination = (index) => {
+    setCustomErrors({});
+    setCustomDestinations(customDestinations.filter((_, i) => i !== index));
+  };
+
+  // Runs at Save, not on every keystroke - a half-typed row is normal
+  // mid-edit, not an error. Duplicate names are checked against the full
+  // 16-region list (regardless of toggle state) and every other custom
+  // row, case-insensitively. A fully blank row is silently dropped.
+  const validateCustomDestinations = () => {
+    const errors = {};
+    const cleaned = [];
+    const seenNames = new Set();
+    customDestinations.forEach((d, index) => {
+      const name = d.name.trim();
+      const priceStr = String(d.price ?? '').trim();
+      const priceNum = Number(priceStr);
+      const hasName = name.length > 0;
+      const hasPrice = priceStr.length > 0 && !Number.isNaN(priceNum) && priceNum > 0;
+
+      if (!hasName && !hasPrice) return;
+      if (!hasName || !hasPrice) {
+        errors[index] = 'Please complete or remove this destination';
+        return;
+      }
+
+      const lower = name.toLowerCase();
+      if (GHANA_REGIONS.some((r) => r.toLowerCase() === lower) || seenNames.has(lower)) {
+        errors[index] = 'This destination already exists';
+        return;
+      }
+      seenNames.add(lower);
+      cleaned.push({ name, price: priceNum });
+    });
+    setCustomErrors(errors);
+    return { valid: Object.keys(errors).length === 0, cleaned };
+  };
+
   const price = Number(pricePerDay);
   const isValid = !!make && !!model && !!year && !!type && !!vehicleClass && !!drivenBy && !!energySource && !!region && !!location && pricePerDay.trim().length > 0 && price > 0;
 
   const handleSave = async () => {
+    const { valid: customValid, cleaned: cleanedCustom } = validateCustomDestinations();
+    if (!customValid) return;
     const enabledRegions = offersRegionalAddons ? regionalAddons.filter((r) => Number(r.price) > 0) : [];
     setIsSaving(true);
     try {
@@ -191,7 +249,12 @@ export default function VendorEditListingScreen() {
         description: description.trim(),
         location: joinLocation(region, location),
         pricePerDay: price,
-        regionalAddons: enabledRegions.map((r) => ({ name: r.name, price: Number(r.price), type: 'per_day' })),
+        regionalAddons: offersRegionalAddons
+          ? [
+              ...enabledRegions.map((r) => ({ name: r.name, price: Number(r.price), type: 'per_day', category: 'region' })),
+              ...cleanedCustom.map((c) => ({ name: c.name, price: c.price, type: 'per_day', category: 'custom' })),
+            ]
+          : [],
       });
       router.back();
     } catch (e) {
@@ -456,6 +519,50 @@ export default function VendorEditListingScreen() {
                   </View>
                 );
               })}
+
+              <View style={styles.customSectionDivider} />
+              <Text style={styles.customSectionTitle}>Custom Destinations</Text>
+              <Text style={styles.cardHint}>Add specific cities or destinations not covered by the regions above</Text>
+
+              {customDestinations.map((destination, index) => {
+                const error = customErrors[index];
+                return (
+                  <View key={index} style={styles.customRow}>
+                    <View style={styles.customFieldsRow}>
+                      <View style={styles.customNameField}>
+                        <Text style={styles.tierLabel}>Destination</Text>
+                        <TextInput
+                          style={[styles.customInput, !!error && styles.customInputError]}
+                          value={destination.name}
+                          onChangeText={(value) => updateCustomDestination(index, { name: value })}
+                          placeholder="e.g. Peduase"
+                          placeholderTextColor={colors.textSubtle}
+                        />
+                      </View>
+                      <View style={styles.customPriceField}>
+                        <Text style={styles.tierLabel}>Price (GHS)</Text>
+                        <TextInput
+                          style={[styles.customInput, !!error && styles.customInputError]}
+                          value={String(destination.price ?? '')}
+                          onChangeText={(value) => updateCustomDestination(index, { price: value })}
+                          placeholder="0"
+                          placeholderTextColor={colors.textSubtle}
+                          keyboardType="numeric"
+                        />
+                      </View>
+                      <TouchableOpacity style={styles.customRemove} onPress={() => removeCustomDestination(index)} hitSlop={10}>
+                        <Ionicons name="trash-outline" size={18} color={colors.error} />
+                      </TouchableOpacity>
+                    </View>
+                    {!!error && <Text style={styles.customRowError}>{error}</Text>}
+                  </View>
+                );
+              })}
+
+              <TouchableOpacity style={styles.addLink} onPress={addCustomDestination}>
+                <Ionicons name="add-circle-outline" size={16} color={colors.teal} />
+                <Text style={styles.addLinkText}>Add City or Destination</Text>
+              </TouchableOpacity>
             </View>
           )}
         </ScrollView>
@@ -781,6 +888,74 @@ function createStyles(colors) {
       fontFamily: FONTS.regular,
       fontSize: 13,
       color: colors.textPrimary,
+    },
+    customSectionDivider: {
+      borderTopWidth: 1,
+      borderTopColor: colors.divider,
+      marginTop: 4,
+      marginBottom: 14,
+    },
+    customSectionTitle: {
+      fontFamily: FONTS.bold,
+      fontSize: 12,
+      color: colors.textSubtle,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      marginBottom: 6,
+    },
+    customRow: {
+      paddingVertical: 10,
+    },
+    customFieldsRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      gap: 8,
+    },
+    customNameField: {
+      flex: 1.4,
+    },
+    customPriceField: {
+      flex: 1,
+    },
+    tierLabel: {
+      fontFamily: FONTS.regular,
+      fontSize: 10,
+      color: colors.textSubtle,
+      marginBottom: 6,
+    },
+    customInput: {
+      backgroundColor: colors.background,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontFamily: FONTS.regular,
+      fontSize: 13,
+      color: colors.textPrimary,
+    },
+    customInputError: {
+      borderColor: colors.error,
+    },
+    customRemove: {
+      paddingBottom: 10,
+    },
+    customRowError: {
+      fontFamily: FONTS.regular,
+      fontSize: 11,
+      color: colors.error,
+      marginTop: 4,
+    },
+    addLink: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginTop: 4,
+    },
+    addLinkText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 13,
+      color: colors.teal,
     },
   });
 }
