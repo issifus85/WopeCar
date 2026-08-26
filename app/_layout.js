@@ -29,6 +29,7 @@ import { VendorProvider } from '../contexts/VendorContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { ThemeProvider, useAppTheme, toNavigationTheme } from '../contexts/ThemeContext';
 import BiometricGate from '../components/BiometricGate';
+import ErrorBoundary from '../components/ErrorBoundary';
 import SplashVideoScreen from '../components/SplashVideoScreen';
 import supabase from '../services/supabase';
 import { parseTokensFromUrl, parseAuthErrorFromUrl } from '../services/supabaseAuthApi';
@@ -113,31 +114,33 @@ export default function RootLayout() {
   }
 
   return (
-    <AuthProvider>
-      <FavoritesProvider>
-        <CartProvider>
-        <CheckoutProvider>
-        <InspectionProvider>
-        <BookingsProvider>
-        <SettingsProvider>
-        <CurrencyProvider>
-        <InboxProvider>
-        <VendorProvider>
-        <AddCarProvider>
-        <ThemeProvider>
-          <RootNavigator authRedirectType={authRedirectType} />
-        </ThemeProvider>
-        </AddCarProvider>
-        </VendorProvider>
-        </InboxProvider>
-        </CurrencyProvider>
-        </SettingsProvider>
-        </BookingsProvider>
-        </InspectionProvider>
-        </CheckoutProvider>
-        </CartProvider>
-      </FavoritesProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <FavoritesProvider>
+          <CartProvider>
+          <CheckoutProvider>
+          <InspectionProvider>
+          <BookingsProvider>
+          <SettingsProvider>
+          <CurrencyProvider>
+          <InboxProvider>
+          <VendorProvider>
+          <AddCarProvider>
+          <ThemeProvider>
+            <RootNavigator authRedirectType={authRedirectType} />
+          </ThemeProvider>
+          </AddCarProvider>
+          </VendorProvider>
+          </InboxProvider>
+          </CurrencyProvider>
+          </SettingsProvider>
+          </BookingsProvider>
+          </InspectionProvider>
+          </CheckoutProvider>
+          </CartProvider>
+        </FavoritesProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 
