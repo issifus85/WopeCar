@@ -6,7 +6,7 @@ import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useVendor } from '../../contexts/VendorContext';
-import { applyToBecomeVendor, getVendorProfile } from '../../services/vendorCarsApi';
+import { applyToBecomeVendor } from '../../services/vendorCarsApi';
 import VendorHeader from '../../components/VendorHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -23,7 +23,7 @@ export default function VendorApplyScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, isLoading: isAuthLoading } = useAuth();
   const { updateSetting } = useSettings();
-  const { refreshVendorProfile } = useVendor();
+  const { vendorProfile, isLoading: isVendorLoading, refreshVendorProfile } = useVendor();
 
   // Reachable via a direct deep link, not just the Dashboard's own guard -
   // this screen needs its own auth check too, since Vendor Mode never had
@@ -37,23 +37,26 @@ export default function VendorApplyScreen() {
   // by any other route (stale bookmark, deep link, browser back after
   // already applying) while already a vendor, bounce them to the real
   // Dashboard instead of letting them resubmit into the unique constraint.
-  const [isCheckingVendor, setIsCheckingVendor] = useState(true);
-
+  //
+  // Reads VendorContext's own vendorProfile/isLoading (useVendor()) instead
+  // of running a second, independent getVendorProfile() fetch here - this
+  // used to call getVendorProfile() directly, which could resolve
+  // differently than VendorContext's own copy (e.g. VendorContext's load()
+  // timing out first-checkout in a session with a null fallback - see its
+  // withTimeout comment). That produced a genuine infinite redirect loop:
+  // this screen would find a real vendor row and bounce to /vendor, whose
+  // own guard reads useVendor()'s still-null vendorProfile and immediately
+  // bounces right back to /vendor/apply - a "constant load screen" that
+  // reproduces on every relaunch and never resolves, since VendorContext's
+  // one-time load never re-runs. A single shared source of truth for
+  // vendorProfile makes that class of disagreement structurally impossible.
   useEffect(() => {
-    if (isAuthLoading || !user) return;
-    getVendorProfile()
-      .then((vendor) => {
-        if (vendor) {
-          updateSetting('appMode', 'vendor');
-          router.replace('/vendor');
-        } else {
-          setIsCheckingVendor(false);
-        }
-      })
-      // Fail open - a network hiccup here shouldn't trap a genuine
-      // first-time applicant on a spinner forever.
-      .catch(() => setIsCheckingVendor(false));
-  }, [isAuthLoading, user]);
+    if (isAuthLoading || isVendorLoading || !user) return;
+    if (vendorProfile) {
+      updateSetting('appMode', 'vendor');
+      router.replace('/vendor');
+    }
+  }, [isAuthLoading, isVendorLoading, user, vendorProfile]);
 
   const [type, setType] = useState('individual');
   const [name, setName] = useState(user?.name ?? '');
@@ -84,7 +87,7 @@ export default function VendorApplyScreen() {
     router.replace('/vendor');
   };
 
-  if (isAuthLoading || !user || isCheckingVendor) {
+  if (isAuthLoading || isVendorLoading || !user || vendorProfile) {
     return (
       <View style={styles.centerState}>
         <ActivityIndicator size="large" color={colors.teal} />
