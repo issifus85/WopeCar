@@ -567,6 +567,42 @@ export default function BookingDetailScreen() {
                   </View>
                 </View>
               )}
+              {mod.old_rental_cost !== mod.new_rental_cost && (
+                <View style={styles.row}>
+                  <Text style={styles.rowLabel}>Rental</Text>
+                  <View>
+                    <Text style={styles.modificationOldValue}>{formatCurrency(mod.old_rental_cost, activeCurrency)}</Text>
+                    <Text style={styles.rowValue}>{formatCurrency(mod.new_rental_cost, activeCurrency)}</Text>
+                  </View>
+                </View>
+              )}
+              {mod.old_wopecare_total_cost !== mod.new_wopecare_total_cost && (mod.old_wopecare_total_cost > 0 || mod.new_wopecare_total_cost > 0) && (
+                <View style={styles.row}>
+                  <Text style={styles.rowLabel}>WopeCare</Text>
+                  <View>
+                    <Text style={styles.modificationOldValue}>{formatCurrency(mod.old_wopecare_total_cost, activeCurrency)}</Text>
+                    <Text style={styles.rowValue}>{formatCurrency(mod.new_wopecare_total_cost, activeCurrency)}</Text>
+                  </View>
+                </View>
+              )}
+              {mod.old_delivery_fee !== mod.new_delivery_fee && (
+                <View style={styles.row}>
+                  <Text style={styles.rowLabel}>Delivery fee</Text>
+                  <View>
+                    <Text style={styles.modificationOldValue}>{formatCurrency(mod.old_delivery_fee, activeCurrency)}</Text>
+                    <Text style={styles.rowValue}>{formatCurrency(mod.new_delivery_fee, activeCurrency)}</Text>
+                  </View>
+                </View>
+              )}
+              {mod.old_security_deposit !== mod.new_security_deposit && (
+                <View style={styles.row}>
+                  <Text style={styles.rowLabel}>Security deposit</Text>
+                  <View>
+                    <Text style={styles.modificationOldValue}>{formatCurrency(mod.old_security_deposit, activeCurrency)}</Text>
+                    <Text style={styles.rowValue}>{formatCurrency(mod.new_security_deposit, activeCurrency)}</Text>
+                  </View>
+                </View>
+              )}
               <View style={styles.row}>
                 <Text style={styles.rowLabel}>Total</Text>
                 <View>

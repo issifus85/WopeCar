@@ -102,7 +102,51 @@ function changeRowsHtml(mod: any) {
     rows += row('Delivery location', mod.old_pickup_location || '—', mod.new_pickup_location || '—');
     rows += row('Pickup location', mod.old_return_location || '—', mod.new_return_location || '—');
   }
-  rows += row('Total cost', formatCurrency(mod.old_total_cost), formatCurrency(mod.new_total_cost));
+
+  return `<table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px;">${rows}</table>`;
+}
+
+// Line-item breakdown of what actually makes up the new total (and, by
+// difference, the amount charged/credited) - a lump "Total: X -> Y" alone
+// doesn't explain WHY, since a date extension moves more than one cost
+// component at once: rental cost and WopeCare cost both scale with day
+// count, and security deposit can jump to a different tier once the
+// subtotal crosses its threshold, while delivery fee is normally flat.
+// Each line only renders if it actually changed, so an unaffected
+// component (e.g. delivery fee on a same-location extension) doesn't
+// clutter the email with a redundant "same -> same" row.
+// deno-lint-ignore no-explicit-any
+function costBreakdownHtml(mod: any) {
+  const row = (label: string, oldVal: number, newVal: number) => `
+    <tr>
+      <td style="padding:6px 0;color:#5b6b6c;">${escapeHtml(label)}</td>
+      <td style="padding:6px 0;text-align:right;">
+        <div style="color:#999999;text-decoration:line-through;font-size:12px;">${formatCurrency(oldVal)}</div>
+        <div style="color:#154B59;font-weight:bold;">${formatCurrency(newVal)}</div>
+      </td>
+    </tr>`;
+
+  let rows = '';
+  if (Number(mod.old_rental_cost) !== Number(mod.new_rental_cost)) {
+    rows += row('Rental', mod.old_rental_cost, mod.new_rental_cost);
+  }
+  if (Number(mod.old_wopecare_total_cost) !== Number(mod.new_wopecare_total_cost) && (Number(mod.old_wopecare_total_cost) > 0 || Number(mod.new_wopecare_total_cost) > 0)) {
+    rows += row('WopeCare', mod.old_wopecare_total_cost, mod.new_wopecare_total_cost);
+  }
+  if (Number(mod.old_delivery_fee) !== Number(mod.new_delivery_fee)) {
+    rows += row('Delivery fee', mod.old_delivery_fee, mod.new_delivery_fee);
+  }
+  if (Number(mod.old_security_deposit) !== Number(mod.new_security_deposit)) {
+    rows += row('Security deposit', mod.old_security_deposit, mod.new_security_deposit);
+  }
+  rows += `
+    <tr>
+      <td style="padding:10px 0 0;font-weight:bold;color:#154B59;border-top:1px solid #e5e5e5;">Total cost</td>
+      <td style="padding:10px 0 0;text-align:right;font-weight:bold;color:#154B59;border-top:1px solid #e5e5e5;">
+        <div style="color:#999999;text-decoration:line-through;font-weight:400;font-size:12px;">${formatCurrency(mod.old_total_cost)}</div>
+        ${formatCurrency(mod.new_total_cost)}
+      </td>
+    </tr>`;
 
   return `<table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px;">${rows}</table>`;
 }
@@ -122,6 +166,8 @@ function buildClientEmailHtml({ booking, car, mod }: any) {
           <p style="font-size:14px;color:#666666;margin:0;">Your booking for ${escapeHtml(car?.name ?? 'this car')} (${escapeHtml(booking.booking_ref)}) has been updated.</p>
         </div>
         ${changeRowsHtml(mod)}
+        <div style="font-size:13px;font-weight:bold;color:#154B59;margin-bottom:6px;">Cost breakdown</div>
+        ${costBreakdownHtml(mod)}
         ${amountLine}
       </div>
       <div style="background:#f5f5f5;padding:16px 24px;text-align:center;">
@@ -143,6 +189,8 @@ function buildAdminEmailHtml({ booking, car, renter, mod, modifiedBy }: any) {
           <div style="font-size:13px;color:#666666;">${escapeHtml(renter?.full_name || 'N/A')} &middot; ${escapeHtml(renter?.email || 'N/A')}</div>
         </div>
         ${changeRowsHtml(mod)}
+        <div style="font-size:13px;font-weight:bold;color:#154B59;margin-bottom:6px;">Cost breakdown</div>
+        ${costBreakdownHtml(mod)}
         <table style="width:100%;border-collapse:collapse;font-size:14px;border-top:1px solid #e5e5e5;padding-top:8px;">
           <tr><td style="padding:6px 0;color:#5b6b6c;">Amount ${mod.amount_charged >= 0 ? 'charged' : 'credited'}</td><td style="padding:6px 0;text-align:right;color:#154B59;">${formatCurrency(Math.abs(mod.amount_charged))}</td></tr>
         </table>
@@ -281,6 +329,10 @@ Deno.serve(async (req) => {
       old_pickup_location: booking.pickup_location,
       old_return_location: booking.return_location,
       old_rental_cost: booking.rental_cost,
+      old_addons_cost: booking.addons_cost,
+      old_delivery_fee: booking.delivery_fee,
+      old_security_deposit: booking.security_deposit,
+      old_wopecare_total_cost: booking.wopecare_total_cost ?? 0,
       old_total_cost: booking.total_cost,
       new_start_date: startDate,
       new_end_date: endDate,
@@ -289,6 +341,10 @@ Deno.serve(async (req) => {
       new_pickup_location: pickupLocation ?? null,
       new_return_location: returnLocation ?? null,
       new_rental_cost: Number(rentalCost ?? booking.rental_cost),
+      new_addons_cost: Number(addonsCost ?? booking.addons_cost),
+      new_delivery_fee: Number(deliveryFee ?? booking.delivery_fee),
+      new_security_deposit: Number(securityDeposit ?? booking.security_deposit),
+      new_wopecare_total_cost: wopecareTotalCost != null ? Number(wopecareTotalCost) : (booking.wopecare_total_cost ?? 0),
       new_total_cost: newTotalCost,
       amount_charged: Number(amountCharged ?? (newTotalCost - Number(booking.total_cost))),
       payment_ref: paystackReference ?? null,
