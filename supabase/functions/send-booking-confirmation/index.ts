@@ -67,6 +67,15 @@ function buildCostRows(booking: any) {
   const addonsRow = (booking.addon_names ?? []).length
     ? `<tr><td style="padding:6px 0;color:#5b6b6c;">Add-ons</td><td style="padding:6px 0;text-align:right;color:#154B59;">${formatCurrency(booking.addons_cost)}</td></tr>`
     : '';
+  // booking.total_cost already includes this (see the checkout insert -
+  // subtotal + deliveryFee + securityDeposit + wopeCareCost) - it just
+  // never got its own line here, so a renter who added WopeCare saw a
+  // total that didn't add up to Rental+Delivery+Deposit with no
+  // explanation for the gap. wopecare_plan defaults to 'none' for a
+  // booking with no protection added, not null - both are excluded.
+  const wopeCareRow = booking.wopecare_plan && booking.wopecare_plan !== 'none' && Number(booking.wopecare_total_cost) > 0
+    ? `<tr><td style="padding:6px 0;color:#5b6b6c;">WopeCare (${escapeHtml(booking.wopecare_plan.charAt(0).toUpperCase() + booking.wopecare_plan.slice(1))})</td><td style="padding:6px 0;text-align:right;color:#154B59;">${formatCurrency(booking.wopecare_total_cost)}</td></tr>`
+    : '';
   const deliveryRow = Number(booking.delivery_fee) > 0
     ? `<tr><td style="padding:6px 0;color:#5b6b6c;">Delivery fee</td><td style="padding:6px 0;text-align:right;color:#154B59;">${formatCurrency(booking.delivery_fee)}</td></tr>`
     : '';
@@ -77,6 +86,7 @@ function buildCostRows(booking: any) {
     <table style="width:100%;border-collapse:collapse;font-size:14px;border-top:1px solid #e5e5e5;padding-top:8px;">
       <tr><td style="padding:6px 0;color:#5b6b6c;">Rental</td><td style="padding:6px 0;text-align:right;color:#154B59;">${formatCurrency(booking.rental_cost)}</td></tr>
       ${addonsRow}
+      ${wopeCareRow}
       ${deliveryRow}
       <tr><td style="padding:6px 0;color:#5b6b6c;">Security deposit</td><td style="padding:6px 0;text-align:right;color:#154B59;">${formatCurrency(booking.security_deposit)}</td></tr>
       ${promoRow}
