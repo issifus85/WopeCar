@@ -24,6 +24,7 @@ import { openDirections } from '../../services/mapsLauncher';
 import { getInspection } from '../../services/inspectionsApi';
 import { getRentalAgreement } from '../../services/rentalAgreementApi';
 import { getMyReviewForBooking } from '../../services/reviewsApi';
+import { getBookingModifications } from '../../services/supabaseApi';
 import { useBookings } from '../../contexts/BookingsContext';
 import { useInbox } from '../../contexts/InboxContext';
 import DateRangeModal, { formatDateShort } from '../../components/DateRangeModal';
@@ -117,7 +118,7 @@ export default function BookingDetailScreen() {
   const { activeCurrency } = useCurrency();
   const { settings } = useSettings();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { bookings, updateBooking, cancelBooking, refreshBookings } = useBookings();
+  const { bookings, modifyBooking, cancelBooking, refreshBookings } = useBookings();
   const { conversations, notifyBookingEvent } = useInbox();
 
   // A custom headerLeft, not just the default native-stack back button -
@@ -186,6 +187,9 @@ export default function BookingDetailScreen() {
   const [postInspection, setPostInspection] = useState(undefined);
   const [rentalAgreement, setRentalAgreement] = useState(undefined);
   const [myReview, setMyReview] = useState(undefined);
+  // Same undefined/null convention as the others above - undefined while
+  // the GET is in flight, [] once confirmed there's genuinely no history.
+  const [modifications, setModifications] = useState(undefined);
 
   useFocusEffect(useCallback(() => {
     // Picks up a vendor's accept/decline (or any other server-side status
@@ -200,11 +204,13 @@ export default function BookingDetailScreen() {
       setPostInspection(null);
       setRentalAgreement(null);
       setMyReview(null);
+      setModifications(undefined);
       return;
     }
     getInspection(booking.id, 'pre').then(setPreInspection).catch(() => setPreInspection(null));
     getInspection(booking.id, 'post').then(setPostInspection).catch(() => setPostInspection(null));
     getRentalAgreement(booking.id).then(setRentalAgreement).catch(() => setRentalAgreement(null));
+    getBookingModifications(booking.id).then(setModifications).catch(() => setModifications([]));
     if (booking.status === 'Completed') {
       getMyReviewForBooking(booking.id).then(setMyReview).catch(() => setMyReview(null));
     }
@@ -334,36 +340,64 @@ export default function BookingDetailScreen() {
   const isEditValid = editStart && editEnd && editPickupTime && editReturnTime
     && editPickupLocation.trim() && editReturnLocation.trim() && !isBelowMinimum;
 
+  // toISODate (not editStart.toISOString()) - bookings.start_date/end_date
+  // are plain `date` columns; a full ISO datetime string parses back a day
+  // early on a device west of UTC, the exact bug class formatDate()'s own
+  // comment above already documents for reads - this is the same fix on
+  // the write side.
   const buildUpdatedFields = (extra = {}) => ({
-    startDate: editStart.toISOString(),
-    endDate: editEnd.toISOString(),
+    startDate: toISODate(editStart),
+    endDate: toISODate(editEnd),
     pickupTime: editPickupTime,
     returnTime: editReturnTime,
     pickupLocation: editPickupLocation,
     returnLocation: editReturnLocation,
+    rentalCost: recomputedBreakdown.rentalCost,
+    addonsCost: recomputedBreakdown.addonsCost,
+    deliveryFee: recomputedBreakdown.deliveryFee,
+    securityDeposit: recomputedBreakdown.securityDeposit,
     totalCost: recomputedTotal,
-    wopeCare: booking.wopeCare?.plan && booking.wopeCare.plan !== 'none'
-      ? { ...booking.wopeCare, totalCost: recomputedWopeCareCost }
-      : booking.wopeCare,
+    billableDays: days,
+    wopecareTotalCost: booking.wopeCare?.plan && booking.wopeCare.plan !== 'none'
+      ? recomputedWopeCareCost
+      : undefined,
     ...extra,
   });
 
-  const handleConfirmNoPayment = () => {
-    updateBooking(booking.id, buildUpdatedFields());
-    notifyBookingEvent('booking_modified', booking);
-    setMode('view');
+  const handleConfirmNoPayment = async () => {
+    setIsProcessingPayment(true);
+    setPaymentError(null);
+    try {
+      await modifyBooking(booking.id, buildUpdatedFields({ amountCharged: 0 }));
+      await refreshBookings();
+      setMode('view');
+    } catch (e) {
+      setPaymentError(e.message || 'Something went wrong. Please try again.');
+    } finally {
+      setIsProcessingPayment(false);
+    }
   };
 
   const handlePayDifference = async () => {
     setIsProcessingPayment(true);
     setPaymentError(null);
+    let reference = null;
     try {
-      const reference = await payWithPaystack(difference);
-      updateBooking(booking.id, buildUpdatedFields({ paystackReference: reference }));
-      notifyBookingEvent('booking_modified', booking);
+      reference = await payWithPaystack(difference);
+      await modifyBooking(booking.id, buildUpdatedFields({ paystackReference: reference, amountCharged: difference }));
+      await refreshBookings();
       setMode('view');
     } catch (e) {
-      setPaymentError(e.message || 'Something went wrong. Please try again.');
+      // A failure after `reference` is set means the charge itself already
+      // went through (payWithPaystack only resolves post-verification) -
+      // modifyBooking is what failed. Retrying "Pay" here would charge the
+      // renter a second time for the same change, so this must read as a
+      // "contact support" case, never as a plain "try again".
+      if (reference) {
+        setPaymentError(`Your payment (ref: ${reference}) went through, but we couldn't confirm the change. Please message support with this reference - don't pay again.`);
+      } else {
+        setPaymentError(e.message || 'Something went wrong. Please try again.');
+      }
     } finally {
       setIsProcessingPayment(false);
     }
@@ -511,6 +545,43 @@ export default function BookingDetailScreen() {
               )}
             </View>
           </View>
+        </View>
+      )}
+
+      {mode === 'view' && modifications && modifications.length > 0 && (
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Trip Changes</Text>
+          {modifications.map((mod, i) => (
+            <View key={mod.id} style={[styles.modificationEntry, i === modifications.length - 1 && styles.modificationEntryLast]}>
+              <Text style={styles.modificationDate}>{formatDate(mod.created_at)}</Text>
+              {(mod.old_start_date !== mod.new_start_date || mod.old_end_date !== mod.new_end_date) && (
+                <View style={styles.row}>
+                  <Text style={styles.rowLabel}>Dates</Text>
+                  <View>
+                    <Text style={styles.modificationOldValue}>
+                      {formatDate(mod.old_start_date)} · {mod.old_pickup_time} — {formatDate(mod.old_end_date)} · {mod.old_return_time}
+                    </Text>
+                    <Text style={styles.rowValue}>
+                      {formatDate(mod.new_start_date)} · {mod.new_pickup_time} — {formatDate(mod.new_end_date)} · {mod.new_return_time}
+                    </Text>
+                  </View>
+                </View>
+              )}
+              <View style={styles.row}>
+                <Text style={styles.rowLabel}>Total</Text>
+                <View>
+                  <Text style={styles.modificationOldValue}>{formatCurrency(mod.old_total_cost, activeCurrency)}</Text>
+                  <Text style={styles.rowValue}>{formatCurrency(mod.new_total_cost, activeCurrency)}</Text>
+                </View>
+              </View>
+              {mod.amount_charged !== 0 && (
+                <View style={[styles.row, styles.rowLast]}>
+                  <Text style={styles.rowLabel}>{mod.amount_charged > 0 ? 'Amount Charged' : 'Credit Owed'}</Text>
+                  <Text style={styles.rowValue}>{formatCurrency(Math.abs(mod.amount_charged), activeCurrency)}</Text>
+                </View>
+              )}
+            </View>
+          ))}
         </View>
       )}
 
@@ -1052,6 +1123,33 @@ function createStyles(colors) {
     height: 1,
     backgroundColor: colors.border,
     marginBottom: 12,
+  },
+  modificationEntry: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingBottom: 12,
+    marginBottom: 12,
+  },
+  modificationEntryLast: {
+    borderBottomWidth: 0,
+    paddingBottom: 0,
+    marginBottom: 0,
+  },
+  modificationDate: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 11,
+    color: colors.textSubtle,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+    marginBottom: 10,
+  },
+  modificationOldValue: {
+    fontFamily: FONTS.regular,
+    fontSize: 12,
+    color: colors.textSubtle,
+    textDecorationLine: 'line-through',
+    textAlign: 'right',
+    marginBottom: 2,
   },
   noPaymentNote: {
     fontFamily: FONTS.regular,

@@ -60,6 +60,24 @@ export async function getUserBookings(userId) {
 }
 
 /**
+ * Modification history for one booking (old vs new dates/locations/cost,
+ * amount charged) - written by the modify-booking Edge Function whenever
+ * app/booking/[id].js's "Modify Booking" flow saves a change. RLS on
+ * booking_modifications already scopes this to the caller's own booking
+ * (or admin/support), so no extra filtering is needed here beyond the
+ * booking_id itself.
+ */
+export async function getBookingModifications(bookingId) {
+  const { data, error } = await supabase
+    .from('booking_modifications')
+    .select('*')
+    .eq('booking_id', bookingId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+/**
  * Bookings for a vendor. Explicitly lists every column except renter_id -
  * "excludes renter personal info" per the spec - rather than `select('*')`.
  * This is the concrete fix for the gap flagged in 0002_rls_policies.sql:
