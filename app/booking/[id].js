@@ -282,8 +282,13 @@ export default function BookingDetailScreen() {
     return calculateWopeCareCost(car.pricePerDay, plan, days);
   }, [car, days, booking?.wopeCare?.plan]);
 
-  const recomputedTotal = useMemo(() => {
-    if (!car || !pricing || !days) return booking?.totalCost ?? 0;
+  // Individual components exposed (not just the combined total) - modifyBooking
+  // needs to persist each of rental_cost/addons_cost/delivery_fee/
+  // security_deposit as its own column, same shape checkout/payment.js's
+  // original booking insert already writes.
+  const recomputedBreakdown = useMemo(() => {
+    const fallback = { rentalCost: 0, addonsCost: 0, deliveryFee: 0, securityDeposit: 0, total: booking?.totalCost ?? 0 };
+    if (!car || !pricing || !days) return fallback;
     const rentalCost = pricing.rentalCost;
     // booking.addons ({name, days}[]) is the current shape; bookings made
     // before per-addon day counts existed only have booking.addonNames
@@ -305,9 +310,11 @@ export default function BookingDetailScreen() {
     const isSelfDrive = car.drivenBy === 'Self-drive';
     const deliveryFee = isSelfDrive ? getSelfDriveDeliveryFee() : 0;
     const securityDeposit = calculateSecurityDeposit(subtotal, car.drivenBy);
-    return subtotal + deliveryFee + securityDeposit + recomputedWopeCareCost;
+    const total = subtotal + deliveryFee + securityDeposit + recomputedWopeCareCost;
+    return { rentalCost, addonsCost, deliveryFee, securityDeposit, total };
   }, [car, pricing, days, booking, originalDays, recomputedWopeCareCost]);
 
+  const recomputedTotal = recomputedBreakdown.total;
   const difference = recomputedTotal - (booking?.totalCost ?? 0);
 
   const minDays = car ? getMinBookingDays(car.drivenBy) : 1;

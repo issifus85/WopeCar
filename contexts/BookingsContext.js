@@ -118,6 +118,65 @@ export function BookingsProvider({ children }) {
     });
   }, []);
 
+  // Routes through the real modify-booking Edge Function - this used to
+  // just be a local updateBooking() call (patches AsyncStorage only, never
+  // Supabase), so a genuine Paystack-charged trip extension would silently
+  // revert on the very next refreshBookings() (Supabase rows win there)
+  // and never appear in this device's own history, the web admin panel, or
+  // the in-app admin surface - all three read the same live bookings row.
+  // The Edge Function re-verifies any paystackReference against Paystack
+  // directly and writes a durable booking_modifications row (old vs new
+  // dates/cost) alongside the bookings update itself, which is what
+  // getBookingModifications() below reads back for the "Trip Changes"
+  // history section. Local state is updated optimistically with the same
+  // patch that was just confirmed written, then trued up by the caller's
+  // own refreshBookings() (app/booking/[id].js already calls this on
+  // focus).
+  const modifyBooking = useCallback(async (id, fields) => {
+    const { data: result, error } = await supabase.functions.invoke('modify-booking', {
+      body: {
+        bookingId: id,
+        startDate: fields.startDate,
+        endDate: fields.endDate,
+        pickupTime: fields.pickupTime,
+        returnTime: fields.returnTime,
+        pickupLocation: fields.pickupLocation,
+        returnLocation: fields.returnLocation,
+        rentalCost: fields.rentalCost,
+        addonsCost: fields.addonsCost,
+        deliveryFee: fields.deliveryFee,
+        securityDeposit: fields.securityDeposit,
+        totalCost: fields.totalCost,
+        billableDays: fields.billableDays,
+        wopecareTotalCost: fields.wopecareTotalCost,
+        paystackReference: fields.paystackReference,
+        amountCharged: fields.amountCharged,
+      },
+    });
+    if (error) throw new Error(await edgeFunctionErrorMessage(error));
+    if (result?.error) throw new Error(result.error);
+
+    setBookings((prev) => {
+      const next = prev.map((b) => (b.id === id ? {
+        ...b,
+        startDate: fields.startDate,
+        endDate: fields.endDate,
+        pickupTime: fields.pickupTime,
+        returnTime: fields.returnTime,
+        pickupLocation: fields.pickupLocation,
+        returnLocation: fields.returnLocation,
+        totalCost: fields.totalCost,
+        wopeCare: fields.wopecareTotalCost != null && b.wopeCare?.plan && b.wopeCare.plan !== 'none'
+          ? { ...b.wopeCare, totalCost: fields.wopecareTotalCost }
+          : b.wopeCare,
+      } : b));
+      bookingsStorage.setBookings(next);
+      return next;
+    });
+
+    return result.modification;
+  }, []);
+
   // Routes through the same cancel-booking Edge Function the admin apps use
   // (services/adminBookingsApi.js), so the tiered cancellation-refund policy
   // (Settings > Cancellation Policy) and the real Paystack refund are
@@ -146,7 +205,7 @@ export function BookingsProvider({ children }) {
   }, []);
 
   return (
-    <BookingsContext.Provider value={{ bookings, isLoading, addBooking, updateBooking, cancelBooking, refreshBookings }}>
+    <BookingsContext.Provider value={{ bookings, isLoading, addBooking, updateBooking, modifyBooking, cancelBooking, refreshBookings }}>
       {children}
     </BookingsContext.Provider>
   );
