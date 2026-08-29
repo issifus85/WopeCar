@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -23,7 +24,8 @@ export default function VendorApplyScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, isLoading: isAuthLoading } = useAuth();
   const { updateSetting } = useSettings();
-  const { vendorProfile, isLoading: isVendorLoading, refreshVendorProfile } = useVendor();
+  const { vendorProfile, isLoading: isVendorLoading, hasLoadError, refreshVendorProfile, refreshVendorData } = useVendor();
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
 
   // Reachable via a direct deep link, not just the Dashboard's own guard -
   // this screen needs its own auth check too, since Vendor Mode never had
@@ -57,6 +59,23 @@ export default function VendorApplyScreen() {
       router.replace('/vendor');
     }
   }, [isAuthLoading, isVendorLoading, user, vendorProfile]);
+
+  // Manual escape hatch, separate from the automatic check above - covers
+  // any case where this screen is reached while VendorContext's own copy
+  // of vendorProfile is stale/null for a reason other than "genuinely no
+  // vendor row yet" (a failed fetch, per hasLoadError below, or simply
+  // switching into an account whose vendor data hasn't loaded on this
+  // device yet). Re-running the full load (not just the profile) means an
+  // existing vendor who taps this lands on a Dashboard that already has
+  // their real cars/bookings, not one that has to fetch them again.
+  const handleCheckExistingStatus = async () => {
+    setIsCheckingStatus(true);
+    try {
+      await refreshVendorData();
+    } finally {
+      setIsCheckingStatus(false);
+    }
+  };
 
   const [type, setType] = useState('individual');
   const [name, setName] = useState(user?.name ?? '');
@@ -95,12 +114,38 @@ export default function VendorApplyScreen() {
     );
   }
 
+  // vendorProfile is null here, but that's not proof this user has no
+  // vendor row - VendorContext's own fetch may simply have failed (see its
+  // hasLoadError). Showing the application form in that state risks an
+  // already-registered vendor (with real cars/bookings) filling out and
+  // submitting a fresh application instead of just reaching their existing
+  // account - so this state gets its own explicit retry, not the form.
+  if (hasLoadError) {
+    return (
+      <View style={styles.centerState}>
+        <Ionicons name="cloud-offline-outline" size={40} color={colors.disabled} />
+        <Text style={styles.errorText}>
+          Couldn't confirm whether you're already registered as a vendor. Check your connection and try again.
+        </Text>
+        <TouchableOpacity style={styles.retryButton} onPress={handleCheckExistingStatus} disabled={isCheckingStatus}>
+          <Text style={styles.retryButtonText}>{isCheckingStatus ? 'Checking…' : 'Retry'}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <VendorHeader title="Become a Vendor" subtitle="Quick application to start listing your car" onBack={() => router.back()} />
 
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <TouchableOpacity onPress={handleCheckExistingStatus} disabled={isCheckingStatus} style={styles.alreadyVendorRow}>
+            <Text style={styles.alreadyVendorText}>
+              {isCheckingStatus ? 'Checking your account…' : 'Already registered as a vendor? Tap to check your status'}
+            </Text>
+          </TouchableOpacity>
+
           <View style={styles.segmentedRow}>
             <TouchableOpacity
               style={[styles.segment, type === 'individual' && styles.segmentActive]}
@@ -182,6 +227,38 @@ function createStyles(colors) {
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.background,
+      gap: 12,
+      paddingHorizontal: 32,
+    },
+    errorText: {
+      fontFamily: FONTS.regular,
+      fontSize: 14,
+      color: colors.textSubtle,
+      textAlign: 'center',
+      lineHeight: 20,
+    },
+    retryButton: {
+      backgroundColor: colors.teal,
+      borderRadius: 12,
+      paddingHorizontal: 24,
+      paddingVertical: 13,
+      marginTop: 4,
+    },
+    retryButtonText: {
+      fontFamily: FONTS.semiBold,
+      color: colors.white,
+      fontSize: 14,
+    },
+    alreadyVendorRow: {
+      alignItems: 'center',
+      paddingVertical: 10,
+      marginBottom: 14,
+    },
+    alreadyVendorText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 13,
+      color: colors.teal,
+      textAlign: 'center',
     },
     scrollContent: {
       padding: 20,
