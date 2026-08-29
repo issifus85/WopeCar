@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { StyleSheet, View, FlatList, ActivityIndicator, Text, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, FlatList, ActivityIndicator, Text, TouchableOpacity, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
@@ -12,7 +12,7 @@ export default function VendorFleetScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { cars, carEarningsThisMonth, isLoading } = useVendor();
+  const { cars, carEarningsThisMonth, isLoading, isRefreshing, refreshVendorData } = useVendor();
 
   if (isLoading) {
     return (
@@ -56,6 +56,7 @@ export default function VendorFleetScreen() {
           )}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refreshVendorData} tintColor={colors.teal} colors={[colors.teal]} />}
         />
       )}
     </View>

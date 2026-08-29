@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import * as vendorCarsApi from '../services/vendorCarsApi';
 import * as vendorBookingsApi from '../services/vendorBookingsApi';
 import { DEFAULT_AVAILABILITY_SETTINGS } from '../services/vendorMockData';
+import { useAuth } from './AuthContext';
 
 const EMPTY_VENDOR_DATA = {
   cars: [],
@@ -41,47 +42,89 @@ const VendorContext = createContext(null);
 // A single slow/hung call here (most likely getCurrentUser()'s
 // supabase.auth.getUser() - a real network round-trip with no built-in
 // timeout, inside every getVendorProfile() call below) must never block
-// Vendor Mode from loading for the rest of the app session. This effect
-// has an empty dependency array and VendorProvider sits above the whole
-// Stack, so it runs exactly once per session - with no timeout, a single
-// dropped request (poor connectivity, the app backgrounding mid-request)
-// would leave isLoading=true permanently, and no amount of retrying
-// "Switch to Host Mode" could ever un-stick it, since nothing here
-// re-runs on navigation. 12s comfortably covers a slow mobile network
-// without making a genuine failure feel broken.
+// Vendor Mode from loading for the rest of the app session. 12s comfortably
+// covers a slow mobile network without making a genuine failure feel
+// broken. Unlike a plain `promise.catch(() => fallback)`, this also reports
+// whether the fallback was actually used (`failed: true`) - a real vendor
+// with real cars/bookings whose fetch merely timed out once must never be
+// silently, indistinguishably treated as "a brand-new vendor with zero
+// cars" (see the `hasLoadError` derived value below, and its use in
+// app/vendor/(tabs)/index.js to avoid showing that vendor a "list your
+// first car" welcome card they've already outgrown).
 function withTimeout(promise, fallback, ms = 12000) {
-  return Promise.race([
-    promise,
-    new Promise((resolve) => setTimeout(() => resolve(fallback), ms)),
-  ]);
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      resolve({ value: fallback, failed: true });
+    }, ms);
+    promise
+      .then((value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve({ value, failed: false });
+      })
+      .catch(() => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve({ value: fallback, failed: true });
+      });
+  });
 }
 
 export function VendorProvider({ children }) {
+  const { user } = useAuth();
   const [data, setData] = useState(EMPTY_VENDOR_DATA);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [vendorProfile, setVendorProfile] = useState(null);
+  const [hasLoadError, setHasLoadError] = useState(false);
 
-  useEffect(() => {
-    async function load() {
-      const [cars, profile, bookingsSplit] = await Promise.all([
-        withTimeout(vendorCarsApi.getMyCars().catch(() => []), []),
-        withTimeout(vendorCarsApi.getVendorProfile().catch(() => null), null),
-        withTimeout(
-          vendorBookingsApi.getVendorBookingsSplit().catch(() => ({ bookingRequests: [], bookingHistory: [] })),
-          { bookingRequests: [], bookingHistory: [] }
-        ),
-      ]);
-      const blockedDates = await withTimeout(
-        vendorCarsApi.getBlockedDatesForCars(cars.map((c) => c.id)).catch(() => ({})),
-        {}
-      );
-      const earningsHistory = deriveEarningsHistory(bookingsSplit.bookingHistory);
-      setData({ cars, blockedDates, earningsHistory, ...bookingsSplit });
-      setVendorProfile(profile);
-      setIsLoading(false);
-    }
-    load();
+  const loadVendorData = useCallback(async () => {
+    const [carsResult, profileResult, bookingsResult] = await Promise.all([
+      withTimeout(vendorCarsApi.getMyCars(), []),
+      withTimeout(vendorCarsApi.getVendorProfile(), null),
+      withTimeout(vendorBookingsApi.getVendorBookingsSplit(), { bookingRequests: [], bookingHistory: [] }),
+    ]);
+    const cars = carsResult.value;
+    const bookingsSplit = bookingsResult.value;
+    const blockedDatesResult = await withTimeout(vendorCarsApi.getBlockedDatesForCars(cars.map((c) => c.id)), {});
+    const earningsHistory = deriveEarningsHistory(bookingsSplit.bookingHistory);
+    setData({ cars, blockedDates: blockedDatesResult.value, earningsHistory, ...bookingsSplit });
+    setVendorProfile(profileResult.value);
+    setHasLoadError(carsResult.failed || profileResult.failed || bookingsResult.failed || blockedDatesResult.failed);
   }, []);
+
+  // Depends on user?.id (not the whole `user` object, which may get a new
+  // identity on every AuthContext render even for the same session) so a
+  // slow cold-start session restore - the most likely real cause of a
+  // vendor's own fetch racing an not-yet-ready auth.uid() - gets one
+  // automatic retry the moment auth actually resolves, instead of the
+  // permanent, un-refreshable empty state this previously produced (empty
+  // dependency array, fired exactly once at VendorProvider mount).
+  useEffect(() => {
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    loadVendorData().finally(() => setIsLoading(false));
+  }, [user?.id, loadVendorData]);
+
+  // Manual retry path - wired to the Dashboard's pull-to-refresh and its
+  // "Couldn't load your data" banner, so a vendor who hits a one-off fetch
+  // failure (see withTimeout above) isn't stuck until they relaunch the app.
+  const refreshVendorData = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await loadVendorData();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [loadVendorData]);
 
   // Re-fetches just the bookings split from Supabase - called after
   // accept/decline (below) so the requests list, history, and earnings
@@ -217,9 +260,12 @@ export function VendorProvider({ children }) {
   const value = useMemo(() => ({
     ...data,
     isLoading,
+    isRefreshing,
+    hasLoadError,
     vendorProfile,
     isVendorApproved: !!vendorProfile?.isApproved,
     refreshVendorProfile,
+    refreshVendorData,
     fleetSize: data.cars.length,
     currentMonthEarnings,
     bookingsThisMonthCount,
@@ -233,7 +279,7 @@ export function VendorProvider({ children }) {
     respondToBookingRequest,
     refreshBookings,
   }), [
-    data, isLoading, vendorProfile, refreshVendorProfile, currentMonthEarnings, bookingsThisMonthCount, carEarningsThisMonth, getAvailabilitySettings,
+    data, isLoading, isRefreshing, hasLoadError, vendorProfile, refreshVendorProfile, refreshVendorData, currentMonthEarnings, bookingsThisMonthCount, carEarningsThisMonth, getAvailabilitySettings,
     updateCar, addCar, setAvailabilitySettings, setBlockedDates, saveVendorProfile,
     respondToBookingRequest, refreshBookings,
   ]);

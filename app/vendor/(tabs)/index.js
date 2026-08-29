@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../../constants/theme';
@@ -25,6 +25,8 @@ export default function VendorDashboardScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const {
     isLoading,
+    isRefreshing,
+    hasLoadError,
     vendorProfile,
     isVendorApproved,
     fleetSize,
@@ -32,6 +34,7 @@ export default function VendorDashboardScreen() {
     bookingsThisMonthCount,
     bookingRequests,
     earningsHistory,
+    refreshVendorData,
   } = useVendor();
   const { settings, updateSetting } = useSettings();
   const { user, isLoading: isAuthLoading } = useAuth();
@@ -45,6 +48,13 @@ export default function VendorDashboardScreen() {
   // check. No vendor row (e.g. a stale pre-gate appMode setting, or a direct
   // deep link with none) bounces to the application screen instead of
   // force-syncing appMode - see app/vendor/apply.js.
+  //
+  // `vendorProfile` can also be null because VendorContext's own fetch
+  // timed out/failed (see contexts/VendorContext.js's withTimeout), not
+  // because this vendor genuinely has no vendor row - an already-approved
+  // vendor with a real fleet hitting a one-off network hiccup must never be
+  // bounced into the "Become a Vendor" application form. `hasLoadError`
+  // distinguishes the two; only a confirmed-empty profile redirects.
   useEffect(() => {
     if (isAuthLoading || isLoading) return;
     if (!user) {
@@ -52,19 +62,42 @@ export default function VendorDashboardScreen() {
       return;
     }
     if (!vendorProfile) {
-      router.replace('/vendor/apply');
+      if (!hasLoadError) router.replace('/vendor/apply');
       return;
     }
     if (settings.appMode !== 'vendor') updateSetting('appMode', 'vendor');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthLoading, isLoading, user, vendorProfile]);
+  }, [isAuthLoading, isLoading, user, vendorProfile, hasLoadError]);
 
   const switchToClientMode = () => {
     updateSetting('appMode', 'client');
     router.replace('/(tabs)/profile');
   };
 
-  if (isAuthLoading || isLoading || !user || !vendorProfile) {
+  if (isAuthLoading || isLoading || !user) {
+    return (
+      <View style={styles.centerState}>
+        <ActivityIndicator size="large" color={colors.teal} />
+      </View>
+    );
+  }
+
+  // Not a genuinely-missing vendor row (that redirects to /vendor/apply
+  // above) - the fetch itself failed. A spinner here would just hang
+  // forever, since nothing auto-retries once `user` stops changing.
+  if (!vendorProfile && hasLoadError) {
+    return (
+      <View style={styles.centerState}>
+        <Ionicons name="cloud-offline-outline" size={40} color={colors.disabled} />
+        <Text style={styles.errorText}>Couldn't load your vendor account. Check your connection and try again.</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={refreshVendorData} disabled={isRefreshing}>
+          <Text style={styles.retryButtonText}>{isRefreshing ? 'Retrying…' : 'Retry'}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (!vendorProfile) {
     return (
       <View style={styles.centerState}>
         <ActivityIndicator size="large" color={colors.teal} />
@@ -88,7 +121,11 @@ export default function VendorDashboardScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refreshVendorData} tintColor={colors.teal} colors={[colors.teal]} />}
+      >
         {!isVendorApproved && (
           <View style={styles.noticeBox}>
             <Ionicons name="information-circle-outline" size={18} color={colors.warning} />
@@ -99,7 +136,22 @@ export default function VendorDashboardScreen() {
           </View>
         )}
 
-        {fleetSize === 0 ? (
+        {hasLoadError && (
+          // vendorProfile did load here (the dedicated retry screen above
+          // handles the case where it didn't) - this means cars/bookings
+          // specifically failed to refresh, which would otherwise silently
+          // read as "this vendor has zero cars/earnings". Pull-to-refresh is
+          // the fix; this just makes clear that's needed instead of implying
+          // the numbers below are final.
+          <View style={styles.noticeBox}>
+            <Ionicons name="cloud-offline-outline" size={18} color={colors.warning} />
+            <Text style={styles.noticeText}>
+              Some of your data couldn't be loaded. Pull down to refresh - the numbers below may be incomplete.
+            </Text>
+          </View>
+        )}
+
+        {fleetSize === 0 && !hasLoadError ? (
           // A brand-new vendor has nothing to show in the earnings card,
           // stats row, or 6-month chart below - GH₵0/0/0 and an empty chart
           // read as "something's broken", not "you haven't started yet". A
@@ -189,6 +241,27 @@ function createStyles(colors) {
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.background,
+      gap: 12,
+      paddingHorizontal: 32,
+    },
+    errorText: {
+      fontFamily: FONTS.regular,
+      fontSize: 14,
+      color: colors.textSubtle,
+      textAlign: 'center',
+      lineHeight: 20,
+    },
+    retryButton: {
+      backgroundColor: colors.teal,
+      borderRadius: 12,
+      paddingHorizontal: 24,
+      paddingVertical: 13,
+      marginTop: 4,
+    },
+    retryButtonText: {
+      fontFamily: FONTS.semiBold,
+      color: colors.white,
+      fontSize: 14,
     },
     header: {
       flexDirection: 'row',
