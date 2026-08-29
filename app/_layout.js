@@ -29,6 +29,7 @@ import { VendorProvider } from '../contexts/VendorContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { ThemeProvider, useAppTheme, toNavigationTheme } from '../contexts/ThemeContext';
 import BiometricGate from '../components/BiometricGate';
+import EnvironmentBanner from '../components/EnvironmentBanner';
 import ErrorBoundary from '../components/ErrorBoundary';
 import SplashVideoScreen from '../components/SplashVideoScreen';
 import supabase from '../services/supabase';
@@ -251,6 +252,7 @@ function RootNavigator({ authRedirectType }) {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
+      <EnvironmentBanner />
       <NavigationThemeProvider value={navTheme}>
         <BiometricGate>
         <Stack screenOptions={{ headerShown: false }}>
