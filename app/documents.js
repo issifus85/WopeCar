@@ -2,12 +2,13 @@ import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert, Linking } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter, useNavigation } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import * as documentsApi from '../services/documentsApi';
+import { pickImage } from '../services/imagePicker';
+import PhotoSourceSheet from '../components/PhotoSourceSheet';
 
 const VERIFICATION_TYPES = [
   { type: 'license_front', label: "Driver's License - Front" },
@@ -96,6 +97,7 @@ export default function DocumentsScreen() {
   const [documents, setDocuments] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [uploadingType, setUploadingType] = useState(null);
+  const [pickerType, setPickerType] = useState(null); // which verification doc type opened the Take Photo/Choose from Library sheet
 
   // Only reached from Profile's menu (pushed from inside the (tabs) group's
   // nested navigator), so the default back button can leave GO_BACK
@@ -136,26 +138,24 @@ export default function DocumentsScreen() {
     Linking.openURL(document.signedUrl);
   };
 
-  const handleUpload = async (type) => {
+  const handleUpload = (type) => {
     if (uploadingType) return;
+    setPickerType(type);
+  };
+
+  const handlePickSource = async (source) => {
+    const type = pickerType;
+    setPickerType(null);
+    if (!type || uploadingType) return;
     // Set before the picker even launches, not just around the upload -
     // otherwise a double-tap while the permission check/picker is still
     // opening can launch two overlapping native pickers, which can leave
     // the picker sheet stuck open and unresponsive.
     setUploadingType(type);
     try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Permission needed', 'Please allow photo library access to upload documents.');
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        quality: 0.7,
-      });
-      if (result.canceled || !result.assets?.[0]) return;
-
-      await documentsApi.uploadDocument(type, result.assets[0].uri);
+      const uri = await pickImage(source);
+      if (!uri) return;
+      await documentsApi.uploadDocument(type, uri);
       load();
     } catch (e) {
       Alert.alert('Upload failed', e.message || 'Could not upload this document. Please try again.');
@@ -188,7 +188,8 @@ export default function DocumentsScreen() {
   const vehicleByCar = groupByCar(documents.vehicle);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
       <Section title="Verification Docs" styles={styles}>
         {verificationDocs.map(({ config, document }, index) => (
           <VerificationRow
@@ -281,6 +282,14 @@ export default function DocumentsScreen() {
         </Section>
       )}
     </ScrollView>
+
+    <PhotoSourceSheet
+      visible={!!pickerType}
+      onClose={() => setPickerType(null)}
+      onChooseCamera={() => handlePickSource('camera')}
+      onChooseLibrary={() => handlePickSource('library')}
+    />
+    </View>
   );
 }
 

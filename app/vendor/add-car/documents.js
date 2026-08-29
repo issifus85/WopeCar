@@ -3,14 +3,15 @@ import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Alert,
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import * as ImagePicker from 'expo-image-picker';
 import { FONTS } from '../../../constants/theme';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 import { useAddCar } from '../../../contexts/AddCarContext';
 import { MONTH_NAMES } from '../../../services/vendorCalendar';
+import { pickImage } from '../../../services/imagePicker';
 import VendorWizardHeader from '../../../components/VendorWizardHeader';
 import CheckoutFooterButton from '../../../components/CheckoutFooterButton';
 import SingleDateModal from '../../../components/SingleDateModal';
+import PhotoSourceSheet from '../../../components/PhotoSourceSheet';
 
 function formatExpiry(iso) {
   if (!iso) return null;
@@ -55,28 +56,27 @@ export default function AddCarDocumentsScreen() {
   const { draft, updateDraft } = useAddCar();
   const [expiryModal, setExpiryModal] = useState(null); // 'roadworthy' | 'insurance' | null
   const [pickingField, setPickingField] = useState(null); // guards against a double-tap launching two overlapping native pickers, which can leave the picker sheet stuck open and unresponsive
+  const [pickerField, setPickerField] = useState(null); // which field opened the Take Photo/Choose from Library sheet
 
   const isValid = !!draft.insurancePolicyNumber.trim()
     && !!draft.roadworthyDocUri && !!draft.roadworthyExpiryDate
     && !!draft.insuranceDocUri && !!draft.insuranceExpiryDate;
 
-  const pickDocument = async (field) => {
+  const pickDocument = (field) => {
     if (pickingField) return;
+    setPickerField(field);
+  };
+
+  const handlePickSource = async (source) => {
+    const field = pickerField;
+    setPickerField(null);
+    if (!field || pickingField) return;
     setPickingField(field);
     try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Permission needed', 'Please allow photo library access to upload documents.');
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        quality: 0.7,
-      });
-      if (result.canceled || !result.assets?.[0]) return;
-      updateDraft({ [field]: result.assets[0].uri });
+      const uri = await pickImage(source);
+      if (uri) updateDraft({ [field]: uri });
     } catch (e) {
-      Alert.alert('Could not open photo library', 'Please try again.');
+      Alert.alert(source === 'camera' ? 'Could not open camera' : 'Could not open photo library', e.message || 'Please try again.');
     } finally {
       setPickingField(null);
     }
@@ -167,6 +167,13 @@ export default function AddCarDocumentsScreen() {
         title="Insurance Expiry Date"
         value={draft.insuranceExpiryDate}
         onApply={(iso) => updateDraft({ insuranceExpiryDate: iso })}
+      />
+
+      <PhotoSourceSheet
+        visible={!!pickerField}
+        onClose={() => setPickerField(null)}
+        onChooseCamera={() => handlePickSource('camera')}
+        onChooseLibrary={() => handlePickSource('library')}
       />
     </View>
   );

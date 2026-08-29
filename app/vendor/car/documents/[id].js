@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Alert, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
-import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../../../constants/theme';
@@ -9,8 +8,10 @@ import { useAppTheme } from '../../../../contexts/ThemeContext';
 import { useVendor } from '../../../../contexts/VendorContext';
 import { getCarDocuments, uploadCarDocument } from '../../../../services/documentsApi';
 import { MONTH_NAMES } from '../../../../services/vendorCalendar';
+import { pickImage } from '../../../../services/imagePicker';
 import VendorHeader from '../../../../components/VendorHeader';
 import SingleDateModal from '../../../../components/SingleDateModal';
+import PhotoSourceSheet from '../../../../components/PhotoSourceSheet';
 
 function formatExpiry(iso) {
   if (!iso) return null;
@@ -85,6 +86,7 @@ export default function VendorCarDocumentsScreen() {
   const [policyDraft, setPolicyDraft] = useState('');
   const [isSavingPolicy, setIsSavingPolicy] = useState(false);
   const [pickingType, setPickingType] = useState(null); // 'roadworthy' | 'insurance' | null
+  const [pickerType, setPickerType] = useState(null); // which doc type opened the Take Photo/Choose from Library sheet
   const [expiryDrafts, setExpiryDrafts] = useState({ roadworthy: null, insurance: null });
   const [expiryModal, setExpiryModal] = useState(null); // 'roadworthy' | 'insurance' | null
 
@@ -140,23 +142,25 @@ export default function VendorCarDocumentsScreen() {
     }
   };
 
-  const pickAndUpload = async (type) => {
+  const pickAndUpload = (type) => {
     if (pickingType) return;
     const label = type === 'roadworthy' ? 'Roadworthy Certificate' : 'Insurance Document';
     if (!expiryDrafts[type]) {
       Alert.alert('Set an expiry date first', `Tap the expiry field below to set ${label}'s expiry date before uploading.`);
       return;
     }
+    setPickerType(type);
+  };
+
+  const handlePickSource = async (source) => {
+    const type = pickerType;
+    setPickerType(null);
+    if (!type || pickingType) return;
     setPickingType(type);
     try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Permission needed', 'Please allow photo library access to upload documents.');
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
-      if (result.canceled || !result.assets?.[0]) return;
-      await uploadCarDocument(car.id, type, result.assets[0].uri, expiryDrafts[type]);
+      const uri = await pickImage(source);
+      if (!uri) return;
+      await uploadCarDocument(car.id, type, uri, expiryDrafts[type]);
       const refreshed = await getCarDocuments(car.id);
       setDocs(refreshed);
     } catch (e) {
@@ -252,6 +256,13 @@ export default function VendorCarDocumentsScreen() {
         title="Insurance Expiry Date"
         value={expiryDrafts.insurance}
         onApply={(iso) => setExpiryDrafts((prev) => ({ ...prev, insurance: iso }))}
+      />
+
+      <PhotoSourceSheet
+        visible={!!pickerType}
+        onClose={() => setPickerType(null)}
+        onChooseCamera={() => handlePickSource('camera')}
+        onChooseLibrary={() => handlePickSource('library')}
       />
     </View>
   );

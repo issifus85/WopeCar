@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import {
   StyleSheet, Text, View, TextInput, TouchableOpacity, ActivityIndicator,
-  ScrollView, Alert, Share, Pressable, KeyboardAvoidingView, Platform,
+  ScrollView, Alert, Share, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter, useNavigation, useLocalSearchParams } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { uploadDocument } from '../services/documentsApi';
+import { pickImage } from '../services/imagePicker';
 import OptionPickerModal from '../components/OptionPickerModal';
+import PhotoSourceSheet from '../components/PhotoSourceSheet';
 
 function getVerificationColors(colors) {
   return {
@@ -94,12 +95,10 @@ export default function AccountScreen() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-  const [isPickingAvatar, setIsPickingAvatar] = useState(false); // guards against a double-tap launching two overlapping native pickers, which can leave the picker sheet stuck open and unresponsive
   const [error, setError] = useState(null);
-  const [showPhotoSourceModal, setShowPhotoSourceModal] = useState(false);
+  const [photoPickerTarget, setPhotoPickerTarget] = useState(null); // 'avatar' | 'nationalId' | null - which upload opened the Take Photo/Choose from Library sheet
   const [isIdTypePickerVisible, setIsIdTypePickerVisible] = useState(false);
   const [isUploadingIdDoc, setIsUploadingIdDoc] = useState(false);
-  const [isPickingIdDoc, setIsPickingIdDoc] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -195,98 +194,49 @@ export default function AccountScreen() {
     }
   };
 
-  const commitAvatar = async (uri) => {
-    setIsUploadingAvatar(true);
-    setError(null);
+  const handlePickAvatar = () => {
+    if (photoPickerTarget || isUploadingAvatar) return;
+    setPhotoPickerTarget('avatar');
+  };
+
+  const handleUploadIdDocument = () => {
+    if (photoPickerTarget || isUploadingIdDoc) return;
+    setPhotoPickerTarget('nationalId');
+  };
+
+  const handlePickSource = async (source) => {
+    const target = photoPickerTarget;
+    setPhotoPickerTarget(null);
+    if (!target) return;
+
+    let uri;
     try {
-      await uploadAvatar(uri);
+      uri = await pickImage(source, target === 'avatar' ? { allowsEditing: true, aspect: [1, 1] } : undefined);
     } catch (e) {
-      setError(e.message || 'Could not upload your photo. Please try again.');
-    } finally {
-      setIsUploadingAvatar(false);
+      Alert.alert(source === 'camera' ? 'Could not open camera' : 'Could not open photo library', e.message || 'Please try again.');
+      return;
     }
-  };
+    if (!uri) return;
 
-  const pickFromLibrary = async () => {
-    if (isPickingAvatar) return;
-    setIsPickingAvatar(true);
-    try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Permission needed', 'Please allow photo library access to update your photo.');
-        return;
+    if (target === 'avatar') {
+      setIsUploadingAvatar(true);
+      setError(null);
+      try {
+        await uploadAvatar(uri);
+      } catch (e) {
+        setError(e.message || 'Could not upload your photo. Please try again.');
+      } finally {
+        setIsUploadingAvatar(false);
       }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        quality: 0.7,
-        allowsEditing: true,
-        aspect: [1, 1],
-      });
-      if (result.canceled || !result.assets?.[0]) return;
-      await commitAvatar(result.assets[0].uri);
-    } catch (e) {
-      Alert.alert('Could not open photo library', 'Please try again.');
-    } finally {
-      setIsPickingAvatar(false);
-    }
-  };
-
-  const pickFromCamera = async () => {
-    if (isPickingAvatar) return;
-    setIsPickingAvatar(true);
-    try {
-      const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Permission needed', 'Please allow camera access to take a new photo.');
-        return;
-      }
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['images'],
-        quality: 0.7,
-        allowsEditing: true,
-        aspect: [1, 1],
-      });
-      if (result.canceled || !result.assets?.[0]) return;
-      await commitAvatar(result.assets[0].uri);
-    } catch (e) {
-      Alert.alert('Could not open camera', 'Please try again.');
-    } finally {
-      setIsPickingAvatar(false);
-    }
-  };
-
-  const handlePickAvatar = () => setShowPhotoSourceModal(true);
-
-  const handleChooseCamera = () => {
-    setShowPhotoSourceModal(false);
-    pickFromCamera();
-  };
-
-  const handleChooseLibrary = () => {
-    setShowPhotoSourceModal(false);
-    pickFromLibrary();
-  };
-
-  // Mirrors checkout/form.js's pickImage() - library-only, no camera sheet,
-  // matching this app's existing identity-document upload convention.
-  const handleUploadIdDocument = async () => {
-    if (isPickingIdDoc) return;
-    setIsPickingIdDoc(true);
-    try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Permission needed', 'Please allow photo library access to upload a copy of your ID.');
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
-      if (result.canceled || !result.assets?.[0]) return;
+    } else {
       setIsUploadingIdDoc(true);
-      await uploadDocument('national_id', result.assets[0].uri);
-    } catch (e) {
-      Alert.alert('Could not upload your ID', e.message || 'Please try again.');
-    } finally {
-      setIsPickingIdDoc(false);
-      setIsUploadingIdDoc(false);
+      try {
+        await uploadDocument('national_id', uri);
+      } catch (e) {
+        Alert.alert('Could not upload your ID', e.message || 'Please try again.');
+      } finally {
+        setIsUploadingIdDoc(false);
+      }
     }
   };
 
@@ -328,7 +278,7 @@ export default function AccountScreen() {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.headerCard}>
-          <TouchableOpacity onPress={handlePickAvatar} disabled={isUploadingAvatar || isPickingAvatar} style={styles.avatarWrap}>
+          <TouchableOpacity onPress={handlePickAvatar} disabled={isUploadingAvatar || !!photoPickerTarget} style={styles.avatarWrap}>
             {user.avatar ? (
               <Image source={{ uri: user.avatar }} style={styles.avatarImage} />
             ) : (
@@ -464,7 +414,7 @@ export default function AccountScreen() {
             colors={colors}
           />
           <Field label="Expiry Date" value={form.nationalIdExpiry} onChangeText={updateField('nationalIdExpiry')} placeholder="YYYY-MM-DD" styles={styles} colors={colors} />
-          <TouchableOpacity style={styles.uploadButton} onPress={handleUploadIdDocument} disabled={isPickingIdDoc || isUploadingIdDoc}>
+          <TouchableOpacity style={styles.uploadButton} onPress={handleUploadIdDocument} disabled={isUploadingIdDoc || !!photoPickerTarget}>
             {isUploadingIdDoc ? (
               <ActivityIndicator size="small" color={colors.teal} />
             ) : (
@@ -510,36 +460,13 @@ export default function AccountScreen() {
       </ScrollView>
       </KeyboardAvoidingView>
 
-      {showPhotoSourceModal && (
-        // Deliberately not RN's <Modal> - that mounts its content in a
-        // separate native view controller, and dismissing it in the same
-        // gesture that then presents the camera/library picker races that
-        // picker's own native presentation (confirmed broken on-device:
-        // neither camera nor library opened). A plain absolutely-positioned
-        // overlay inside this same screen has no such transition to race.
-        <View style={styles.sheetBackdrop}>
-          <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setShowPhotoSourceModal(false)} />
-          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.sheetHeader}>
-              <TouchableOpacity onPress={() => setShowPhotoSourceModal(false)} hitSlop={10}>
-                <Ionicons name="close" size={24} color={colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.sheetTitle}>Update Profile Photo</Text>
-
-            <TouchableOpacity style={styles.sheetOptionButton} onPress={handleChooseCamera}>
-              <Ionicons name="camera-outline" size={18} color={colors.textPrimary} />
-              <Text style={styles.sheetOptionButtonText}>Take Photo</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.sheetOptionButton, styles.sheetOptionButtonPrimary]} onPress={handleChooseLibrary}>
-              <Ionicons name="images-outline" size={18} color={colors.white} />
-              <Text style={styles.sheetOptionButtonTextPrimary}>Choose from Library</Text>
-            </TouchableOpacity>
-          </Pressable>
-        </View>
-      )}
+      <PhotoSourceSheet
+        visible={!!photoPickerTarget}
+        title={photoPickerTarget === 'avatar' ? 'Update Profile Photo' : 'Upload ID Copy'}
+        onClose={() => setPhotoPickerTarget(null)}
+        onChooseCamera={() => handlePickSource('camera')}
+        onChooseLibrary={() => handlePickSource('library')}
+      />
 
       <OptionPickerModal
         visible={isIdTypePickerVisible}
@@ -818,57 +745,6 @@ function createStyles(colors) {
     fontFamily: FONTS.semiBold,
     color: colors.error,
     fontSize: 15,
-  },
-  sheetBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-    zIndex: 10,
-  },
-  sheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    paddingBottom: 30,
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-  },
-  sheetTitle: {
-    fontFamily: FONTS.bold,
-    fontSize: 18,
-    color: colors.textPrimary,
-    textAlign: 'center',
-    marginTop: -8,
-    marginBottom: 20,
-  },
-  sheetOptionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    borderRadius: 12,
-    paddingVertical: 15,
-    marginBottom: 12,
-  },
-  sheetOptionButtonText: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 15,
-    color: colors.textPrimary,
-  },
-  sheetOptionButtonPrimary: {
-    borderWidth: 0,
-    backgroundColor: colors.teal,
-    marginBottom: 0,
-  },
-  sheetOptionButtonTextPrimary: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 15,
-    color: colors.white,
   },
   });
 }

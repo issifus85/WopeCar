@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Image } from 'react-native';
 import { useRouter } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useVendor } from '../../contexts/VendorContext';
 import { getMyVendorDocuments, uploadVendorDocument } from '../../services/vendorDocumentsApi';
+import { pickImage } from '../../services/imagePicker';
 import VendorHeader from '../../components/VendorHeader';
 import VendorStatusBadge from '../../components/VendorStatusBadge';
+import PhotoSourceSheet from '../../components/PhotoSourceSheet';
 
 const STATUS_LABEL = {
   not_submitted: 'Not Submitted',
@@ -53,7 +54,7 @@ export default function VendorDocumentVerificationScreen() {
   const [docs, setDocs] = useState({});
   const [isInitialized, setIsInitialized] = useState(false);
   const [uploadingType, setUploadingType] = useState(null);
-  const [isPicking, setIsPicking] = useState(false); // guards against a double-tap launching two overlapping native pickers, which can leave the picker sheet stuck open and unresponsive
+  const [pickerType, setPickerType] = useState(null); // which document type opened the Take Photo/Choose from Library sheet
   const [error, setError] = useState(null);
 
   const loadDocs = useCallback(async () => {
@@ -67,27 +68,9 @@ export default function VendorDocumentVerificationScreen() {
 
   const isBusinessVendor = vendorProfile?.businessInfo?.type === 'business';
 
-  const pickImage = async (onPicked) => {
-    if (isPicking) return;
-    setIsPicking(true);
-    try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Permission needed', 'Please allow photo library access to upload documents.');
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        quality: 0.7,
-      });
-      if (!result.canceled && result.assets?.[0]) {
-        onPicked(result.assets[0].uri);
-      }
-    } catch (e) {
-      Alert.alert('Could not open photo library', 'Please try again.');
-    } finally {
-      setIsPicking(false);
-    }
+  const handlePick = (type) => {
+    if (uploadingType) return;
+    setPickerType(type);
   };
 
   // Every upload submits immediately (no separate submit step, matching the
@@ -95,10 +78,15 @@ export default function VendorDocumentVerificationScreen() {
   // Storage, flips the matching vendors row to "under_review", then
   // refreshes both the local preview and the shared vendorProfile so the
   // status badge here and on app/vendor/settings.js update together.
-  const handlePick = (type) => pickImage(async (uri) => {
+  const handlePickSource = async (source) => {
+    const type = pickerType;
+    setPickerType(null);
+    if (!type || uploadingType) return;
     setUploadingType(type);
     setError(null);
     try {
+      const uri = await pickImage(source);
+      if (!uri) return;
       await uploadVendorDocument(type, uri);
       await Promise.all([loadDocs(), refreshVendorProfile()]);
     } catch (e) {
@@ -106,7 +94,7 @@ export default function VendorDocumentVerificationScreen() {
     } finally {
       setUploadingType(null);
     }
-  });
+  };
 
   if (isLoading || !isInitialized) {
     return (
@@ -135,7 +123,7 @@ export default function VendorDocumentVerificationScreen() {
             label="Ghana Card - Front"
             value={docs.vendor_id_front}
             isUploading={uploadingType === 'vendor_id_front'}
-            disabled={isPicking}
+            disabled={!!pickerType}
             onPick={() => handlePick('vendor_id_front')}
             styles={styles}
             colors={colors}
@@ -144,7 +132,7 @@ export default function VendorDocumentVerificationScreen() {
             label="Ghana Card - Back"
             value={docs.vendor_id_back}
             isUploading={uploadingType === 'vendor_id_back'}
-            disabled={isPicking}
+            disabled={!!pickerType}
             onPick={() => handlePick('vendor_id_back')}
             styles={styles}
             colors={colors}
@@ -164,7 +152,7 @@ export default function VendorDocumentVerificationScreen() {
               label="Proof of Business Registration"
               value={docs.vendor_business_reg}
               isUploading={uploadingType === 'vendor_business_reg'}
-              disabled={isPicking}
+              disabled={!!pickerType}
               onPick={() => handlePick('vendor_business_reg')}
               styles={styles}
               colors={colors}
@@ -190,6 +178,13 @@ export default function VendorDocumentVerificationScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      <PhotoSourceSheet
+        visible={!!pickerType}
+        onClose={() => setPickerType(null)}
+        onChooseCamera={() => handlePickSource('camera')}
+        onChooseLibrary={() => handlePickSource('library')}
+      />
     </View>
   );
 }

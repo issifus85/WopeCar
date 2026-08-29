@@ -1,15 +1,16 @@
 import { useState, useMemo, useEffect } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Image, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import { getMyVerificationDocumentsByType } from '../../services/documentsApi';
+import { pickImage } from '../../services/imagePicker';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
+import PhotoSourceSheet from '../../components/PhotoSourceSheet';
 
 function splitName(fullName) {
   const parts = (fullName ?? '').trim().split(/\s+/);
@@ -63,6 +64,7 @@ export default function CheckoutFormScreen() {
   const [licenseBack, setLicenseBack] = useState(draft.licenseBack);
   const [proofOfAddress, setProofOfAddress] = useState(draft.proofOfAddress);
   const [isPicking, setIsPicking] = useState(false); // guards against a double-tap launching two overlapping native pickers, which can leave the picker sheet stuck open and unresponsive
+  const [pickerField, setPickerField] = useState(null); // 'licenseFront' | 'licenseBack' | 'proofOfAddress' | null - which tile opened the Take Photo/Choose from Library sheet
 
   // One-time seed from whatever this renter already has on file (a prior
   // booking, or a direct Documents Hub upload) - so a returning renter
@@ -81,24 +83,18 @@ export default function CheckoutFormScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const pickImage = async (setter) => {
-    if (isPicking) return;
+  const FIELD_SETTERS = { licenseFront: setLicenseFront, licenseBack: setLicenseBack, proofOfAddress: setProofOfAddress };
+
+  const handlePickSource = async (source) => {
+    const field = pickerField;
+    setPickerField(null);
+    if (!field || isPicking) return;
     setIsPicking(true);
     try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Permission needed', 'Please allow photo library access to upload documents.');
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        quality: 0.7,
-      });
-      if (!result.canceled && result.assets?.[0]) {
-        setter(result.assets[0].uri);
-      }
+      const uri = await pickImage(source);
+      if (uri) FIELD_SETTERS[field](uri);
     } catch (e) {
-      Alert.alert('Could not open photo library', 'Please try again.');
+      Alert.alert(source === 'camera' ? 'Could not open camera' : 'Could not open photo library', e.message || 'Please try again.');
     } finally {
       setIsPicking(false);
     }
@@ -156,15 +152,22 @@ export default function CheckoutFormScreen() {
         </View>
 
         <Text style={styles.sectionTitle}>Driver's License or ID (for Chauffeur)</Text>
-        <DocumentUploadTile label="License - Front" value={licenseFront} disabled={isPicking} onPick={() => pickImage(setLicenseFront)} styles={styles} colors={colors} />
-        <DocumentUploadTile label="License - Back" value={licenseBack} disabled={isPicking} onPick={() => pickImage(setLicenseBack)} styles={styles} colors={colors} />
+        <DocumentUploadTile label="License - Front" value={licenseFront} disabled={isPicking} onPick={() => setPickerField('licenseFront')} styles={styles} colors={colors} />
+        <DocumentUploadTile label="License - Back" value={licenseBack} disabled={isPicking} onPick={() => setPickerField('licenseBack')} styles={styles} colors={colors} />
 
         <Text style={styles.sectionTitle}>Proof of Address (eg. Utility bill, hotel reservation, etc)</Text>
-        <DocumentUploadTile label="Utility Bill / Bank Statement" value={proofOfAddress} disabled={isPicking} onPick={() => pickImage(setProofOfAddress)} styles={styles} colors={colors} />
+        <DocumentUploadTile label="Utility Bill / Bank Statement" value={proofOfAddress} disabled={isPicking} onPick={() => setPickerField('proofOfAddress')} styles={styles} colors={colors} />
       </ScrollView>
 
       <CheckoutFooterButton label="Continue" onPress={handleContinue} disabled={!isValid} />
       </KeyboardAvoidingView>
+
+      <PhotoSourceSheet
+        visible={!!pickerField}
+        onClose={() => setPickerField(null)}
+        onChooseCamera={() => handlePickSource('camera')}
+        onChooseLibrary={() => handlePickSource('library')}
+      />
     </View>
   );
 }
