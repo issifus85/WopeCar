@@ -469,6 +469,32 @@ export default function CheckoutPaymentScreen() {
           </View>
         </View>
 
+        <View style={styles.paymentMethodsCard}>
+          <Text style={styles.paymentMethodsLabel}>How to Pay</Text>
+          <Text style={styles.paymentMethodsIntro}>
+            Tapping "Pay {formatCurrency(draft.totalCost, activeCurrency)}" opens a secure Paystack checkout where you
+            can complete your payment using any of the following:
+          </Text>
+
+          <View style={styles.paymentMethodRow}>
+            <Text style={styles.paymentMethodIcon}>💳</Text>
+            <Text style={styles.paymentMethodLabel}>Visa / Mastercard (Debit or Credit)</Text>
+          </View>
+          <View style={styles.paymentMethodRow}>
+            <Text style={styles.paymentMethodIcon}>📱</Text>
+            <Text style={styles.paymentMethodLabel}>Mobile Money — MTN, Vodafone, AirtelTigo</Text>
+          </View>
+          <View style={styles.paymentMethodRow}>
+            <Text style={styles.paymentMethodIcon}>🏦</Text>
+            <Text style={styles.paymentMethodLabel}>Bank Transfer</Text>
+          </View>
+
+          <Text style={styles.paymentMethodsNote}>
+            Your card details are encrypted and never shared with WopeCar. Payments are processed securely by
+            Paystack — Ghana's leading payment gateway.
+          </Text>
+        </View>
+
         <View style={styles.infoBox}>
           <Ionicons name="lock-closed-outline" size={16} color={colors.teal} />
           <Text style={styles.infoText}>
@@ -608,6 +634,57 @@ function createStyles(colors) {
       fontFamily: FONTS.bold,
       fontSize: 20,
       color: colors.textPrimary,
+    },
+    paymentMethodsCard: {
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      padding: 14,
+      marginBottom: 16,
+    },
+    paymentMethodsLabel: {
+      fontFamily: FONTS.bold,
+      fontSize: 10,
+      color: colors.teal,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      marginBottom: 8,
+    },
+    paymentMethodsIntro: {
+      fontFamily: FONTS.regular,
+      fontSize: 13,
+      color: colors.textSubtle,
+      lineHeight: 18,
+      marginBottom: 10,
+    },
+    paymentMethodRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 8,
+    },
+    paymentMethodIcon: {
+      width: 20,
+      fontSize: 15,
+      textAlign: 'center',
+    },
+    paymentMethodLabel: {
+      flex: 1,
+      fontFamily: FONTS.regular,
+      fontSize: 13,
+      color: colors.textPrimary,
+    },
+    paymentMethodsNote: {
+      fontFamily: FONTS.regular,
+      fontSize: 11,
+      fontStyle: 'italic',
+      color: colors.textSubtle,
+      lineHeight: 16,
+      marginTop: 10,
+      paddingTop: 10,
+      borderTopWidth: 1,
+      borderTopColor: colors.divider,
     },
     infoBox: {
       flexDirection: 'row',
