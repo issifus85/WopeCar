@@ -7,6 +7,7 @@ import { useAppTheme } from '../contexts/ThemeContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { formatCurrency, isAnyDiscountActive, applyAnyDiscount, isCarNew, useAppWideDiscount } from '../constants/pricing';
 import { resizeImageUrl } from '../utils/imageUrl';
+import { getAvailabilityBadge } from '../utils/carAvailability';
 
 const CARD_IMAGE_WIDTH = 110;
 const CARD_IMAGE_HEIGHT = 130;
@@ -18,6 +19,7 @@ export default function CarListCard({ car, onPress }) {
   const appWideDiscount = useAppWideDiscount();
   const hasActiveDiscount = isAnyDiscountActive(car.discount, appWideDiscount);
   const discountedPricePerDay = hasActiveDiscount ? applyAnyDiscount(car.pricePerDay, car.discount, appWideDiscount) : car.pricePerDay;
+  const availability = getAvailabilityBadge(car);
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress}>
@@ -108,13 +110,13 @@ export default function CarListCard({ car, onPress }) {
           </View>
           <View style={[
             styles.availabilityBadge,
-            { backgroundColor: car.isAvailable ? colors.successBg : colors.errorBg }
+            { backgroundColor: availability.isAvailable ? colors.successBg : colors.errorBg }
           ]}>
             <Text style={[
               styles.availabilityText,
-              { color: car.isAvailable ? colors.success : colors.error }
+              { color: availability.isAvailable ? colors.success : colors.error }
             ]}>
-              {car.isAvailable ? 'Available' : 'Unavailable'}
+              {availability.shortLabel}
             </Text>
           </View>
         </View>

@@ -6,6 +6,7 @@ import { useAppTheme } from '../contexts/ThemeContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { formatCurrency, isAnyDiscountActive, applyAnyDiscount, isCarNew, useAppWideDiscount } from '../constants/pricing';
 import ImageGallery from './ImageGallery';
+import { getAvailabilityBadge } from '../utils/carAvailability';
 
 export default function CarTileCard({ car, onPress }) {
   const { colors } = useAppTheme();
@@ -14,6 +15,7 @@ export default function CarTileCard({ car, onPress }) {
   const appWideDiscount = useAppWideDiscount();
   const hasActiveDiscount = isAnyDiscountActive(car.discount, appWideDiscount);
   const discountedPricePerDay = hasActiveDiscount ? applyAnyDiscount(car.pricePerDay, car.discount, appWideDiscount) : car.pricePerDay;
+  const availability = getAvailabilityBadge(car);
 
   return (
     <View style={styles.card}>
@@ -87,13 +89,13 @@ export default function CarTileCard({ car, onPress }) {
           </View>
           <View style={[
             styles.availabilityBadge,
-            { backgroundColor: car.isAvailable ? colors.successBg : colors.errorBg }
+            { backgroundColor: availability.isAvailable ? colors.successBg : colors.errorBg }
           ]}>
             <Text style={[
               styles.availabilityText,
-              { color: car.isAvailable ? colors.success : colors.error }
+              { color: availability.isAvailable ? colors.success : colors.error }
             ]}>
-              {car.isAvailable ? 'Available' : 'Unavailable'}
+              {availability.shortLabel}
             </Text>
           </View>
         </View>

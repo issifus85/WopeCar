@@ -1,5 +1,6 @@
 import supabase from './supabase';
 import { CAR_FEATURES, GHANA_CITIES_BY_REGION, GHANA_REGIONS } from '../constants/vehicleCatalog';
+import { toISODate } from './vendorCalendar';
 
 const FEATURE_BY_SLUG = new Map(CAR_FEATURES.map((f) => [f.slug, f]));
 
@@ -289,6 +290,7 @@ export async function fetchCars(params = {}) {
   }
 
   cars = await attachRatings(cars);
+  cars = await attachAvailability(cars);
   if (params.orderBy === 'rate_high_low') {
     cars = sortByRatingDesc(cars);
   }
@@ -345,6 +347,77 @@ export async function fetchUnavailableCarIds(startDate, endDate) {
 }
 
 /**
+ * "Available" / "Available from <date>" for a card/detail badge - mirrors
+ * wopecar-website's lib/data/cars.ts getAvailabilityInfo() exactly (same
+ * get_booked_dates_for_cars RPC + availability-blocked query, same 90-day
+ * forward scan), so the same car reads the same status on both platforms -
+ * this app previously had no equivalent at all and just showed "Available"
+ * for every active-status car regardless of real booking state. NOT the
+ * same thing as fetchUnavailableCarIds() above (that excludes a car
+ * entirely for a chosen search range); this describes the car's own
+ * next-open date from today, independent of what was searched.
+ */
+export async function getAvailabilityInfo(carIds) {
+  const result = new Map();
+  if (carIds.length === 0) return result;
+
+  const today = new Date();
+  const todayISO = toISODate(today);
+  const horizon = new Date(today);
+  horizon.setDate(horizon.getDate() + 90);
+  const horizonISO = toISODate(horizon);
+
+  const [bookedRes, blockedRes] = await Promise.all([
+    supabase.rpc('get_booked_dates_for_cars', { p_car_ids: carIds }),
+    supabase.from('availability').select('car_id, date').eq('status', 'blocked').in('car_id', carIds).gte('date', todayISO).lte('date', horizonISO),
+  ]);
+  if (bookedRes.error) throw bookedRes.error;
+  if (blockedRes.error) throw blockedRes.error;
+
+  const blockedByCarId = new Map();
+  const addRow = (carId, date) => {
+    const set = blockedByCarId.get(carId) ?? new Set();
+    set.add(date);
+    blockedByCarId.set(carId, set);
+  };
+  (bookedRes.data ?? []).forEach((row) => {
+    if (row.date >= todayISO && row.date <= horizonISO) addRow(row.car_id, row.date);
+  });
+  (blockedRes.data ?? []).forEach((row) => addRow(row.car_id, row.date));
+
+  carIds.forEach((carId) => {
+    const blocked = blockedByCarId.get(carId);
+    if (!blocked || !blocked.has(todayISO)) {
+      result.set(carId, { isAvailableToday: true, availableFrom: null });
+      return;
+    }
+    let found = null;
+    const cursor = new Date(today);
+    for (let i = 1; i <= 90; i++) {
+      cursor.setDate(cursor.getDate() + 1);
+      const iso = toISODate(cursor);
+      if (!blocked.has(iso)) {
+        found = iso;
+        break;
+      }
+    }
+    result.set(carId, { isAvailableToday: false, availableFrom: found });
+  });
+
+  return result;
+}
+
+async function attachAvailability(cars) {
+  const carIds = cars.map((c) => c.id);
+  if (carIds.length === 0) return cars;
+  const availabilityMap = await getAvailabilityInfo(carIds);
+  return cars.map((car) => {
+    const info = availabilityMap.get(car.id);
+    return info ? { ...car, isAvailableToday: info.isAvailableToday, availableFrom: info.availableFrom } : car;
+  });
+}
+
+/**
  * Single car with vendor info joined via vendor_public_profiles (never the
  * raw `vendors` table - that has private columns like bank details).
  * Throws if not found (RLS-invisible cars, e.g. someone else's pending
@@ -365,7 +438,11 @@ export async function fetchCarById(id) {
     vendor = vendorRow;
   }
 
-  return normalizeCar({ ...car, vendor });
+  const normalized = normalizeCar({ ...car, vendor });
+
+  const availabilityMap = await getAvailabilityInfo([car.id]);
+  const availability = availabilityMap.get(car.id);
+  return availability ? { ...normalized, isAvailableToday: availability.isAvailableToday, availableFrom: availability.availableFrom } : normalized;
 }
 
 /**

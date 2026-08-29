@@ -23,6 +23,7 @@ import BookingChoiceModal from '../../components/BookingChoiceModal';
 import { useFavorites } from '../../contexts/FavoritesContext';
 import { useCart } from '../../contexts/CartContext';
 import { useInbox } from '../../contexts/InboxContext';
+import { getAvailabilityBadge } from '../../utils/carAvailability';
 
 const DESCRIPTION_TRUNCATE_LENGTH = 220;
 
@@ -107,6 +108,7 @@ export default function CarDetailScreen() {
 
   const hasActiveDiscount = isAnyDiscountActive(car.discount, appWideDiscount);
   const discountedPricePerDay = hasActiveDiscount ? applyAnyDiscount(car.pricePerDay, car.discount, appWideDiscount) : car.pricePerDay;
+  const availability = getAvailabilityBadge(car);
 
   const specs = [
     { icon: 'people-outline', value: car.seats, label: 'Seats' },
@@ -205,13 +207,13 @@ export default function CarDetailScreen() {
               </>
             )}
             <Ionicons
-              name={car.isAvailable ? 'checkmark-circle' : 'close-circle'}
+              name={availability.isAvailable ? 'checkmark-circle' : 'close-circle'}
               size={14}
-              color={car.isAvailable ? colors.success : colors.error}
+              color={availability.isAvailable ? colors.success : colors.error}
               style={{ marginLeft: 10 }}
             />
-            <Text style={[styles.metaText, { color: car.isAvailable ? colors.success : colors.error }]}>
-              {car.isAvailable ? 'Available' : 'Unavailable'}
+            <Text style={[styles.metaText, { color: availability.isAvailable ? colors.success : colors.error }]}>
+              {availability.longLabel}
             </Text>
           </View>
 
