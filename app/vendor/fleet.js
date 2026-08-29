@@ -39,6 +39,9 @@ export default function VendorFleetScreen() {
         <View style={styles.centerState}>
           <Ionicons name="car-outline" size={40} color={colors.disabled} />
           <Text style={styles.emptyText}>You haven't listed any cars yet.</Text>
+          <TouchableOpacity style={styles.emptyAddButton} onPress={() => router.push('/vendor/add-car')}>
+            <Text style={styles.emptyAddButtonText}>Add Your First Car</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -77,6 +80,18 @@ function createStyles(colors) {
       fontSize: 14,
       color: colors.textSubtle,
       textAlign: 'center',
+    },
+    emptyAddButton: {
+      marginTop: 12,
+      backgroundColor: colors.teal,
+      borderRadius: 12,
+      paddingHorizontal: 20,
+      paddingVertical: 13,
+    },
+    emptyAddButtonText: {
+      fontFamily: FONTS.semiBold,
+      color: colors.white,
+      fontSize: 14,
     },
     list: {
       padding: 20,

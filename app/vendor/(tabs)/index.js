@@ -99,23 +99,49 @@ export default function VendorDashboardScreen() {
           </View>
         )}
 
-        <View style={styles.earningsCard}>
-          <Text style={styles.earningsLabel}>This Month's Earnings</Text>
-          <Text style={styles.earningsValue}>{formatCurrency(currentMonthEarnings, activeCurrency)}</Text>
-        </View>
+        {fleetSize === 0 ? (
+          // A brand-new vendor has nothing to show in the earnings card,
+          // stats row, or 6-month chart below - GH₵0/0/0 and an empty chart
+          // read as "something's broken", not "you haven't started yet". A
+          // single welcome card with the one real next step (list a car)
+          // replaces all three until there's at least one car to report on.
+          <View style={styles.welcomeCard}>
+            <View style={styles.welcomeIcon}>
+              <Ionicons name="car-sport-outline" size={26} color={colors.white} />
+            </View>
+            <Text style={styles.welcomeTitle}>Welcome to WopeCar Hosting</Text>
+            <Text style={styles.welcomeText}>
+              List your first car to start earning. It only takes a few minutes, and WopeCar reviews every submission
+              before it goes live.
+            </Text>
+            <TouchableOpacity style={styles.welcomeButton} onPress={() => router.push('/vendor/add-car')}>
+              <Text style={styles.welcomeButtonText}>Add Your First Car</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.welcomeSecondaryButton} onPress={() => router.push('/vendor/getting-started')}>
+              <Text style={styles.welcomeSecondaryButtonText}>See How Hosting Works</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            <View style={styles.earningsCard}>
+              <Text style={styles.earningsLabel}>This Month's Earnings</Text>
+              <Text style={styles.earningsValue}>{formatCurrency(currentMonthEarnings, activeCurrency)}</Text>
+            </View>
 
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Ionicons name="calendar-outline" size={20} color={colors.teal} />
-            <Text style={styles.statValue}>{bookingsThisMonthCount}</Text>
-            <Text style={styles.statLabel}>Bookings this month</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Ionicons name="car-outline" size={20} color={colors.teal} />
-            <Text style={styles.statValue}>{fleetSize}</Text>
-            <Text style={styles.statLabel}>Cars listed</Text>
-          </View>
-        </View>
+            <View style={styles.statsRow}>
+              <View style={styles.statCard}>
+                <Ionicons name="calendar-outline" size={20} color={colors.teal} />
+                <Text style={styles.statValue}>{bookingsThisMonthCount}</Text>
+                <Text style={styles.statLabel}>Bookings this month</Text>
+              </View>
+              <View style={styles.statCard}>
+                <Ionicons name="car-outline" size={20} color={colors.teal} />
+                <Text style={styles.statValue}>{fleetSize}</Text>
+                <Text style={styles.statLabel}>Cars listed</Text>
+              </View>
+            </View>
+          </>
+        )}
 
         <Text style={styles.sectionTitle}>Quick Actions</Text>
         <View style={styles.actionsGrid}>
@@ -141,10 +167,12 @@ export default function VendorDashboardScreen() {
           })}
         </View>
 
-        <View style={styles.chartCard}>
-          <Text style={styles.sectionTitle}>Earnings - Last 6 Months</Text>
-          <VendorEarningsBarChart data={earningsHistory} />
-        </View>
+        {fleetSize > 0 && (
+          <View style={styles.chartCard}>
+            <Text style={styles.sectionTitle}>Earnings - Last 6 Months</Text>
+            <VendorEarningsBarChart data={earningsHistory} />
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -238,6 +266,64 @@ function createStyles(colors) {
       fontFamily: FONTS.bold,
       fontSize: 30,
       color: colors.white,
+    },
+    welcomeCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 16,
+      padding: 24,
+      alignItems: 'center',
+      marginBottom: 24,
+      shadowColor: colors.shadow,
+      shadowOpacity: 0.06,
+      shadowRadius: 8,
+      elevation: 3,
+    },
+    welcomeIcon: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: colors.teal,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 14,
+    },
+    welcomeTitle: {
+      fontFamily: FONTS.bold,
+      fontSize: 17,
+      color: colors.textPrimary,
+      textAlign: 'center',
+      marginBottom: 8,
+    },
+    welcomeText: {
+      fontFamily: FONTS.regular,
+      fontSize: 13,
+      color: colors.textSubtle,
+      textAlign: 'center',
+      lineHeight: 19,
+      marginBottom: 20,
+    },
+    welcomeButton: {
+      alignSelf: 'stretch',
+      backgroundColor: colors.teal,
+      borderRadius: 12,
+      paddingVertical: 15,
+      alignItems: 'center',
+    },
+    welcomeButtonText: {
+      fontFamily: FONTS.semiBold,
+      color: colors.white,
+      fontSize: 15,
+    },
+    welcomeSecondaryButton: {
+      alignSelf: 'stretch',
+      marginTop: 10,
+      paddingVertical: 12,
+      alignItems: 'center',
+    },
+    welcomeSecondaryButtonText: {
+      fontFamily: FONTS.semiBold,
+      color: colors.teal,
+      fontSize: 13,
     },
     statsRow: {
       flexDirection: 'row',
