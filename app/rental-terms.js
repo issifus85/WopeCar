@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
-import { CHAUFFEUR_TERMS, SELF_DRIVE_TERMS } from '../constants/rentalTerms';
+import { getRentalTermsSections } from '../services/rentalTermsApi';
 
 function TermsGroup({ group, colors, styles }) {
   return (
@@ -32,6 +32,19 @@ function ClauseAccordion({ index, clause, colors, styles }) {
 export default function RentalTermsScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const [sections, setSections] = useState(null);
+
+  useEffect(() => {
+    getRentalTermsSections().then(setSections).catch(() => setSections(null));
+  }, []);
+
+  if (!sections) {
+    return (
+      <View style={styles.centerState}>
+        <ActivityIndicator size="large" color={colors.teal} />
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -40,8 +53,8 @@ export default function RentalTermsScreen() {
         These are WopeCar's standard rental terms, covering both chauffeured and self-drive bookings. Tap a clause to expand it. A car's own listing shows only the terms that apply to how it's booked.
       </Text>
 
-      <TermsGroup group={CHAUFFEUR_TERMS} colors={colors} styles={styles} />
-      <TermsGroup group={SELF_DRIVE_TERMS} colors={colors} styles={styles} />
+      <TermsGroup group={sections.chauffeur} colors={colors} styles={styles} />
+      <TermsGroup group={sections.self_drive} colors={colors} styles={styles} />
     </ScrollView>
   );
 }
@@ -50,6 +63,12 @@ function createStyles(colors) {
   return StyleSheet.create({
     container: {
       flex: 1,
+      backgroundColor: colors.surface,
+    },
+    centerState: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
       backgroundColor: colors.surface,
     },
     content: {

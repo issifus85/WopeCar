@@ -7,6 +7,7 @@ import { fetchCarById, fetchCarAvailabilityByStatus } from '../../services/carsA
 import { WEEKDAYS, MONTH_NAMES, stripTime, toISODate, buildMonthGrid } from '../../services/vendorCalendar';
 import { getCarReviews, getCarReviewScore } from '../../services/reviewsApi';
 import { getCarDetailFaqs } from '../../services/faqsApi';
+import { getRentalTermsSections } from '../../services/rentalTermsApi';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -42,6 +43,7 @@ export default function CarDetailScreen() {
   const [reviewScore, setReviewScore] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [faqs, setFaqs] = useState([]);
+  const [rentalTerms, setRentalTerms] = useState(null);
   const [unavailableDates, setUnavailableDates] = useState(new Set());
   const today = stripTime(new Date());
   const [availabilityViewMonth, setAvailabilityViewMonth] = useState(today);
@@ -61,6 +63,7 @@ export default function CarDetailScreen() {
     getCarReviewScore(id).then(setReviewScore).catch(() => setReviewScore(null));
     getCarReviews(id).then(setReviews).catch(() => setReviews([]));
     getCarDetailFaqs().then(setFaqs).catch(() => setFaqs([]));
+    getRentalTermsSections().then(setRentalTerms).catch(() => setRentalTerms(null));
 
     // Same "nice to have, don't block the page" treatment as
     // app/checkout/dates.js's own availability fetch - a renter can still
@@ -346,9 +349,11 @@ export default function CarDetailScreen() {
             </View>
           </View>
 
-          <View style={styles.section}>
-            <RentalTermsSection drivenBy={car.drivenBy} />
-          </View>
+          {!!rentalTerms && (
+            <View style={styles.section}>
+              <RentalTermsSection drivenBy={car.drivenBy} sections={rentalTerms} />
+            </View>
+          )}
 
           {!!car.cancellationPolicy && (
             <View style={styles.section}>

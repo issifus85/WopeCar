@@ -5,7 +5,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import SectionHeading from './SectionHeading';
-import { CHAUFFEUR_TERMS, SELF_DRIVE_TERMS } from '../constants/rentalTerms';
 
 function TermsBlock({ block, styles }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -34,18 +33,24 @@ function TermsBlock({ block, styles }) {
 // A car with no drivenBy value at all (shouldn't happen for real listings,
 // but the field is nullable) is treated like Self-drive - showing both
 // blocks is the safer default over silently hiding the self-drive terms.
-export default function RentalTermsSection({ drivenBy }) {
+// `sections` is { chauffeur: {title, clauses}, self_drive: {title, clauses}
+// } from services/rentalTermsApi.js's getRentalTermsSections() - fetched by
+// the parent screen (app/car/[id].js), not this component, matching how
+// FaqSection also receives its data as a prop rather than fetching itself.
+export default function RentalTermsSection({ drivenBy, sections }) {
   const { colors } = useAppTheme();
   const router = useRouter();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const showSelfDrive = drivenBy !== 'Chauffeur';
 
+  if (!sections) return null;
+
   return (
     <View>
       <SectionHeading>Rental Terms & Conditions</SectionHeading>
 
-      <TermsBlock block={CHAUFFEUR_TERMS} styles={{ ...styles, chevronColor: colors.textMuted }} />
-      {showSelfDrive && <TermsBlock block={SELF_DRIVE_TERMS} styles={{ ...styles, chevronColor: colors.textMuted }} />}
+      <TermsBlock block={sections.chauffeur} styles={{ ...styles, chevronColor: colors.textMuted }} />
+      {showSelfDrive && <TermsBlock block={sections.self_drive} styles={{ ...styles, chevronColor: colors.textMuted }} />}
 
       <TouchableOpacity style={styles.fullTermsButton} onPress={() => router.push('/rental-terms')}>
         <Text style={styles.fullTermsText}>View Full Terms & Conditions</Text>

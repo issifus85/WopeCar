@@ -46,7 +46,8 @@ function htmlToPlainText(html) {
 
 // Older migrated rows still have the standard Chauffeured/Self-Drive rental
 // T&Cs pasted directly into `description` (now rendered properly by
-// components/RentalTermsSection.js instead, from constants/rentalTerms.js).
+// components/RentalTermsSection.js instead, from the admin-editable
+// rental_terms_clauses table via services/rentalTermsApi.js).
 // Cut it off client-side so a car whose Supabase row hasn't been through
 // supabase/scripts/set-car-descriptions.mjs yet doesn't dump that whole
 // block into the Description section.
