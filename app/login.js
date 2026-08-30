@@ -17,6 +17,7 @@ import { FontAwesome } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { logSignUp, logLogin, setUserProperties } from '../services/analytics';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -72,9 +73,13 @@ export default function LoginScreen() {
     setIsSubmitting(true);
     try {
       if (isSignUp) {
-        await register({ name, email, password, passwordConfirmation: confirmPassword });
+        const newUser = await register({ name, email, password, passwordConfirmation: confirmPassword });
+        logSignUp({ method: 'email' });
+        setUserProperties({ userId: newUser.id, userType: newUser.role ?? 'renter' });
       } else {
-        await login({ email, password });
+        const loggedInUser = await login({ email, password });
+        logLogin({ method: 'email' });
+        setUserProperties({ userId: loggedInUser.id, userType: loggedInUser.role ?? 'renter' });
       }
       navigateAfterAuth();
     } catch (e) {

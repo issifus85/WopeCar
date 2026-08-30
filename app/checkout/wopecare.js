@@ -2,12 +2,13 @@ import { useState, useEffect, useMemo } from 'react';
 import { StyleSheet, View, ActivityIndicator, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAppTheme } from '../../contexts/ThemeContext';
-import { calculateRentalPricing, WOPECARE_PLANS } from '../../constants/pricing';
+import { calculateRentalPricing, calculateWopeCareDailyRate, calculateWopeCareCost, WOPECARE_PLANS } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 import WopeCareSelector from '../../components/WopeCareSelector';
+import { logScreen, logWopecareSelected } from '../../services/analytics';
 
 // Split out of checkout/addons.js (previously combined with Regional
 // Add-ons on one screen, WopeCare stacked above it) - Regional Add-ons now
@@ -29,6 +30,10 @@ export default function CheckoutWopeCareScreen() {
       .then(setCar)
       .finally(() => setIsLoading(false));
   }, [carId]);
+
+  useEffect(() => {
+    logScreen('Checkout_WopeCare');
+  }, []);
 
   const days = useMemo(() => {
     if (!draft.startDate || !draft.endDate || !car) return 0;
@@ -63,7 +68,17 @@ export default function CheckoutWopeCareScreen() {
           pricePerDay={car?.pricePerDay ?? 0}
           days={days}
           selectedPlan={draft.wopeCare}
-          onSelect={(planId) => updateDraft({ wopeCare: planId, wopeCareDetails: planId === 'none' ? null : WOPECARE_PLANS[planId] })}
+          onSelect={(planId) => {
+            updateDraft({ wopeCare: planId, wopeCareDetails: planId === 'none' ? null : WOPECARE_PLANS[planId] });
+            if (planId !== 'none' && car) {
+              logWopecareSelected({
+                plan: planId,
+                dailyRate: calculateWopeCareDailyRate(car.pricePerDay, planId),
+                totalCost: calculateWopeCareCost(car.pricePerDay, planId, days),
+                carId,
+              });
+            }
+          }}
         />
       </ScrollView>
 

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { StyleSheet, Text, View, FlatList, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -9,6 +9,7 @@ import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { formatCurrency } from '../../constants/pricing';
 import { useBookings } from '../../contexts/BookingsContext';
+import { logScreen } from '../../services/analytics';
 
 const STATUS_TABS = ['Pending', 'Confirmed', 'Completed', 'Cancelled'];
 
@@ -64,6 +65,10 @@ export default function BookingsScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { bookings, isLoading, refreshBookings } = useBookings();
   const [activeTab, setActiveTab] = useState('Pending');
+
+  useEffect(() => {
+    logScreen('MyBookings');
+  }, []);
 
   // Picks up a vendor's accept/decline (or any other server-side status
   // change) that happened while this tab was already mounted - see

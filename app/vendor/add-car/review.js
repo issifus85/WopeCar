@@ -14,6 +14,7 @@ import { joinLocation } from '../../../constants/vehicleCatalog';
 import VendorWizardHeader from '../../../components/VendorWizardHeader';
 import CheckoutFooterButton from '../../../components/CheckoutFooterButton';
 import ConfirmModal from '../../../components/ConfirmModal';
+import { logCarListed } from '../../../services/analytics';
 
 function formatVettingDate(iso) {
   if (!iso) return '';
@@ -81,6 +82,14 @@ export default function AddCarReviewScreen() {
       // never block or fail the submission Ops can retry from the
       // Appointments tab.
       createCalendarAppointment(car.id).catch(() => {});
+
+      logCarListed({
+        carId: car.id,
+        carName: car.name,
+        carType: car.type,
+        region: draft.region,
+        pricePerDay: car.pricePerDay,
+      });
 
       setShowSubmitted(true);
     } catch (e) {

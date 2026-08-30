@@ -16,6 +16,7 @@ import CurrencyModal from '../../components/CurrencyModal';
 import FilterModal from '../../components/FilterModal';
 import CarListCard from '../../components/CarListCard';
 import CarTileCard from '../../components/CarTileCard';
+import { logScreen, logSearchCars } from '../../services/analytics';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -74,6 +75,16 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
+    logScreen('Home');
+  }, []);
+
+  // Home has no separate "search" submit - loadCars() re-fetches on every
+  // filter/date/sort change, including the very first mount. Only the
+  // fetches AFTER that initial mount represent a real search/filter action,
+  // so this ref skips logging the first one.
+  const hasLoadedOnce = useRef(false);
+
+  useEffect(() => {
     loadCars();
   }, [selectedTypes, seats, locationFilters, startDate, endDate, sortBy, drivenBy, priceRange, vehicleClass]);
 
@@ -114,6 +125,15 @@ export default function HomeScreen() {
       .then(({ cars, meta }) => {
         setCars(cars);
         setTotal(meta?.total ?? cars.length);
+        if (hasLoadedOnce.current) {
+          logSearchCars({
+            location: locationFilters[0],
+            carType: selectedTypes[0],
+            startDate: startDate ? toISODate(startDate) : null,
+            endDate: endDate ? toISODate(endDate) : null,
+          });
+        }
+        hasLoadedOnce.current = true;
       })
       .catch(() => setError('Could not load cars. Please try again.'))
       .finally(() => setIsLoading(false));

@@ -9,6 +9,7 @@ import { fetchCarById, fetchCarAvailability } from '../../services/carsApi';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
+import { logScreen, logStartCheckout } from '../../services/analytics';
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const MONTH_NAMES = [
@@ -101,6 +102,10 @@ export default function CheckoutDatesScreen() {
     }
   }, [carId]);
 
+  useEffect(() => {
+    logScreen('Checkout_Dates');
+  }, []);
+
   const [car, setCar] = useState(null);
   const [bookedRanges, setBookedRanges] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -165,6 +170,14 @@ export default function CheckoutDatesScreen() {
 
   const handleContinue = () => {
     updateDraft({ startDate: tempStart.toISOString(), endDate: tempEnd.toISOString() });
+    // Rough default-rate estimate, not the final priced total - add-ons,
+    // WopeCare, and discounts aren't chosen yet at this first checkout step.
+    logStartCheckout({
+      carId,
+      carName: car.name,
+      totalDays: selectedDays,
+      estimatedCost: car.pricePerDay * selectedDays,
+    });
     router.push({ pathname: '/checkout/details', params: { carId } });
   };
 

@@ -3,6 +3,7 @@ import * as authApi from '../services/supabaseAuthApi';
 import supabase from '../services/supabase';
 import { clearLocalUserData } from '../services/clearLocalUserData';
 import { registerPushToken } from '../services/pushNotifications';
+import { setCrashlyticsUser, logError } from '../services/analytics';
 
 const AuthContext = createContext(null);
 
@@ -29,7 +30,10 @@ export function AuthProvider({ children }) {
     setIsLoading(true);
     return withTimeout(authApi.getCurrentUser(), null)
       .then(setUser)
-      .catch(() => setUser(null))
+      .catch((e) => {
+        logError(e, 'AuthContext: session restore failed');
+        setUser(null);
+      })
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -45,6 +49,13 @@ export function AuthProvider({ children }) {
   // session), not on every render - best-effort, never blocks anything.
   useEffect(() => {
     if (user?.id) registerPushToken();
+  }, [user?.id]);
+
+  // Same "once per real user id" shape as the push-token effect above -
+  // tags every Crashlytics report from here on with the real user, so a
+  // crash can be traced back to who hit it.
+  useEffect(() => {
+    if (user?.id) setCrashlyticsUser(user.id);
   }, [user?.id]);
 
   // Keeps the context in sync with the Supabase session automatically -

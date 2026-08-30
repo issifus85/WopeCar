@@ -17,10 +17,17 @@
       "channel": "preview",
       "env": {
         "APP_ENV": "preview"
+      },
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "simulator": false
       }
     },
     "production": {
       "autoIncrement": true,
+      "distribution": "store",
       "channel": "production",
       "env": {
         "APP_ENV": "production"

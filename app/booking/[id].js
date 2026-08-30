@@ -18,6 +18,7 @@ import {
   calculateWopeCareCost,
 } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
+import { logBookingCancelled } from '../../services/analytics';
 import { getDatePriceMap } from '../../services/carPricingApi';
 import { payWithPaystack } from '../../services/paystackCheckout';
 import { openDirections } from '../../services/mapsLauncher';
@@ -411,6 +412,7 @@ export default function BookingDetailScreen() {
       // that, in reality, wasn't.
       await cancelBooking(booking.id);
       notifyBookingEvent('booking_cancelled', booking);
+      logBookingCancelled({ bookingRef: booking.id, carId: booking.carId });
     } catch (e) {
       Alert.alert('Could not cancel booking', e.message || 'Please try again.');
     }

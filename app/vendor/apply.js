@@ -8,6 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useVendor } from '../../contexts/VendorContext';
 import { applyToBecomeVendor } from '../../services/vendorCarsApi';
+import { logVendorRegistered } from '../../services/analytics';
 import VendorHeader from '../../components/VendorHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -88,10 +89,11 @@ export default function VendorApplyScreen() {
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      await applyToBecomeVendor({
+      const vendor = await applyToBecomeVendor({
         businessName: name.trim(),
         ghanaCardId: ghanaCardId.trim(),
       });
+      logVendorRegistered({ vendorId: vendor.id });
       setShowSuccess(true);
     } catch (e) {
       Alert.alert('Could not submit application', e?.message || 'Please check your connection and try again.');

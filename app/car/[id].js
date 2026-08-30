@@ -24,6 +24,7 @@ import { useFavorites } from '../../contexts/FavoritesContext';
 import { useCart } from '../../contexts/CartContext';
 import { useInbox } from '../../contexts/InboxContext';
 import { getAvailabilityBadge } from '../../utils/carAvailability';
+import { logScreen, logViewCar } from '../../services/analytics';
 
 const DESCRIPTION_TRUNCATE_LENGTH = 220;
 
@@ -54,7 +55,17 @@ export default function CarDetailScreen() {
     setIsLoading(true);
     setError(null);
     fetchCarById(id)
-      .then(setCar)
+      .then((fetchedCar) => {
+        setCar(fetchedCar);
+        logScreen('CarDetail');
+        logViewCar({
+          carId: fetchedCar.id,
+          carName: fetchedCar.name,
+          carType: fetchedCar.type,
+          pricePerDay: fetchedCar.pricePerDay,
+          location: fetchedCar.location,
+        });
+      })
       .catch(() => setError('Could not load this car. Please try again.'))
       .finally(() => setIsLoading(false));
 

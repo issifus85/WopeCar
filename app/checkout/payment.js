@@ -40,6 +40,7 @@ import { useInbox } from '../../contexts/InboxContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 import ConfirmModal from '../../components/ConfirmModal';
+import { logScreen, logBookingCompleted, logSaveToCart } from '../../services/analytics';
 
 const SAVED_BOOKING_HOLD_MS = 24 * 60 * 60 * 1000;
 
@@ -82,6 +83,10 @@ export default function CheckoutPaymentScreen() {
       .then(setCar)
       .finally(() => setIsLoading(false));
   }, [carId]);
+
+  useEffect(() => {
+    logScreen('Checkout_Payment');
+  }, []);
 
   // Same billableDays/rentalCost/addonsCost/deliveryFee/securityDeposit
   // formulas as checkout/summary.js - re-derived here (not imported from
@@ -295,6 +300,17 @@ export default function CheckoutPaymentScreen() {
       sendBookingRequestVendorEmail(confirmed.id).catch(() => {});
       recordQuickbooksPayment(confirmed.id, reference, resumedBooking?.pendingInvoiceId).catch(() => {});
 
+      logBookingCompleted({
+        bookingRef: confirmed.booking_ref ?? confirmed.id,
+        carId,
+        carName: car?.name,
+        totalCost: draft.totalCost,
+        totalDays: billableDays,
+        driveType: car?.drivenBy === 'Chauffeur' ? 'chauffeur' : 'self_drive',
+        wopecareSelected: !!wopeCarePlanId,
+        paymentMethod: 'paystack',
+      });
+
       const booking = {
         id: confirmed.id,
         carId,
@@ -413,6 +429,13 @@ export default function CheckoutPaymentScreen() {
       // comes out here too. Same cleanup handlePay() already does on the
       // paid path, just triggered a step earlier.
       removeFromCart(carId);
+
+      logSaveToCart({
+        carId,
+        carName: car.name,
+        totalCost: draft.totalCost,
+        totalDays: billableDays,
+      });
 
       setSavedExpiry(expiresAt);
     } catch (e) {

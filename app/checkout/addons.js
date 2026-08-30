@@ -10,6 +10,7 @@ import { fetchCarById } from '../../services/carsApi';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
+import { logScreen } from '../../services/analytics';
 
 export default function CheckoutAddonsScreen() {
   const { carId } = useLocalSearchParams();
@@ -18,6 +19,10 @@ export default function CheckoutAddonsScreen() {
   const { activeCurrency } = useCurrency();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { draft, updateDraft } = useCheckout();
+
+  useEffect(() => {
+    logScreen('Checkout_Addons');
+  }, []);
 
   const [car, setCar] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
