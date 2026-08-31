@@ -25,6 +25,14 @@ module.exports = ({ config }) => ({
     '@react-native-firebase/app',
     '@react-native-firebase/analytics',
     '@react-native-firebase/crashlytics',
+    // react-native-firebase v26 resolves Firebase via Swift Package
+    // Manager, which fails to link against this RN 0.81 New Architecture
+    // project's default static-framework linkage ("SPM + static linkage
+    // is not supported" - confirmed via a real EAS iOS build failure).
+    // expo-build-properties is the supported way to set Podfile linkage
+    // in a CNG project (no committed ios/Podfile to hand-edit) - dynamic
+    // linkage is the fix CocoaPods' own error message suggests first.
+    ['expo-build-properties', { ios: { useFrameworks: 'dynamic' } }],
   ],
   extra: {
     ...config.extra,
