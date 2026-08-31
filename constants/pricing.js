@@ -59,20 +59,29 @@ export function formatCurrency(amount, currency = DEFAULT_CURRENCY) {
 // (e.g. a synchronous render) still have a sane value.
 export const SELF_DRIVE_DELIVERY_FEE = 200;
 
+// Admin-configured app_settings rows are cached client-side (below) so
+// synchronous price computations never have to await a fetch - but a cache
+// that only ever fetches once per app process (the original shape of every
+// getter in this file) means an admin edit is invisible to any session
+// already running, indefinitely, not just briefly. Re-checking on a short
+// TTL instead means an edit shows up the next time anyone re-opens pricing
+// within a minute, without turning every price read into a network call.
+const SETTINGS_CACHE_TTL_MS = 60 * 1000;
+
 // Admin > Settings > Business Rules > "Self-Drive Delivery Fee" is real and
 // live-editable (app_settings.self_drive_delivery_fee), not just stored -
 // this is the read side. Stale-while-revalidate: every call returns
 // whatever's cached *right now* (the hardcoded constant until the first
-// fetch resolves) and kicks off exactly one background fetch to replace it
-// with the real configured value for every call after that. Avoids forcing
-// every synchronous price computation in the app to become async just to
-// read one admin-configurable number.
+// fetch resolves) and kicks off a background fetch, at most once per
+// SETTINGS_CACHE_TTL_MS, to replace it with the real configured value.
+// Avoids forcing every synchronous price computation in the app to become
+// async just to read one admin-configurable number.
 let cachedSelfDriveDeliveryFee = SELF_DRIVE_DELIVERY_FEE;
-let hasFetchedSelfDriveDeliveryFee = false;
+let selfDriveDeliveryFeeFetchedAt = 0;
 
 export function getSelfDriveDeliveryFee() {
-  if (!hasFetchedSelfDriveDeliveryFee) {
-    hasFetchedSelfDriveDeliveryFee = true;
+  if (Date.now() - selfDriveDeliveryFeeFetchedAt > SETTINGS_CACHE_TTL_MS) {
+    selfDriveDeliveryFeeFetchedAt = Date.now();
     // Lazy import avoids a module-load-order/circular-import risk with
     // services/supabase.js pulling in constants at startup.
     import('../services/supabase')
@@ -81,8 +90,8 @@ export function getSelfDriveDeliveryFee() {
         if (typeof value === 'number' && value >= 0) cachedSelfDriveDeliveryFee = value;
       })
       .catch(() => {
-        // Keep the hardcoded default - never let a settings-fetch failure
-        // block checkout.
+        // Keep the last-known-good value - never let a settings-fetch
+        // failure block checkout.
       });
   }
   return cachedSelfDriveDeliveryFee;
@@ -95,19 +104,19 @@ export function getSelfDriveDeliveryFee() {
 export const LATEST_BADGE_DAYS = 14;
 
 let cachedLatestBadgeDays = LATEST_BADGE_DAYS;
-let hasFetchedLatestBadgeDays = false;
+let latestBadgeDaysFetchedAt = 0;
 
 export function getLatestBadgeDays() {
-  if (!hasFetchedLatestBadgeDays) {
-    hasFetchedLatestBadgeDays = true;
+  if (Date.now() - latestBadgeDaysFetchedAt > SETTINGS_CACHE_TTL_MS) {
+    latestBadgeDaysFetchedAt = Date.now();
     import('../services/supabase')
       .then(({ getAppSetting }) => getAppSetting('latest_badge_days'))
       .then((value) => {
         if (typeof value === 'number' && value >= 0) cachedLatestBadgeDays = value;
       })
       .catch(() => {
-        // Keep the hardcoded default - never let a settings-fetch failure
-        // hide/show the badge incorrectly.
+        // Keep the last-known-good value - never let a settings-fetch
+        // failure hide/show the badge incorrectly.
       });
   }
   return cachedLatestBadgeDays;
@@ -126,7 +135,7 @@ export function getLatestBadgeDays() {
 const DEFAULT_APP_WIDE_DISCOUNT = { enabled: false, type: 'percentage', value: null, startsAt: null, endsAt: null };
 
 let cachedAppWideDiscount = DEFAULT_APP_WIDE_DISCOUNT;
-let hasFetchedAppWideDiscount = false;
+let appWideDiscountFetchedAt = 0;
 
 // Unlike getSelfDriveDeliveryFee()/getLatestBadgeDays() (read once, well
 // before the value matters, deep into checkout), this is read on the very
@@ -152,8 +161,8 @@ export function useAppWideDiscount() {
 }
 
 export function getAppWideDiscount() {
-  if (!hasFetchedAppWideDiscount) {
-    hasFetchedAppWideDiscount = true;
+  if (Date.now() - appWideDiscountFetchedAt > SETTINGS_CACHE_TTL_MS) {
+    appWideDiscountFetchedAt = Date.now();
     import('../services/supabase')
       .then(({ getAppSetting }) =>
         Promise.all([
@@ -201,18 +210,18 @@ const SECURITY_DEPOSIT_PERCENT = 0.25;
 // their own copy-pasted cache/fetch boilerplate.
 function makeSettingGetter(key, defaultValue) {
   let cached = defaultValue;
-  let hasFetched = false;
+  let fetchedAt = 0;
   return function getSetting() {
-    if (!hasFetched) {
-      hasFetched = true;
+    if (Date.now() - fetchedAt > SETTINGS_CACHE_TTL_MS) {
+      fetchedAt = Date.now();
       import('../services/supabase')
         .then(({ getAppSetting }) => getAppSetting(key))
         .then((value) => {
           if (typeof value === 'number' && value >= 0) cached = value;
         })
         .catch(() => {
-          // Keep the hardcoded default - never let a settings-fetch failure
-          // block checkout.
+          // Keep the last-known-good value - never let a settings-fetch
+          // failure block checkout.
         });
     }
     return cached;
@@ -246,11 +255,18 @@ export function calculateSecurityDeposit(subtotal, drivenBy) {
 // Minimum rental length, per wopecar.com/faq: chauffeured trips can be
 // booked for a single day, but self-drive requires a 3-day minimum since
 // the vehicle is handed over unsupervised for the whole rental.
+// Admin > Settings > Business Rules exposes both as
+// app_settings.min_booking_days_self_drive/_chauffeur, but nothing ever read
+// them - these two fields did nothing no matter what an admin set them to.
+// Wired to the same live-editable pattern as every other setting above.
 export const MIN_BOOKING_DAYS_SELF_DRIVE = 3;
 export const MIN_BOOKING_DAYS_CHAUFFEUR = 1;
 
+export const getMinBookingDaysSelfDrive = makeSettingGetter('min_booking_days_self_drive', MIN_BOOKING_DAYS_SELF_DRIVE);
+export const getMinBookingDaysChauffeur = makeSettingGetter('min_booking_days_chauffeur', MIN_BOOKING_DAYS_CHAUFFEUR);
+
 export function getMinBookingDays(drivenBy) {
-  return drivenBy === 'Self-drive' ? MIN_BOOKING_DAYS_SELF_DRIVE : MIN_BOOKING_DAYS_CHAUFFEUR;
+  return drivenBy === 'Self-drive' ? getMinBookingDaysSelfDrive() : getMinBookingDaysChauffeur();
 }
 
 // --- Rental Cost & Duration Calculation Engine ------------------------------
