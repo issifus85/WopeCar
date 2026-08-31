@@ -216,7 +216,7 @@ export default function CartScreen() {
                 style={styles.checkoutButton}
                 onPress={() => handleCheckout(item.id)}
               >
-                <Text style={styles.checkoutButtonText}>Checkout</Text>
+                <Text style={styles.checkoutButtonText}>Start Booking</Text>
                 <Ionicons name="arrow-forward" size={16} color={colors.white} />
               </TouchableOpacity>
             </View>

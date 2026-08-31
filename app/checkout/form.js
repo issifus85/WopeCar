@@ -159,7 +159,7 @@ export default function CheckoutFormScreen() {
         <DocumentUploadTile label="Utility Bill / Bank Statement" value={proofOfAddress} disabled={isPicking} onPick={() => setPickerField('proofOfAddress')} styles={styles} colors={colors} />
       </ScrollView>
 
-      <CheckoutFooterButton label="Continue" onPress={handleContinue} disabled={!isValid} />
+      <CheckoutFooterButton label="Checkout" onPress={handleContinue} disabled={!isValid} />
       </KeyboardAvoidingView>
 
       <PhotoSourceSheet

@@ -27,7 +27,7 @@ export default function BookingChoiceModal({ visible, onClose, onInquiry, onCont
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.continueButton} onPress={onContinue}>
-            <Text style={styles.continueButtonText}>Continue</Text>
+            <Text style={styles.continueButtonText}>Add to Cart</Text>
             <Ionicons name="arrow-forward" size={18} color={colors.white} />
           </TouchableOpacity>
         </Pressable>
