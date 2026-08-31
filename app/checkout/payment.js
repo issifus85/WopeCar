@@ -533,8 +533,11 @@ export default function CheckoutPaymentScreen() {
             <Text style={styles.paymentMethodIcon}>🏦</Text>
             <Text style={styles.paymentMethodLabel}>Bank Transfer</Text>
           </View>
+        </View>
 
-          <Text style={styles.paymentMethodsNote}>🔒 Securely processed by Paystack, a Stripe company.</Text>
+        <View style={styles.infoBox}>
+          <Ionicons name="lock-closed-outline" size={16} color={colors.teal} />
+          <Text style={styles.infoText}>Securely processed by Paystack, a Stripe Company.</Text>
         </View>
 
         {isProcessing && (
@@ -566,6 +569,8 @@ export default function CheckoutPaymentScreen() {
             </Text>
           </Text>
         </View>
+
+        <Image source={require('../../assets/paystack-logo.webp')} style={styles.paystackLogo} contentFit="contain" />
       </ScrollView>
 
       <CheckoutFooterButton
@@ -716,16 +721,17 @@ function createStyles(colors) {
       fontSize: 13,
       color: colors.textPrimary,
     },
-    paymentMethodsNote: {
+    infoBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 16,
+    },
+    infoText: {
+      flex: 1,
       fontFamily: FONTS.regular,
-      fontSize: 11,
-      fontStyle: 'italic',
+      fontSize: 12,
       color: colors.textSubtle,
-      lineHeight: 16,
-      marginTop: 10,
-      paddingTop: 10,
-      borderTopWidth: 1,
-      borderTopColor: colors.divider,
     },
     processingBox: {
       flexDirection: 'row',
@@ -783,6 +789,12 @@ function createStyles(colors) {
       fontFamily: FONTS.semiBold,
       color: colors.teal,
       textDecorationLine: 'underline',
+    },
+    paystackLogo: {
+      width: 120,
+      height: 32,
+      alignSelf: 'center',
+      marginTop: 20,
     },
   });
 }
