@@ -85,7 +85,7 @@ export default function CarTileCard({ car, onPress }) {
             {hasActiveDiscount && (
               <Text style={styles.priceStrikethrough}>{formatCurrency(car.pricePerDay, activeCurrency)}</Text>
             )}
-            <Text style={styles.price}>{formatCurrency(discountedPricePerDay, activeCurrency)}<Text style={styles.priceLabel}>/day</Text></Text>
+            <Text style={styles.price}><Text style={styles.priceLabel}>from </Text>{formatCurrency(discountedPricePerDay, activeCurrency)}<Text style={styles.priceLabel}>/day</Text></Text>
           </View>
           <View style={[
             styles.availabilityBadge,
