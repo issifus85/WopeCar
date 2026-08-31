@@ -1,15 +1,41 @@
 import Constants from 'expo-constants';
-import analytics from '@react-native-firebase/analytics';
-import crashlytics from '@react-native-firebase/crashlytics';
+import {
+  getAnalytics,
+  logEvent as fbLogEvent,
+  logScreenView as fbLogScreenView,
+  logPurchase as fbLogPurchase,
+  logSignUp as fbLogSignUp,
+  logLogin as fbLogLogin,
+  setUserId as fbSetAnalyticsUserId,
+  setUserProperties as fbSetUserProperties,
+} from '@react-native-firebase/analytics';
+import {
+  getCrashlytics,
+  recordError as fbRecordError,
+  log as fbCrashlyticsLog,
+  setUserId as fbSetCrashlyticsUserId,
+} from '@react-native-firebase/crashlytics';
 
 // Native (iOS/Android) implementation - this file is never bundled for web
 // (see analytics.web.js, a same-shaped no-op sibling Metro picks instead
 // there), since @react-native-firebase's native modules aren't available
 // in a web bundle at all.
 //
-// Only logs in production and staging, never in development, to keep event
-// data clean. Reads APP_ENV via Constants.expoConfig.extra (same pattern
-// components/EnvironmentBanner.js already uses) rather than
+// @react-native-firebase v26 ships the fully modular API only - no
+// `import analytics from '@react-native-firebase/analytics'; analytics()`
+// default export exists anymore (confirmed by reading the installed
+// package's own source after a real device crash: "TypeError: undefined
+// is not a function" at setCrashlyticsUser, because `crashlytics` was
+// undefined - there was never a default export to import). The real shape
+// is `getAnalytics()`/`getCrashlytics()` returning an instance, passed as
+// the first argument to free functions like `logEvent(analytics, name,
+// params)`. Every RNFB import here is aliased (fb-prefixed) since several
+// names collide with this file's own exports (logSignUp, logLogin,
+// setUserProperties) - callers of this service didn't need to change.
+//
+// Only logs in production and staging, never in development, to keep
+// event data clean. Reads APP_ENV via Constants.expoConfig.extra (same
+// pattern components/EnvironmentBanner.js already uses) rather than
 // process.env.APP_ENV directly - Expo does not inline arbitrary
 // process.env.* vars into the runtime bundle (only EXPO_PUBLIC_-prefixed
 // ones), so a bare process.env.APP_ENV read here would always be
@@ -20,7 +46,7 @@ const shouldLog = Constants.expoConfig?.extra?.APP_ENV !== 'development';
 // ─── SCREEN TRACKING ──────────────────────────────────
 export async function logScreen(screenName) {
   if (!shouldLog) return;
-  await analytics().logScreenView({
+  await fbLogScreenView(getAnalytics(), {
     screen_name: screenName,
     screen_class: screenName,
   });
@@ -29,7 +55,7 @@ export async function logScreen(screenName) {
 // ─── SEARCH & BROWSE ──────────────────────────────────
 export async function logSearchCars({ location, carType, startDate, endDate }) {
   if (!shouldLog) return;
-  await analytics().logEvent('search_cars', {
+  await fbLogEvent(getAnalytics(), 'search_cars', {
     location: location || 'not_set',
     car_type: carType || 'all',
     start_date: startDate || 'not_set',
@@ -39,7 +65,7 @@ export async function logSearchCars({ location, carType, startDate, endDate }) {
 
 export async function logViewCar({ carId, carName, carType, pricePerDay, location }) {
   if (!shouldLog) return;
-  await analytics().logEvent('view_car', {
+  await fbLogEvent(getAnalytics(), 'view_car', {
     car_id: carId,
     car_name: carName,
     car_type: carType || 'not_set',
@@ -51,7 +77,7 @@ export async function logViewCar({ carId, carName, carType, pricePerDay, locatio
 // ─── BOOKING FLOW ──────────────────────────────────────
 export async function logStartCheckout({ carId, carName, totalDays, estimatedCost }) {
   if (!shouldLog) return;
-  await analytics().logEvent('start_checkout', {
+  await fbLogEvent(getAnalytics(), 'start_checkout', {
     car_id: carId,
     car_name: carName,
     total_days: totalDays,
@@ -61,7 +87,7 @@ export async function logStartCheckout({ carId, carName, totalDays, estimatedCos
 
 export async function logCheckoutStep({ step, stepName, carId }) {
   if (!shouldLog) return;
-  await analytics().logEvent('checkout_step', {
+  await fbLogEvent(getAnalytics(), 'checkout_step', {
     step_number: step,
     step_name: stepName,
     car_id: carId,
@@ -70,7 +96,7 @@ export async function logCheckoutStep({ step, stepName, carId }) {
 
 export async function logSaveToCart({ carId, carName, totalCost, totalDays }) {
   if (!shouldLog) return;
-  await analytics().logEvent('save_to_cart', {
+  await fbLogEvent(getAnalytics(), 'save_to_cart', {
     car_id: carId,
     car_name: carName,
     total_cost: totalCost,
@@ -83,7 +109,8 @@ export async function logBookingCompleted({
   totalDays, driveType, wopecareSelected, paymentMethod,
 }) {
   if (!shouldLog) return;
-  await analytics().logEvent('booking_completed', {
+  const analytics = getAnalytics();
+  await fbLogEvent(analytics, 'booking_completed', {
     booking_ref: bookingRef,
     car_id: carId,
     car_name: carName,
@@ -94,7 +121,7 @@ export async function logBookingCompleted({
     payment_method: paymentMethod || 'paystack',
   });
   // Also logged as a purchase event for Firebase's built-in revenue tracking.
-  await analytics().logPurchase({
+  await fbLogPurchase(analytics, {
     currency: 'GHS',
     value: totalCost,
     transaction_id: bookingRef,
@@ -109,7 +136,7 @@ export async function logBookingCompleted({
 
 export async function logBookingCancelled({ bookingRef, carId, reason }) {
   if (!shouldLog) return;
-  await analytics().logEvent('booking_cancelled', {
+  await fbLogEvent(getAnalytics(), 'booking_cancelled', {
     booking_ref: bookingRef,
     car_id: carId,
     reason: reason || 'not_specified',
@@ -119,7 +146,7 @@ export async function logBookingCancelled({ bookingRef, carId, reason }) {
 // ─── WOPECARE ─────────────────────────────────────────
 export async function logWopecareSelected({ plan, dailyRate, totalCost, carId }) {
   if (!shouldLog) return;
-  await analytics().logEvent('wopecare_selected', {
+  await fbLogEvent(getAnalytics(), 'wopecare_selected', {
     plan,
     daily_rate: dailyRate,
     total_cost: totalCost,
@@ -130,14 +157,14 @@ export async function logWopecareSelected({ plan, dailyRate, totalCost, carId })
 // ─── VENDOR ──────────────────────────────────────────
 export async function logVendorRegistered({ vendorId }) {
   if (!shouldLog) return;
-  await analytics().logEvent('vendor_registered', {
+  await fbLogEvent(getAnalytics(), 'vendor_registered', {
     vendor_id: vendorId,
   });
 }
 
 export async function logCarListed({ carId, carName, carType, region, pricePerDay }) {
   if (!shouldLog) return;
-  await analytics().logEvent('car_listed', {
+  await fbLogEvent(getAnalytics(), 'car_listed', {
     car_id: carId,
     car_name: carName,
     car_type: carType || 'not_set',
@@ -149,29 +176,34 @@ export async function logCarListed({ carId, carName, carType, region, pricePerDa
 // ─── USER ─────────────────────────────────────────────
 export async function logSignUp({ method }) {
   if (!shouldLog) return;
-  await analytics().logSignUp({ method: method || 'email' });
+  await fbLogSignUp(getAnalytics(), { method: method || 'email' });
 }
 
 export async function logLogin({ method }) {
   if (!shouldLog) return;
-  await analytics().logLogin({ method: method || 'email' });
+  await fbLogLogin(getAnalytics(), { method: method || 'email' });
 }
 
 export async function setUserProperties({ userId, userType, region }) {
   if (!shouldLog) return;
-  await analytics().setUserId(userId);
-  await analytics().setUserProperties({
+  const analytics = getAnalytics();
+  await fbSetAnalyticsUserId(analytics, userId);
+  await fbSetUserProperties(analytics, {
     user_type: userType || 'renter',
     region: region || 'not_set',
   });
 }
 
 // ─── CRASHLYTICS ─────────────────────────────────────
+// Crashlytics deliberately always reports, even when shouldLog is false
+// (development) - a crash is worth capturing regardless of environment,
+// unlike a marketing/product analytics event.
 export function logError(error, context = '') {
-  crashlytics().recordError(error);
-  if (context) crashlytics().log(context);
+  const crashlytics = getCrashlytics();
+  fbRecordError(crashlytics, error);
+  if (context) fbCrashlyticsLog(crashlytics, context);
 }
 
 export function setCrashlyticsUser(userId) {
-  crashlytics().setUserId(userId);
+  fbSetCrashlyticsUserId(getCrashlytics(), userId);
 }
