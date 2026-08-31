@@ -5,14 +5,14 @@ import { CATEGORIES } from '../data/cars';
 // market. Used to power the searchable Make/Model pickers in
 // app/vendor/add-car/index.js.
 export const VEHICLE_MAKES = [
-  { make: 'Toyota', models: ['Camry', 'Corolla', 'Corolla Cross', 'RAV4', 'Highlander', 'Land Cruiser', 'Land Cruiser V8', 'Land Cruiser Prado', 'Hilux', 'Hiace', 'Yaris', 'Avalon', 'Sienna', '4-Runner', 'Fortuner'] },
+  { make: 'Toyota', models: ['Camry', 'Corolla', 'Corolla Cross', 'RAV4', 'Highlander', 'Land Cruiser', 'Land Cruiser V8', 'Land Cruiser Prado', 'Hilux', 'Hiace', 'Yaris', 'Avalon', 'Sienna', '4-Runner', 'Fortuner', 'Rush'] },
   { make: 'Hyundai', models: ['Elantra', 'Tucson', 'Santa Fe', 'Sonata', 'Accent', 'i10', 'i20', 'Creta', 'Palisade', 'Venue', 'H1', 'ix35'] },
   { make: 'Kia', models: ['Sportage', 'Picanto', 'Rio', 'Sorento', 'Sonet', 'Seltos', 'Cerato', 'Soul', 'Forte'] },
   { make: 'Nissan', models: ['Altima', 'Sentra', 'X-Trail', 'Rogue', 'Pathfinder', 'Navara', 'Patrol', 'Micra', 'Qashqai'] },
   { make: 'Honda', models: ['Civic', 'Accord', 'CR-V', 'HR-V', 'Pilot', 'City', 'Fit'] },
-  { make: 'Ford', models: ['Focus', 'Fusion', 'Explorer', 'Escape', 'Ranger', 'EcoSport', 'Everest'] },
+  { make: 'Ford', models: ['Focus', 'Fusion', 'Explorer', 'Escape', 'Ranger', 'EcoSport', 'Everest', 'Transit'] },
   { make: 'Chevrolet', models: ['Cruze', 'Malibu', 'Captiva', 'Trailblazer', 'Spark'] },
-  { make: 'Mercedes-Benz', models: ['A-Class', 'B-Class', 'C-Class', 'E-Class', 'S-Class', 'CLA', 'CLS', 'GLA', 'GLB', 'GLC', 'GLK', 'GLE', 'GLS', 'ML-Class', 'GL-Class', 'G-Class', 'Sprinter', 'Vito', 'Viano', 'V-Class'] },
+  { make: 'Mercedes-Benz', models: ['A-Class', 'B-Class', 'C-Class', 'E-Class', 'S-Class', 'CLA', 'CLS', 'GLA', 'GLB', 'GLC', 'GLK', 'GLE', 'GLS', 'ML-Class', 'GL-Class', 'G-Class', 'Sprinter', 'Vito', 'Viano', 'V-Class', 'Maybach'] },
   { make: 'BMW', models: ['3 Series', '5 Series', 'X1', 'X3', 'X5'] },
   { make: 'Volkswagen', models: ['Golf', 'Passat', 'Jetta', 'Polo', 'Tiguan', 'Touareg'] },
   { make: 'Suzuki', models: ['Swift', 'Vitara', 'Jimny', 'Baleno', 'Ertiga'] },
