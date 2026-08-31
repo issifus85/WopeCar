@@ -53,6 +53,11 @@ function toISODate(value) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function formatShortDate(value) {
+  if (!value) return '';
+  return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 export default function CheckoutPaymentScreen() {
   const { carId, resumedBookingId } = useLocalSearchParams();
   const router = useRouter();
@@ -87,6 +92,21 @@ export default function CheckoutPaymentScreen() {
   useEffect(() => {
     logScreen('Checkout_Payment');
   }, []);
+
+  // Synchronous days count for the "Aug 30 - Sep 2 - 3 days" summary line -
+  // buildPricingBreakdown() below also computes billableDays, but only
+  // inside an async function, not usable directly in render.
+  const days = useMemo(() => {
+    if (!draft.startDate || !draft.endDate || !car) return 0;
+    return calculateRentalPricing({
+      startDate: draft.startDate,
+      endDate: draft.endDate,
+      pickupTime: draft.pickupTime,
+      returnTime: draft.returnTime,
+      drivenBy: car.drivenBy,
+      dailyRate: car.pricePerDay,
+    }).billableDays;
+  }, [draft.startDate, draft.endDate, draft.pickupTime, draft.returnTime, car]);
 
   // Same billableDays/rentalCost/addonsCost/deliveryFee/securityDeposit
   // formulas as checkout/summary.js - re-derived here (not imported from
@@ -487,6 +507,11 @@ export default function CheckoutPaymentScreen() {
           ) : null}
           <View style={styles.summaryInfo}>
             <Text style={styles.carName} numberOfLines={1}>{car.name}</Text>
+            {days > 0 && (
+              <Text style={styles.summaryDates}>
+                {formatShortDate(draft.startDate)} – {formatShortDate(draft.endDate)} · {days} {days === 1 ? 'day' : 'days'}
+              </Text>
+            )}
             <Text style={styles.totalLabel}>Amount due</Text>
             <Text style={styles.totalValue}>{formatCurrency(draft.totalCost, activeCurrency)}</Text>
           </View>
@@ -494,35 +519,22 @@ export default function CheckoutPaymentScreen() {
 
         <View style={styles.paymentMethodsCard}>
           <Text style={styles.paymentMethodsLabel}>How to Pay</Text>
-          <Text style={styles.paymentMethodsIntro}>
-            Tapping "Pay {formatCurrency(draft.totalCost, activeCurrency)}" opens a secure Paystack checkout where you
-            can complete your payment using any of the following:
-          </Text>
+          <Text style={styles.paymentMethodsIntro}>Complete your payment securely through Paystack.</Text>
 
           <View style={styles.paymentMethodRow}>
             <Text style={styles.paymentMethodIcon}>💳</Text>
-            <Text style={styles.paymentMethodLabel}>Visa / Mastercard (Debit or Credit)</Text>
+            <Text style={styles.paymentMethodLabel}>Visa / Mastercard</Text>
           </View>
           <View style={styles.paymentMethodRow}>
             <Text style={styles.paymentMethodIcon}>📱</Text>
-            <Text style={styles.paymentMethodLabel}>Mobile Money — MTN, Vodafone, AirtelTigo</Text>
+            <Text style={styles.paymentMethodLabel}>Mobile Money — MTN, Telecel, AirtelTigo</Text>
           </View>
           <View style={styles.paymentMethodRow}>
             <Text style={styles.paymentMethodIcon}>🏦</Text>
             <Text style={styles.paymentMethodLabel}>Bank Transfer</Text>
           </View>
 
-          <Text style={styles.paymentMethodsNote}>
-            Your card details are encrypted and never shared with WopeCar. Payments are processed securely by
-            Paystack — Ghana's leading payment gateway.
-          </Text>
-        </View>
-
-        <View style={styles.infoBox}>
-          <Ionicons name="lock-closed-outline" size={16} color={colors.teal} />
-          <Text style={styles.infoText}>
-            Secured by Paystack. Your card details are never stored on this device.
-          </Text>
+          <Text style={styles.paymentMethodsNote}>🔒 Securely processed by Paystack, a Stripe company.</Text>
         </View>
 
         {isProcessing && (
@@ -648,6 +660,12 @@ function createStyles(colors) {
       color: colors.textPrimary,
       marginBottom: 6,
     },
+    summaryDates: {
+      fontFamily: FONTS.regular,
+      fontSize: 12,
+      color: colors.textMuted,
+      marginBottom: 8,
+    },
     totalLabel: {
       fontFamily: FONTS.regular,
       fontSize: 11,
@@ -708,18 +726,6 @@ function createStyles(colors) {
       paddingTop: 10,
       borderTopWidth: 1,
       borderTopColor: colors.divider,
-    },
-    infoBox: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      marginBottom: 16,
-    },
-    infoText: {
-      flex: 1,
-      fontFamily: FONTS.regular,
-      fontSize: 12,
-      color: colors.textSubtle,
     },
     processingBox: {
       flexDirection: 'row',
