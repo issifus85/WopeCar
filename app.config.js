@@ -26,13 +26,17 @@ module.exports = ({ config }) => ({
     '@react-native-firebase/analytics',
     '@react-native-firebase/crashlytics',
     // react-native-firebase v26 resolves Firebase via Swift Package
-    // Manager, which fails to link against this RN 0.81 New Architecture
-    // project's default static-framework linkage ("SPM + static linkage
-    // is not supported" - confirmed via a real EAS iOS build failure).
-    // expo-build-properties is the supported way to set Podfile linkage
-    // in a CNG project (no committed ios/Podfile to hand-edit) - dynamic
-    // linkage is the fix CocoaPods' own error message suggests first.
-    ['expo-build-properties', { ios: { useFrameworks: 'dynamic' } }],
+    // Manager, which failed outright against this project's default
+    // static-framework linkage ("SPM + static linkage is not supported").
+    // Switching to dynamic linkage (via expo-build-properties) got past
+    // that but then failed at the link step with an undefined symbol
+    // (_OBJC_CLASS_$_FIRApp) - both confirmed via real EAS iOS build
+    // failures. Disabling RNFirebase's SPM resolution entirely (this local
+    // plugin - see plugins/withRNFirebaseDisableSPM.js) avoids both
+    // problems by falling back to Firebase's older, far more
+    // battle-tested pure-CocoaPods resolution path, so linkage stays at
+    // its default (static) - no expo-build-properties needed for this.
+    require('./plugins/withRNFirebaseDisableSPM'),
   ],
   extra: {
     ...config.extra,
