@@ -70,7 +70,11 @@ export default function CheckoutWopeCareScreen() {
           selectedPlan={draft.wopeCare}
           onSelect={(planId) => {
             updateDraft({ wopeCare: planId, wopeCareDetails: planId === 'none' ? null : WOPECARE_PLANS[planId] });
-            if (planId !== 'none' && car) {
+            if (planId === 'none') {
+              handleContinue();
+              return;
+            }
+            if (car) {
               logWopecareSelected({
                 plan: planId,
                 dailyRate: calculateWopeCareDailyRate(car.pricePerDay, planId),
