@@ -14,6 +14,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { formatCurrency, getMinBookingDays, isAnyDiscountActive, applyAnyDiscount, useAppWideDiscount } from '../../constants/pricing';
 import ImageGallery from '../../components/ImageGallery';
 import SectionHeading from '../../components/SectionHeading';
+import AvailableDestinationsSection from '../../components/AvailableDestinationsSection';
 import FeaturesSection from '../../components/FeaturesSection';
 import FaqSection from '../../components/FaqSection';
 import CarOwnerCard from '../../components/CarOwnerCard';
@@ -361,6 +362,12 @@ export default function CarDetailScreen() {
               })}
             </View>
           </View>
+
+          {!!car.regionalAddons?.length && (
+            <View style={styles.section}>
+              <AvailableDestinationsSection addons={car.regionalAddons} />
+            </View>
+          )}
 
           {!!rentalTerms && (
             <View style={styles.section}>

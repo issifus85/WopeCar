@@ -581,6 +581,7 @@ This table predates several areas of the app (e.g. `app/admin/*`, `app/vendor/*`
 | `CarTileCard.js` | Home tile-view car card |
 | `ImageGallery.js` | Swipeable image carousel (car photos) |
 | `SectionHeading.js` | Small heading + accent bar, used across Car Detail sections |
+| `AvailableDestinationsSection.js` | Car Detail "Available Destinations" — this car's regional/custom destination add-ons (`car.regionalAddons`, from `cars.regional_addons`), collapsible past 3 like `FaqSection.js` |
 | `FeaturesSection.js` | Car Detail feature list (icon-mapped) |
 | `ReviewsSection.js` | Car Detail rating breakdown |
 | `FaqSection.js` | Car Detail FAQ accordion (collapsible, "show all") |
