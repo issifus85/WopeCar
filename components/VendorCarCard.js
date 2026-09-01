@@ -1,12 +1,15 @@
 import { useMemo } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, PixelRatio } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { formatCurrency } from '../constants/pricing';
+import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../utils/imageUrl';
 import VendorStatusBadge from './VendorStatusBadge';
+
+const CARD_IMAGE_SIZE = 90;
 
 export default function VendorCarCard({ car, earningsThisMonth = 0, onPress }) {
   const { colors } = useAppTheme();
@@ -16,7 +19,21 @@ export default function VendorCarCard({ car, earningsThisMonth = 0, onPress }) {
   return (
     <TouchableOpacity style={styles.card} onPress={onPress}>
       {car.image ? (
-        <Image source={{ uri: car.image }} style={styles.image} contentFit="cover" />
+        <Image
+          source={{
+            uri: resizeImageUrl(car.image, {
+              width: CARD_IMAGE_SIZE * PixelRatio.get(),
+              height: CARD_IMAGE_SIZE * PixelRatio.get(),
+            }),
+          }}
+          style={styles.image}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={200}
+          placeholder={CAR_PHOTO_BLURHASH}
+          placeholderContentFit="cover"
+          recyclingKey={car.image}
+        />
       ) : (
         <View style={[styles.image, styles.imagePlaceholder]}>
           <Text style={styles.imagePlaceholderText}>🚗</Text>

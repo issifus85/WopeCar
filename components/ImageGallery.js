@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { StyleSheet, View, FlatList, Text, Dimensions, TouchableOpacity, PixelRatio } from 'react-native';
 import { Image } from 'expo-image';
 import { useAppTheme } from '../contexts/ThemeContext';
-import { resizeImageUrl } from '../utils/imageUrl';
+import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../utils/imageUrl';
 
 // `onPress`, when given, makes the gallery double as a tap target (e.g. a
 // card that opens the car's detail page) - each rendered image gets its own
@@ -56,6 +56,9 @@ export default function ImageGallery({ images, height = 180, borderRadius = 16, 
               cachePolicy="memory-disk"
               transition={200}
               priority={index === 0 ? 'high' : 'low'}
+              placeholder={CAR_PHOTO_BLURHASH}
+              placeholderContentFit="cover"
+              recyclingKey={item}
             />
           );
           return onPress ? (

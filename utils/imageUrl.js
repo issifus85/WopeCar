@@ -36,3 +36,12 @@ export function resizeImageUrl(url, { width, height, quality = 75 } = {}) {
 
   return `${RESIZE_PROXY}?${params.toString()}`;
 }
+
+// A single generic neutral-gray blurhash shared by every car photo slot -
+// not decoded from the actual image (the data layer has no per-photo hash
+// stored), just something better than a blank white rectangle while the
+// resized image is still loading in. The `blurhash:/` scheme is required -
+// expo-image's isBlurhashString() only recognizes a plain hash string with
+// this prefix; without it the string is treated as a literal image URI
+// (confirmed live: a bare hash fired a network request for it as a path).
+export const CAR_PHOTO_BLURHASH = 'blurhash:/LKO2?U%2Tw=w]~RBVZRi};RPxuwH';

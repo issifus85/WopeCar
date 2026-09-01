@@ -62,6 +62,12 @@ export default function FavoritesScreen() {
         )}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
+        // Same windowing as the main browse screen's FlatList
+        // (app/(tabs)/index.js) - avoids firing a request per photo for
+        // every saved car at once on a cold cache.
+        initialNumToRender={4}
+        maxToRenderPerBatch={4}
+        windowSize={5}
       />
     </View>
   );

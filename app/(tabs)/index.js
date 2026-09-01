@@ -1,10 +1,12 @@
-import { StyleSheet, Text, View, TextInput, FlatList, TouchableOpacity, ScrollView, ActivityIndicator, Animated } from 'react-native';
+import { StyleSheet, Text, View, TextInput, FlatList, TouchableOpacity, ScrollView, ActivityIndicator, Animated, Dimensions, PixelRatio } from 'react-native';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'expo-router';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { QUICK_FILTERS } from '../../data/cars';
 import { fetchCars } from '../../services/carsApi';
+import { resizeImageUrl } from '../../utils/imageUrl';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -17,6 +19,12 @@ import FilterModal from '../../components/FilterModal';
 import CarListCard from '../../components/CarListCard';
 import CarTileCard from '../../components/CarTileCard';
 import { logScreen, logSearchCars } from '../../services/analytics';
+
+// Matches the tile FlatList's own initialNumToRender + a small buffer for
+// the batch right after it - warms expo-image's cache for those cards
+// while the list is still rendering, instead of each one only starting its
+// fetch once it actually mounts.
+const PREFETCH_CAR_COUNT = 6;
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -125,6 +133,17 @@ export default function HomeScreen() {
       .then(({ cars, meta }) => {
         setCars(cars);
         setTotal(meta?.total ?? cars.length);
+        // Sized to the tile card's own ImageGallery dimensions (full-bleed
+        // width x 190) since 'tile' is the default viewMode - a list-view
+        // prefetch would need CarListCard's own 110x130, but tile is what
+        // most people see first.
+        const screenWidth = Dimensions.get('window').width;
+        const prefetchUrls = cars
+          .slice(0, PREFETCH_CAR_COUNT)
+          .map(car => car.gallery?.[0])
+          .filter(Boolean)
+          .map(uri => resizeImageUrl(uri, { width: screenWidth * PixelRatio.get(), height: 190 * PixelRatio.get() }));
+        if (prefetchUrls.length) Image.prefetch(prefetchUrls, 'memory-disk');
         if (hasLoadedOnce.current) {
           logSearchCars({
             location: locationFilters[0],

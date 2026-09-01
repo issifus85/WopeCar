@@ -6,7 +6,7 @@ import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { formatCurrency, isAnyDiscountActive, applyAnyDiscount, isCarNew, useAppWideDiscount } from '../constants/pricing';
-import { resizeImageUrl } from '../utils/imageUrl';
+import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../utils/imageUrl';
 import { getAvailabilityBadge } from '../utils/carAvailability';
 
 const CARD_IMAGE_WIDTH = 110;
@@ -36,6 +36,9 @@ export default function CarListCard({ car, onPress }) {
             contentFit="cover"
             cachePolicy="memory-disk"
             transition={200}
+            placeholder={CAR_PHOTO_BLURHASH}
+            placeholderContentFit="cover"
+            recyclingKey={car.image}
           />
         ) : (
           <View style={[styles.image, styles.imagePlaceholder]}>
