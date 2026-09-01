@@ -1,7 +1,7 @@
 // Supabase Edge Function - scans confirmed bookings whose return date+time
 // falls in the next 23-25 hours and sends a one-time "your rental ends
-// soon" reminder (in-app notification + email) to the renter, with a CTA
-// into the EXISTING Modify Booking flow (modify-booking Edge Function,
+// soon" reminder (push + in-app notification + email) to the renter, with a
+// CTA into the EXISTING Modify Booking flow (modify-booking Edge Function,
 // app/booking/[id].js's "Modify Trip Details" section) so they can extend
 // their return date and pay the difference exactly the way modifying a
 // booking already works. Deliberately not a new/separate "extend booking"
@@ -168,19 +168,42 @@ Deno.serve(async (req) => {
       const timeLabel = booking.return_time || 'the scheduled time';
       const bookingUrl = `wopecar://booking/${booking.id}`;
 
+      const reminderBody = `${carName} is due back ${timeLabel} on ${dateLabel}. Want more time? You can extend it right in the app.`;
+
       if (booking.renter_id) {
         try {
           await adminClient.from('notifications').insert({
             user_id: booking.renter_id,
             type: 'booking_ending_reminder',
             title: 'Your rental ends tomorrow',
-            body: `${carName} is due back ${timeLabel} on ${dateLabel}. Want more time? You can extend it right in the app.`,
+            body: reminderBody,
             booking_id: booking.id,
           });
         } catch {
           // Best-effort, same as every other reminder cron - one failed
           // insert must not stop the rest of this batch.
         }
+
+        // send-push-notification now accepts this service-role-authenticated
+        // call as a trusted internal caller (fixed alongside this feature -
+        // it previously only accepted a real logged-in admin session, so
+        // every server-side push call, including this one, would have
+        // 401'd). data.url is the deep-link contract
+        // services/pushNotifications.js's tap handler already reads.
+        await adminClient.functions
+          .invoke('send-push-notification', {
+            body: {
+              notifications: [
+                {
+                  userId: booking.renter_id,
+                  title: 'Your rental ends tomorrow',
+                  body: reminderBody,
+                  data: { url: `/booking/${booking.id}` },
+                },
+              ],
+            },
+          })
+          .catch(() => {});
       }
 
       if (renter?.email && resendApiKey) {
