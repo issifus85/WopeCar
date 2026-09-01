@@ -791,8 +791,8 @@ function createStyles(colors) {
       textDecorationLine: 'underline',
     },
     paystackLogo: {
-      width: 120,
-      height: 32,
+      width: 140,
+      height: 25,
       alignSelf: 'center',
       marginTop: 20,
     },
