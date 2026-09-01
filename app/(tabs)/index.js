@@ -26,6 +26,14 @@ import { logScreen, logSearchCars } from '../../services/analytics';
 // fetch once it actually mounts.
 const PREFETCH_CAR_COUNT = 6;
 
+// app/car/[id].js's ImageGallery renders its hero at this height (full
+// screen width) - a different size than the list's own tile/list cards, so
+// it's a different resizeImageUrl cache key and gets none of the benefit
+// from PREFETCH_CAR_COUNT above. Warming it here, the instant a card is
+// tapped, gives the fetch a head start during the push transition instead
+// of starting cold once the detail screen actually mounts.
+const DETAIL_HERO_HEIGHT = 320;
+
 export default function HomeScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
@@ -224,7 +232,17 @@ export default function HomeScreen() {
   });
 
   const renderCar = ({ item }) => {
-    const onPress = () => router.push(`/car/${item.id}`);
+    const onPress = () => {
+      const heroUrl = item.gallery?.[0];
+      if (heroUrl) {
+        const screenWidth = Dimensions.get('window').width;
+        Image.prefetch(
+          resizeImageUrl(heroUrl, { width: screenWidth * PixelRatio.get(), height: DETAIL_HERO_HEIGHT * PixelRatio.get() }),
+          'memory-disk'
+        );
+      }
+      router.push(`/car/${item.id}`);
+    };
     return viewMode === 'list' ? (
       <CarListCard car={item} onPress={onPress} />
     ) : (
