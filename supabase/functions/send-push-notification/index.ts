@@ -12,6 +12,18 @@
 // is an admin action targeting some other user, so this deliberately does
 // NOT support "send to yourself" self-service like send-notification-email.
 //
+// ALSO accepts a trusted internal call: any server-side function that
+// authenticates with this project's own SUPABASE_SERVICE_ROLE_KEY (i.e.
+// every cron-triggered reminder, and modify-booking's push-to-renter call).
+// Confirmed via production logs (2026-08-31) that this was previously
+// broken - a service-role-authenticated client has no real user session,
+// so callerClient.auth.getUser() below returned an error and every such
+// call 401'd silently (the call sites all wrap it in .catch(() => {}), so
+// nothing surfaced this until it was investigated directly). Comparing the
+// raw bearer token against this function's own service-role key is safe
+// because that key is never shipped to any client (mobile app or admin
+// web) - only other server-side Edge Functions ever hold it.
+//
 // Deploy with: supabase functions deploy send-push-notification
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -53,18 +65,22 @@ Deno.serve(async (req) => {
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-    const callerClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: getUserError } = await callerClient.auth.getUser();
-    if (getUserError || !user) {
-      return jsonResponse({ error: 'Invalid or expired session.' }, 401);
-    }
-
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
-    const { data: callerProfile } = await adminClient.from('users').select('role').eq('id', user.id).maybeSingle();
-    if (callerProfile?.role !== 'admin') {
-      return jsonResponse({ error: 'Admin access required.' }, 403);
+
+    const isTrustedInternalCall = authHeader.replace(/^Bearer\s+/i, '') === serviceRoleKey;
+    if (!isTrustedInternalCall) {
+      const callerClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user }, error: getUserError } = await callerClient.auth.getUser();
+      if (getUserError || !user) {
+        return jsonResponse({ error: 'Invalid or expired session.' }, 401);
+      }
+
+      const { data: callerProfile } = await adminClient.from('users').select('role').eq('id', user.id).maybeSingle();
+      if (callerProfile?.role !== 'admin') {
+        return jsonResponse({ error: 'Admin access required.' }, 403);
+      }
     }
 
     const { notifications } = (await req.json()) as { notifications: NotificationInput[] };
