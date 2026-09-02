@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, PixelRatio } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,8 +8,10 @@ import { useAppTheme } from '../../contexts/ThemeContext';
 import { useInbox } from '../../contexts/InboxContext';
 import MessageThread from '../../components/MessageThread';
 import { pickAndUploadChatImage, pickAndUploadChatDocument, getCurrentLocationForChat } from '../../services/chatAttachmentsApi';
+import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
 
 const ROLE_ICONS = { Host: 'home-outline', Driver: 'car-outline', Support: 'headset-outline' };
+const AVATAR_SIZE = 36;
 
 export default function ConversationScreen() {
   const { id, from, carId, bookingId } = useLocalSearchParams();
@@ -107,7 +109,15 @@ export default function ConversationScreen() {
     <View style={styles.container}>
       <View style={styles.participantHeader}>
         {conversation.participant.avatar ? (
-          <Image source={{ uri: conversation.participant.avatar }} style={styles.avatarImage} />
+          <Image
+            source={{ uri: resizeImageUrl(conversation.participant.avatar, { width: AVATAR_SIZE * PixelRatio.get(), height: AVATAR_SIZE * PixelRatio.get() }) }}
+            style={styles.avatarImage}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={200}
+            placeholder={CAR_PHOTO_BLURHASH}
+            placeholderContentFit="cover"
+          />
         ) : (
           <View style={styles.avatarPlaceholder}>
             <Ionicons name={roleIcon} size={18} color={colors.teal} />

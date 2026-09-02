@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View, FlatList, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, FlatList, TouchableOpacity, PixelRatio } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,8 +9,10 @@ import { useAppTheme } from '../../contexts/ThemeContext';
 import { useInbox } from '../../contexts/InboxContext';
 import SwipeableRow from '../../components/SwipeableRow';
 import ConfirmModal from '../../components/ConfirmModal';
+import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
 
 const TABS = ['Messages', 'Notifications'];
+const AVATAR_SIZE = 44;
 
 const ROLE_ICONS = { Host: 'home-outline', Driver: 'car-outline', Support: 'headset-outline' };
 
@@ -28,7 +30,16 @@ function ConversationRow({ conversation, styles, colors }) {
   return (
     <View style={styles.row}>
       {conversation.participant.avatar ? (
-        <Image source={{ uri: conversation.participant.avatar }} style={styles.avatarImage} />
+        <Image
+          source={{ uri: resizeImageUrl(conversation.participant.avatar, { width: AVATAR_SIZE * PixelRatio.get(), height: AVATAR_SIZE * PixelRatio.get() }) }}
+          style={styles.avatarImage}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={200}
+          placeholder={CAR_PHOTO_BLURHASH}
+          placeholderContentFit="cover"
+          recyclingKey={conversation.participant.avatar}
+        />
       ) : (
         <View style={styles.avatarPlaceholder}>
           <Ionicons name={roleIcon} size={20} color={colors.teal} />

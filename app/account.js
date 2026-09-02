@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import {
   StyleSheet, Text, View, TextInput, TouchableOpacity, ActivityIndicator,
-  ScrollView, Alert, Share, KeyboardAvoidingView, Platform,
+  ScrollView, Alert, Share, KeyboardAvoidingView, Platform, PixelRatio,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter, useNavigation, useLocalSearchParams } from 'expo-router';
@@ -13,6 +13,9 @@ import { uploadDocument } from '../services/documentsApi';
 import { pickImage } from '../services/imagePicker';
 import OptionPickerModal from '../components/OptionPickerModal';
 import PhotoSourceSheet from '../components/PhotoSourceSheet';
+import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../utils/imageUrl';
+
+const AVATAR_SIZE = 80;
 
 function getVerificationColors(colors) {
   return {
@@ -280,7 +283,15 @@ export default function AccountScreen() {
         <View style={styles.headerCard}>
           <TouchableOpacity onPress={handlePickAvatar} disabled={isUploadingAvatar || !!photoPickerTarget} style={styles.avatarWrap}>
             {user.avatar ? (
-              <Image source={{ uri: user.avatar }} style={styles.avatarImage} />
+              <Image
+                source={{ uri: resizeImageUrl(user.avatar, { width: AVATAR_SIZE * PixelRatio.get(), height: AVATAR_SIZE * PixelRatio.get() }) }}
+                style={styles.avatarImage}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                transition={200}
+                placeholder={CAR_PHOTO_BLURHASH}
+                placeholderContentFit="cover"
+              />
             ) : (
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>{user.name?.charAt(0)?.toUpperCase() ?? '?'}</Text>

@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert, PixelRatio } from 'react-native';
 import { Image } from 'expo-image';
 import { useMemo } from 'react';
 import { useRouter } from 'expo-router';
@@ -10,8 +10,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useInbox } from '../../contexts/InboxContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { getVendorProfile } from '../../services/vendorCarsApi';
+import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
+const AVATAR_SIZE = 52;
 
 const BASE_MENU_ITEMS = [
   { label: 'Inbox', icon: 'mail-outline', route: '/inbox' },
@@ -82,7 +84,15 @@ export default function ProfileScreen() {
         onPress={() => router.push(user ? '/account' : '/login')}
       >
         {user?.avatar ? (
-          <Image source={{ uri: user.avatar }} style={styles.avatarImage} />
+          <Image
+            source={{ uri: resizeImageUrl(user.avatar, { width: AVATAR_SIZE * PixelRatio.get(), height: AVATAR_SIZE * PixelRatio.get() }) }}
+            style={styles.avatarImage}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={200}
+            placeholder={CAR_PHOTO_BLURHASH}
+            placeholderContentFit="cover"
+          />
         ) : (
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>

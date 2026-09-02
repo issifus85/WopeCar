@@ -1,12 +1,14 @@
 import { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, PixelRatio } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import SectionHeading from './SectionHeading';
+import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../utils/imageUrl';
 
 const STAR_COLOR = '#F5A623';
+const AVATAR_SIZE = 32;
 
 // Standard 5-to-1-star labels (matches Laravel/Bravo's own rate_score
 // wording) - shown as a fixed set of rows, even before any reviews exist,
@@ -111,7 +113,15 @@ export default function ReviewsSection({ reviewScore, reviews }) {
             <View key={review.id ?? index} style={styles.reviewItem}>
               <View style={styles.reviewHeader}>
                 {review.authorAvatar ? (
-                  <Image source={{ uri: review.authorAvatar }} style={styles.avatar} contentFit="cover" />
+                  <Image
+                    source={{ uri: resizeImageUrl(review.authorAvatar, { width: AVATAR_SIZE * PixelRatio.get(), height: AVATAR_SIZE * PixelRatio.get() }) }}
+                    style={styles.avatar}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    transition={200}
+                    placeholder={CAR_PHOTO_BLURHASH}
+                    placeholderContentFit="cover"
+                  />
                 ) : (
                   <View style={styles.avatarFallback}>
                     <Text style={styles.avatarFallbackText}>

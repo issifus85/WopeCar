@@ -1,10 +1,13 @@
 import { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, PixelRatio } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import SectionHeading from './SectionHeading';
+import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../utils/imageUrl';
+
+const AVATAR_SIZE = 48;
 
 function formatMemberSince(dateString) {
   if (!dateString) return null;
@@ -26,7 +29,15 @@ export default function CarOwnerCard({ owner }) {
       <SectionHeading>Partner</SectionHeading>
       <View style={styles.card}>
         {owner.avatar ? (
-          <Image source={{ uri: owner.avatar }} style={styles.avatarImage} />
+          <Image
+            source={{ uri: resizeImageUrl(owner.avatar, { width: AVATAR_SIZE * PixelRatio.get(), height: AVATAR_SIZE * PixelRatio.get() }) }}
+            style={styles.avatarImage}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={200}
+            placeholder={CAR_PHOTO_BLURHASH}
+            placeholderContentFit="cover"
+          />
         ) : (
           <View style={styles.avatarPlaceholder}>
             <Ionicons name="person" size={22} color={colors.teal} />
