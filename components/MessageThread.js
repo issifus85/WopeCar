@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   StyleSheet, Text, View, FlatList, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, Modal, Pressable, ActivityIndicator, Linking,
+  KeyboardAvoidingView, Platform, Modal, Pressable, ActivityIndicator, Linking, PixelRatio,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +10,10 @@ import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { getChatAttachmentSignedUrl, openChatDocument } from '../services/chatAttachmentsApi';
 import PinnedBookingSummary from './PinnedBookingSummary';
+import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../utils/imageUrl';
+
+const ATTACHMENT_WIDTH = 200;
+const ATTACHMENT_HEIGHT = 150;
 
 function formatMessageTime(iso) {
   return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -61,7 +65,15 @@ function ImageAttachment({ path, styles, colors, onPress }) {
 
   return (
     <TouchableOpacity onPress={() => onPress(url)} activeOpacity={0.85}>
-      <Image source={{ uri: url }} style={styles.attachmentImage} contentFit="cover" />
+      <Image
+        source={{ uri: resizeImageUrl(url, { width: ATTACHMENT_WIDTH * PixelRatio.get(), height: ATTACHMENT_HEIGHT * PixelRatio.get() }) }}
+        style={styles.attachmentImage}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        transition={200}
+        placeholder={CAR_PHOTO_BLURHASH}
+        placeholderContentFit="cover"
+      />
     </TouchableOpacity>
   );
 }

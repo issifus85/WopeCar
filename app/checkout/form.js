@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Image, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Alert, KeyboardAvoidingView, Platform, PixelRatio } from 'react-native';
+import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
@@ -11,6 +12,9 @@ import { pickImage } from '../../services/imagePicker';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 import PhotoSourceSheet from '../../components/PhotoSourceSheet';
+import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
+
+const UPLOAD_TILE_SIZE = 48;
 
 function splitName(fullName) {
   const parts = (fullName ?? '').trim().split(/\s+/);
@@ -29,7 +33,15 @@ function DocumentUploadTile({ label, value, disabled, onPick, styles, colors }) 
   return (
     <TouchableOpacity style={styles.uploadTile} onPress={onPick} disabled={disabled}>
       {previewUri ? (
-        <Image source={{ uri: previewUri }} style={styles.uploadPreview} />
+        <Image
+          source={{ uri: resizeImageUrl(previewUri, { width: UPLOAD_TILE_SIZE * PixelRatio.get(), height: UPLOAD_TILE_SIZE * PixelRatio.get() }) }}
+          style={styles.uploadPreview}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={200}
+          placeholder={CAR_PHOTO_BLURHASH}
+          placeholderContentFit="cover"
+        />
       ) : (
         <View style={styles.uploadPlaceholder}>
           <Ionicons name="camera-outline" size={24} color={colors.textSubtle} />

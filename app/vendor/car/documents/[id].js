@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Alert, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Alert, KeyboardAvoidingView, Platform, ActivityIndicator, Dimensions, PixelRatio } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,13 @@ import { pickImage } from '../../../../services/imagePicker';
 import VendorHeader from '../../../../components/VendorHeader';
 import SingleDateModal from '../../../../components/SingleDateModal';
 import PhotoSourceSheet from '../../../../components/PhotoSourceSheet';
+import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../../../utils/imageUrl';
+
+// docTile fills the screen width (minus the scroll content's own padding)
+// at aspectRatio 2.2 - close enough for a resize target without threading
+// onLayout through this presentational tile just for a perf hint.
+const DOC_TILE_WIDTH = Dimensions.get('window').width - 32;
+const DOC_TILE_HEIGHT = DOC_TILE_WIDTH / 2.2;
 
 function formatExpiry(iso) {
   if (!iso) return null;
@@ -34,7 +41,15 @@ function DocUploadTile({ label, uri, isPicking, onPick, styles, colors }) {
   return (
     <TouchableOpacity style={styles.docTile} onPress={onPick} disabled={isPicking}>
       {uri ? (
-        <Image source={{ uri }} style={styles.docThumbnail} contentFit="cover" />
+        <Image
+          source={{ uri: resizeImageUrl(uri, { width: DOC_TILE_WIDTH * PixelRatio.get(), height: DOC_TILE_HEIGHT * PixelRatio.get() }) }}
+          style={styles.docThumbnail}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={200}
+          placeholder={CAR_PHOTO_BLURHASH}
+          placeholderContentFit="cover"
+        />
       ) : (
         <Ionicons name="document-attach-outline" size={26} color={colors.textSubtle} />
       )}

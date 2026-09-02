@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, FlatList, RefreshControl, ActivityIndicator, Image } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, FlatList, RefreshControl, ActivityIndicator, PixelRatio } from 'react-native';
+import { Image } from 'expo-image';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { FONTS } from '../../constants/theme';
 import { formatCurrency } from '../../constants/pricing';
@@ -7,14 +8,24 @@ import FilterTabs from '../../components/admin/FilterTabs';
 import BadgeStatus from '../../components/admin/BadgeStatus';
 import CarDetailModal from '../../components/admin/CarDetailModal';
 import { listCars } from '../../services/adminCarsApi';
+import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
 
 const STATUS_TONE = { pending: 'warning', active: 'success', inactive: 'muted' };
+const THUMB_SIZE = 72;
 
 function CarCard({ car, onPress, styles, colors }) {
   return (
     <TouchableOpacity style={styles.card} onPress={onPress}>
       {car.images?.[0] ? (
-        <Image source={{ uri: car.images[0] }} style={styles.thumb} />
+        <Image
+          source={{ uri: resizeImageUrl(car.images[0], { width: THUMB_SIZE * PixelRatio.get(), height: THUMB_SIZE * PixelRatio.get() }) }}
+          style={styles.thumb}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={200}
+          placeholder={CAR_PHOTO_BLURHASH}
+          placeholderContentFit="cover"
+        />
       ) : (
         <View style={[styles.thumb, styles.thumbPlaceholder]} />
       )}

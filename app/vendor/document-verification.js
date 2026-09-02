@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Image } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, ActivityIndicator, Alert, PixelRatio } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
@@ -10,6 +11,9 @@ import { pickImage } from '../../services/imagePicker';
 import VendorHeader from '../../components/VendorHeader';
 import VendorStatusBadge from '../../components/VendorStatusBadge';
 import PhotoSourceSheet from '../../components/PhotoSourceSheet';
+import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
+
+const UPLOAD_TILE_SIZE = 48;
 
 const STATUS_LABEL = {
   not_submitted: 'Not Submitted',
@@ -22,7 +26,15 @@ function UploadTile({ label, value, isUploading, disabled, onPick, styles, color
   return (
     <TouchableOpacity style={styles.uploadTile} onPress={onPick} disabled={isUploading || disabled}>
       {value ? (
-        <Image source={{ uri: value }} style={styles.uploadPreview} />
+        <Image
+          source={{ uri: resizeImageUrl(value, { width: UPLOAD_TILE_SIZE * PixelRatio.get(), height: UPLOAD_TILE_SIZE * PixelRatio.get() }) }}
+          style={styles.uploadPreview}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={200}
+          placeholder={CAR_PHOTO_BLURHASH}
+          placeholderContentFit="cover"
+        />
       ) : (
         <View style={styles.uploadPlaceholder}>
           <Ionicons name="camera-outline" size={22} color={colors.textSubtle} />
