@@ -580,8 +580,6 @@ export default function CheckoutPaymentScreen() {
             </Text>
           </Text>
         </View>
-
-        <Image source={require('../../assets/paystack-logo.webp')} style={styles.paystackLogo} contentFit="contain" />
       </ScrollView>
 
       <CheckoutFooterButton
@@ -800,12 +798,6 @@ function createStyles(colors) {
       fontFamily: FONTS.semiBold,
       color: colors.teal,
       textDecorationLine: 'underline',
-    },
-    paystackLogo: {
-      width: 140,
-      height: 25,
-      alignSelf: 'center',
-      marginTop: 20,
     },
   });
 }
