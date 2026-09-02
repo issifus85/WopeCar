@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, FlatList, TouchableOpacity, PixelRatio } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { useRouter, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { formatRelativeTime } from '../../constants/dateUtils';
@@ -85,6 +85,7 @@ function NotificationRow({ notification, styles, colors }) {
 
 export default function InboxScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const {
@@ -94,6 +95,29 @@ export default function InboxScreen() {
   } = useInbox();
   const [activeTab, setActiveTab] = useState('Messages');
   const [pendingDelete, setPendingDelete] = useState(null);
+
+  // A custom headerLeft, not just the default native-stack back button -
+  // this screen (like app/booking/[id].js) is a root-level Stack.Screen
+  // pushed from inside the (tabs) group's own nested navigator, the exact
+  // combination that can leave the default back button's bare GO_BACK
+  // action unresolved ("tap does nothing") - see booking/[id].js's own
+  // handleBack comment for the full explanation and the live repro. Always
+  // replaces to the Account tab explicitly rather than trusting back()/
+  // canGoBack() (canGoBack() reports true even in the broken state).
+  const handleBack = useCallback(() => {
+    router.replace('/(tabs)/profile');
+  }, [router]);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity onPress={handleBack} hitSlop={10} style={styles.headerBackButton}>
+          <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+          <Text style={styles.headerBackLabel}>Account</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, handleBack, styles, colors]);
 
   const unreadNotificationsCount = notifications.filter(n => !n.readAt).length;
 
@@ -215,6 +239,17 @@ function createStyles(colors) {
     container: {
       flex: 1,
       backgroundColor: colors.background,
+    },
+    headerBackButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingRight: 8,
+    },
+    headerBackLabel: {
+      fontFamily: FONTS.regular,
+      fontSize: 17,
+      color: colors.textPrimary,
+      marginLeft: -4,
     },
     header: {
       paddingTop: 20,
