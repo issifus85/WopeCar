@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Switch, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Switch, ActivityIndicator, Alert, PixelRatio } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,9 @@ import { withdrawListing } from '../../../services/vendorCarsApi';
 import supabase from '../../../services/supabase';
 import VendorHeader from '../../../components/VendorHeader';
 import VendorStatusBadge from '../../../components/VendorStatusBadge';
+import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../../utils/imageUrl';
+
+const CARD_IMAGE_SIZE = 72;
 
 const CANCELLATION_SETTING_KEYS = ['cancellation_full_refund_hours', 'cancellation_partial_refund_hours', 'cancellation_partial_refund_percentage'];
 
@@ -146,7 +149,15 @@ export default function VendorCarManagementScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.summaryCard}>
           {car.image ? (
-            <Image source={{ uri: car.image }} style={styles.image} contentFit="cover" />
+            <Image
+              source={{ uri: resizeImageUrl(car.image, { width: CARD_IMAGE_SIZE * PixelRatio.get(), height: CARD_IMAGE_SIZE * PixelRatio.get() }) }}
+              style={styles.image}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={200}
+              placeholder={CAR_PHOTO_BLURHASH}
+              placeholderContentFit="cover"
+            />
           ) : (
             <View style={[styles.image, styles.imagePlaceholder]}>
               <Text style={styles.imagePlaceholderText}>🚗</Text>

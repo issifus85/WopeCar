@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, FlatList, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, FlatList, ActivityIndicator, TouchableOpacity, Dimensions, PixelRatio } from 'react-native';
 import { Image } from 'expo-image';
 import { useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'expo-router';
@@ -14,6 +14,14 @@ import { useCheckout } from '../../contexts/CheckoutContext';
 import { fetchCarById } from '../../services/carsApi';
 import CarListCard from '../../components/CarListCard';
 import ConfirmModal from '../../components/ConfirmModal';
+import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
+
+// app/car/[id].js's hero and app/checkout/payment.js's summary card each
+// render at their own size - different resizeImageUrl cache keys than this
+// list's own cards, so they're warmed the instant a card/button is tapped.
+const DETAIL_HERO_HEIGHT = 320;
+const CHECKOUT_IMAGE_SIZE = 64;
+const SAVED_CARD_IMAGE_SIZE = 56;
 
 function formatShortDate(iso) {
   if (!iso) return '';
@@ -56,7 +64,16 @@ function SavedBookingCard({ booking, onCompletePayment, onRemove, onSearchAgain,
     <View style={styles.savedCard}>
       <View style={styles.savedCardTop}>
         {booking.carImage ? (
-          <Image source={{ uri: booking.carImage }} style={styles.savedCarImage} contentFit="cover" />
+          <Image
+            source={{ uri: resizeImageUrl(booking.carImage, { width: SAVED_CARD_IMAGE_SIZE * PixelRatio.get(), height: SAVED_CARD_IMAGE_SIZE * PixelRatio.get() }) }}
+            style={styles.savedCarImage}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={200}
+            placeholder={CAR_PHOTO_BLURHASH}
+            placeholderContentFit="cover"
+            recyclingKey={booking.carImage}
+          />
         ) : null}
         <View style={styles.savedCardInfo}>
           <Text style={styles.savedCarName} numberOfLines={1}>{booking.carName}</Text>
@@ -146,6 +163,12 @@ export default function CartScreen() {
       licenseBack: booking.licenseBack,
       proofOfAddress: booking.proofOfAddress,
     });
+    if (booking.carImage) {
+      Image.prefetch(
+        resizeImageUrl(booking.carImage, { width: CHECKOUT_IMAGE_SIZE * PixelRatio.get(), height: CHECKOUT_IMAGE_SIZE * PixelRatio.get() }),
+        'memory-disk'
+      );
+    }
     router.push({ pathname: '/checkout/payment', params: { carId: booking.carId, resumedBookingId: booking.id } });
   };
 
@@ -204,7 +227,20 @@ export default function CartScreen() {
             </View>
           ) : (
             <View style={styles.cartItem}>
-              <CarListCard car={item} onPress={() => router.push(`/car/${item.id}`)} />
+              <CarListCard
+                car={item}
+                onPress={() => {
+                  const heroUrl = item.gallery?.[0];
+                  if (heroUrl) {
+                    const screenWidth = Dimensions.get('window').width;
+                    Image.prefetch(
+                      resizeImageUrl(heroUrl, { width: screenWidth * PixelRatio.get(), height: DETAIL_HERO_HEIGHT * PixelRatio.get() }),
+                      'memory-disk'
+                    );
+                  }
+                  router.push(`/car/${item.id}`);
+                }}
+              />
               <TouchableOpacity
                 style={styles.removeButton}
                 onPress={() => removeFromCart(item.id)}
@@ -224,6 +260,9 @@ export default function CartScreen() {
         )}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        windowSize={5}
       />
 
       <ConfirmModal

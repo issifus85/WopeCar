@@ -1,10 +1,13 @@
 import { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, PixelRatio } from 'react-native';
 import { Image } from 'expo-image';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { formatCurrency } from '../constants/pricing';
+import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../utils/imageUrl';
+
+const CARD_IMAGE_SIZE = 56;
 
 function formatDateTime(value) {
   if (!value) return '';
@@ -28,7 +31,15 @@ export default function PinnedBookingSummary({ summary }) {
   return (
     <View style={styles.card}>
       {summary.carImage ? (
-        <Image source={{ uri: summary.carImage }} style={styles.image} contentFit="cover" />
+        <Image
+          source={{ uri: resizeImageUrl(summary.carImage, { width: CARD_IMAGE_SIZE * PixelRatio.get(), height: CARD_IMAGE_SIZE * PixelRatio.get() }) }}
+          style={styles.image}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={200}
+          placeholder={CAR_PHOTO_BLURHASH}
+          placeholderContentFit="cover"
+        />
       ) : (
         <View style={[styles.image, styles.imagePlaceholder]}>
           <Text style={styles.imagePlaceholderText}>🚗</Text>

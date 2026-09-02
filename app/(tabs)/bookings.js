@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { StyleSheet, Text, View, FlatList, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, FlatList, ActivityIndicator, TouchableOpacity, PixelRatio } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -10,6 +10,14 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { formatCurrency } from '../../constants/pricing';
 import { useBookings } from '../../contexts/BookingsContext';
 import { logScreen } from '../../services/analytics';
+import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
+
+const CARD_IMAGE_WIDTH = 100;
+const CARD_IMAGE_HEIGHT = 118;
+// app/booking/[id].js renders its own carImage at 72x72 - a different
+// resizeImageUrl cache key than this list's cards, so it's warmed here the
+// instant a card is tapped rather than starting cold once that screen mounts.
+const DETAIL_IMAGE_SIZE = 72;
 
 const STATUS_TABS = ['Pending', 'Confirmed', 'Completed', 'Cancelled'];
 
@@ -34,7 +42,16 @@ function BookingCard({ booking, onPress, styles, colors, currency }) {
   return (
     <TouchableOpacity style={styles.card} onPress={onPress}>
       {booking.carImage ? (
-        <Image source={{ uri: booking.carImage }} style={styles.image} contentFit="cover" />
+        <Image
+          source={{ uri: resizeImageUrl(booking.carImage, { width: CARD_IMAGE_WIDTH * PixelRatio.get(), height: CARD_IMAGE_HEIGHT * PixelRatio.get() }) }}
+          style={styles.image}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={200}
+          placeholder={CAR_PHOTO_BLURHASH}
+          placeholderContentFit="cover"
+          recyclingKey={booking.carImage}
+        />
       ) : (
         <View style={[styles.image, styles.imagePlaceholder]}>
           <Text style={styles.imagePlaceholderText}>🚗</Text>
@@ -131,10 +148,27 @@ export default function BookingsScreen() {
           data={filtered}
           keyExtractor={item => item.id}
           renderItem={({ item }) => (
-            <BookingCard booking={item} onPress={() => router.push(`/booking/${item.id}`)} styles={styles} colors={colors} currency={activeCurrency} />
+            <BookingCard
+              booking={item}
+              onPress={() => {
+                if (item.carImage) {
+                  Image.prefetch(
+                    resizeImageUrl(item.carImage, { width: DETAIL_IMAGE_SIZE * PixelRatio.get(), height: DETAIL_IMAGE_SIZE * PixelRatio.get() }),
+                    'memory-disk'
+                  );
+                }
+                router.push(`/booking/${item.id}`);
+              }}
+              styles={styles}
+              colors={colors}
+              currency={activeCurrency}
+            />
           )}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          initialNumToRender={6}
+          maxToRenderPerBatch={6}
+          windowSize={5}
         />
       )}
     </View>

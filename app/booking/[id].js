@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator, Alert, PixelRatio } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -31,6 +31,9 @@ import { useInbox } from '../../contexts/InboxContext';
 import DateRangeModal, { formatDateShort } from '../../components/DateRangeModal';
 import LocationSearchModal from '../../components/LocationSearchModal';
 import ConfirmModal from '../../components/ConfirmModal';
+import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
+
+const CARD_IMAGE_SIZE = 72;
 
 function getStatusColors(colors) {
   return {
@@ -468,7 +471,15 @@ export default function BookingDetailScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.headerCard}>
         {booking.carImage ? (
-          <Image source={{ uri: booking.carImage }} style={styles.carImage} contentFit="cover" />
+          <Image
+            source={{ uri: resizeImageUrl(booking.carImage, { width: CARD_IMAGE_SIZE * PixelRatio.get(), height: CARD_IMAGE_SIZE * PixelRatio.get() }) }}
+            style={styles.carImage}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={200}
+            placeholder={CAR_PHOTO_BLURHASH}
+            placeholderContentFit="cover"
+          />
         ) : (
           <View style={[styles.carImage, styles.imagePlaceholder]}>
             <Text style={styles.imagePlaceholderText}>🚗</Text>

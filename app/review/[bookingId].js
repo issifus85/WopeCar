@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, PixelRatio } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { FONTS } from '../../constants/theme';
@@ -7,6 +7,9 @@ import { useAppTheme } from '../../contexts/ThemeContext';
 import supabase from '../../services/supabase';
 import { getMyReviewForBooking, submitReview, updateMyReview } from '../../services/reviewsApi';
 import StarRatingInput from '../../components/StarRatingInput';
+import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
+
+const CARD_IMAGE_SIZE = 56;
 
 const CATEGORIES = [
   { key: 'cleanliness', label: 'Vehicle Condition & Cleanliness' },
@@ -164,7 +167,15 @@ export default function ReviewScreen() {
     <ScrollView style={styles.flex} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.carRow}>
         {!!booking.cars?.images?.[0] && (
-          <Image source={{ uri: booking.cars.images[0] }} style={styles.carImage} contentFit="cover" />
+          <Image
+            source={{ uri: resizeImageUrl(booking.cars.images[0], { width: CARD_IMAGE_SIZE * PixelRatio.get(), height: CARD_IMAGE_SIZE * PixelRatio.get() }) }}
+            style={styles.carImage}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={200}
+            placeholder={CAR_PHOTO_BLURHASH}
+            placeholderContentFit="cover"
+          />
         )}
         <Text style={styles.carName}>{booking.cars?.name ?? 'Your trip'}</Text>
       </View>

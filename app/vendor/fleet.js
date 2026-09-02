@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { StyleSheet, View, FlatList, ActivityIndicator, Text, TouchableOpacity, RefreshControl } from 'react-native';
+import { StyleSheet, View, FlatList, ActivityIndicator, Text, TouchableOpacity, RefreshControl, PixelRatio } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
@@ -7,6 +8,12 @@ import { useAppTheme } from '../../contexts/ThemeContext';
 import { useVendor } from '../../contexts/VendorContext';
 import VendorHeader from '../../components/VendorHeader';
 import VendorCarCard from '../../components/VendorCarCard';
+import { resizeImageUrl } from '../../utils/imageUrl';
+
+// app/vendor/car/[id].js renders its own summary image at 72x72 - a
+// different resizeImageUrl cache key than this list's 90x90 VendorCarCard,
+// so it's warmed the instant a card is tapped.
+const DETAIL_IMAGE_SIZE = 72;
 
 export default function VendorFleetScreen() {
   const router = useRouter();
@@ -51,11 +58,22 @@ export default function VendorFleetScreen() {
             <VendorCarCard
               car={item}
               earningsThisMonth={carEarningsThisMonth[item.id] ?? 0}
-              onPress={() => router.push(`/vendor/car/${item.id}`)}
+              onPress={() => {
+                if (item.image) {
+                  Image.prefetch(
+                    resizeImageUrl(item.image, { width: DETAIL_IMAGE_SIZE * PixelRatio.get(), height: DETAIL_IMAGE_SIZE * PixelRatio.get() }),
+                    'memory-disk'
+                  );
+                }
+                router.push(`/vendor/car/${item.id}`);
+              }}
             />
           )}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          initialNumToRender={6}
+          maxToRenderPerBatch={6}
+          windowSize={5}
           refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refreshVendorData} tintColor={colors.teal} colors={[colors.teal]} />}
         />
       )}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { StyleSheet, Text, View, ActivityIndicator, ScrollView, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, ActivityIndicator, ScrollView, TouchableOpacity, PixelRatio } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -36,6 +36,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import { useBookings } from '../../contexts/BookingsContext';
 import { useCart } from '../../contexts/CartContext';
+import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
+
+const CARD_IMAGE_SIZE = 64;
 import { useInbox } from '../../contexts/InboxContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
@@ -503,7 +506,15 @@ export default function CheckoutPaymentScreen() {
 
         <View style={styles.summaryCard}>
           {car.image ? (
-            <Image source={{ uri: car.image }} style={styles.carImage} contentFit="cover" />
+            <Image
+              source={{ uri: resizeImageUrl(car.image, { width: CARD_IMAGE_SIZE * PixelRatio.get(), height: CARD_IMAGE_SIZE * PixelRatio.get() }) }}
+              style={styles.carImage}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={200}
+              placeholder={CAR_PHOTO_BLURHASH}
+              placeholderContentFit="cover"
+            />
           ) : null}
           <View style={styles.summaryInfo}>
             <Text style={styles.carName} numberOfLines={1}>{car.name}</Text>
