@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Switch, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { useRouter, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
@@ -92,8 +93,33 @@ function SettingRow({ label, value, onEdit, styles, colors }) {
 }
 
 export default function AdminSettingsScreen() {
+  const router = useRouter();
+  const navigation = useNavigation();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+
+  // Custom headerLeft, not the default native-stack back button - this
+  // screen is pushed from inside admin/(tabs) (the Menu tab) to a
+  // Stack.Screen registered as that tabs group's sibling in
+  // admin/_layout.js, the same combination that leaves the default back
+  // button's bare GO_BACK action unresolved elsewhere in this app (see
+  // app/booking/[id].js's handleBack and app/inbox/index.js's matching fix
+  // - canGoBack() isn't a safe guard either, it reports true even in the
+  // broken state).
+  const handleBack = useCallback(() => {
+    router.replace('/admin/(tabs)/menu');
+  }, [router]);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity onPress={handleBack} hitSlop={10} style={styles.headerBackButton}>
+          <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+          <Text style={styles.headerBackLabel}>Back</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, handleBack, styles, colors]);
 
   const [settings, setSettings] = useState([]);
   const [regions, setRegions] = useState([]);
@@ -657,6 +683,17 @@ function EditFieldModal({ visible, label, value, onChangeValue, numeric, isSavin
 
 function createStyles(colors) {
   return StyleSheet.create({
+    headerBackButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingRight: 8,
+    },
+    headerBackLabel: {
+      fontFamily: FONTS.regular,
+      fontSize: 17,
+      color: colors.textPrimary,
+      marginLeft: -4,
+    },
     container: {
       flex: 1,
       backgroundColor: colors.background,
