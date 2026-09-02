@@ -64,14 +64,22 @@ function rawServerConversationId(id) {
 }
 
 // Maps a server conversation summary into the same shape the existing
-// Inbox UI already renders (ConversationRow/[id].js) - always framed as
-// "you and WopeCar Support" from the current viewer's perspective, even
-// though an invited participant (e.g. a driver) may also be present, per
-// "the messaging only includes wopecar support and the client."
-function toLocalConversationShape(raw) {
+// Inbox UI already renders (ConversationRow/[id].js) - framed as "you and
+// WopeCar Support" from a renter's perspective, even though an invited
+// participant (e.g. a driver) may also be present, per "the messaging only
+// includes wopecar support and the client." For a support/admin viewer
+// (isSupportViewer), the screen is that person's OWN inbox and the "you"
+// side of every conversation already IS WopeCar Support - the other party
+// shown needs to be the real customer, from pinnedSummary.customerName
+// (already returned by list_conversations for every category), not that
+// same hardcoded label again.
+function toLocalConversationShape(raw, isSupportViewer) {
+  const participant = isSupportViewer
+    ? { id: 'customer', name: raw.pinnedSummary?.customerName ?? 'Customer', role: 'Customer', avatar: null }
+    : { id: 'support', name: 'WopeCar Support', role: 'Support', avatar: null };
   return {
     id: `${SERVER_CONVERSATION_PREFIX}${raw.id}`,
-    participant: { id: 'support', name: 'WopeCar Support', role: 'Support', avatar: null },
+    participant,
     carId: null,
     bookingId: raw.bookingId,
     pinned: false,
@@ -157,12 +165,21 @@ export function InboxProvider({ children }) {
   // and cross-account notifications (e.g. a host's booking alert) live on
   // Supabase now, not just locally. Polled rather than pushed - preserving
   // parity with the original design; no websocket/Realtime infra wired up.
+  // A support/admin account's personal Inbox should only be their own
+  // general (non-booking) conversations - every booking/inquiry
+  // conversation they're auto-added to as a support participant (see
+  // create_conversation_for_booking()) belongs in Ride Support
+  // (app/staff-inbox), not here. A plain renter keeps the existing
+  // unfiltered fetch (category: null) - booking/inquiry conversations are
+  // exactly what belongs in *their* one and only Inbox.
+  const isSupportViewer = !!(user?.isSupport || user?.role === 'admin');
+
   const syncServerConversations = useCallback(() => {
     if (!user) return;
-    conversationsApi.getConversations()
+    conversationsApi.getConversations(isSupportViewer ? { category: 'general' } : {})
       .then(setServerConversations)
       .catch(() => {});
-  }, [user]);
+  }, [user, isSupportViewer]);
 
   const syncServerNotifications = useCallback(() => {
     if (!user) return;
@@ -546,12 +563,12 @@ export function InboxProvider({ children }) {
   }, []);
 
   const conversations = useMemo(() => {
-    const mappedServer = serverConversations.map(toLocalConversationShape);
+    const mappedServer = serverConversations.map((raw) => toLocalConversationShape(raw, isSupportViewer));
     return [...data.conversations, ...mappedServer].sort((a, b) => {
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
       return new Date(b.lastMessageAt) - new Date(a.lastMessageAt);
     });
-  }, [data.conversations, serverConversations]);
+  }, [data.conversations, serverConversations, isSupportViewer]);
 
   const notifications = useMemo(() => {
     const dismissed = new Set(data.dismissedServerNotificationIds ?? []);
