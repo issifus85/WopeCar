@@ -104,7 +104,7 @@ export default function AdminCarAvailabilityScreen() {
             {cells.map((day, index) => {
               if (!day) return <View key={`empty-${index}`} style={styles.dayCell} />;
 
-              const state = getDayState(day, { today, bookedRanges, blockedSet });
+              const state = getDayState(day, { today, bookedRanges, blockedSet, car });
 
               return (
                 <View key={toISODate(day)} style={styles.dayCell}>
@@ -124,6 +124,13 @@ export default function AdminCarAvailabilityScreen() {
                     ]}>
                       {day.getDate()}
                     </Text>
+                    {day.getDay() === 0 && state === 'available' && (
+                      // Marks a Sunday that's open specifically because this
+                      // car is chauffeur-only - every other 'available' cell
+                      // is a normal weekday, so this dot is the only visual
+                      // cue distinguishing an open Sunday from them.
+                      <View style={styles.chauffeurSundayDot} pointerEvents="none" />
+                    )}
                   </View>
                 </View>
               );
@@ -239,6 +246,17 @@ function createStyles(colors) {
     },
     dayCircleBlocked: {
       backgroundColor: colors.errorBg,
+    },
+    chauffeurSundayDot: {
+      position: 'absolute',
+      top: -1,
+      right: -1,
+      width: 7,
+      height: 7,
+      borderRadius: 3.5,
+      backgroundColor: colors.teal,
+      borderWidth: 1,
+      borderColor: colors.surface,
     },
     dayCircleBooked: {
       backgroundColor: colors.infoBg,

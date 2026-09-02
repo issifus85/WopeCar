@@ -15,6 +15,7 @@ const STATE_LABEL = {
   blocked: 'Blocked',
   booked: 'Booked',
   past: 'No activity',
+  sunday: 'Closed (Sunday)',
 };
 
 export default function VendorFleetCalendarScreen() {
@@ -44,7 +45,7 @@ export default function VendorFleetCalendarScreen() {
   const getStatesForDay = (day) => {
     return carDayStates.map(({ car, bookedRanges, blockedSet }) => ({
       car,
-      state: getDayState(day, { today, bookedRanges, blockedSet }),
+      state: getDayState(day, { today, bookedRanges, blockedSet, car }),
     }));
   };
 
@@ -102,15 +103,21 @@ export default function VendorFleetCalendarScreen() {
 
                   const states = getStatesForDay(day);
                   const isSunday = day.getDay() === 0;
+                  // A Sunday only reads as fully closed once every car in
+                  // the fleet is actually blocked that day - a chauffeur-only
+                  // car with that Sunday open still gets its own dot, same
+                  // as any other day.
+                  const hasOpenCarToday = states.some(({ state }) => state !== 'sunday' && state !== 'past');
+                  const showAsClosed = isSunday && !hasOpenCarToday;
 
                   return (
                     <TouchableOpacity key={day.toISOString()} style={styles.dayCell} onPress={() => setSelectedDay(day)}>
-                      <View style={[styles.dayInner, isSunday && styles.dayInnerSunday]}>
-                        <Text style={[styles.dayText, isSunday && styles.dayTextSunday]}>{day.getDate()}</Text>
-                        {!isSunday && (
+                      <View style={[styles.dayInner, showAsClosed && styles.dayInnerSunday]}>
+                        <Text style={[styles.dayText, showAsClosed && styles.dayTextSunday]}>{day.getDate()}</Text>
+                        {!showAsClosed && (
                           <View style={styles.dotsRow}>
                             {states.map(({ car, state }) => {
-                              if (state === 'past') return null;
+                              if (state === 'past' || state === 'sunday') return null;
                               const dotColor =
                                 state === 'available' ? colors.success :
                                 state === 'blocked' ? colors.error :
@@ -150,7 +157,7 @@ export default function VendorFleetCalendarScreen() {
             <Text style={styles.sheetTitle}>
               {selectedDay ? `${MONTH_NAMES[selectedDay.getMonth()]} ${selectedDay.getDate()}, ${selectedDay.getFullYear()}` : ''}
             </Text>
-            {selectedDay?.getDay() === 0 ? (
+            {selectedDay?.getDay() === 0 && selectedStates.every(({ state }) => state === 'sunday' || state === 'past') ? (
               <Text style={styles.sheetClosed}>WopeCar is closed on Sundays - no rentals possible.</Text>
             ) : (
               selectedStates.map(({ car, state }) => (
@@ -169,7 +176,7 @@ export default function VendorFleetCalendarScreen() {
                       state === 'available' && { color: colors.success },
                       state === 'blocked' && { color: colors.error },
                       state === 'booked' && { color: colors.info },
-                      state === 'past' && { color: colors.textSubtle },
+                      (state === 'past' || state === 'sunday') && { color: colors.textSubtle },
                     ]}>
                       {STATE_LABEL[state]}
                     </Text>

@@ -35,15 +35,29 @@ export function buildMonthGrid(viewMonth) {
   return cells;
 }
 
-// Sundays are auto-blocked everywhere in this app (business is closed) and
-// past dates (with nothing booked) have nothing left to manage - neither is
-// part of the vendor's own blockedDates list, both are simply not
-// tappable/actionable. A real booking always wins over "past", though, so
-// the read-only fleet Calendar tab can show accurate history rather than
-// hiding it behind a generic "past" grey - both states are equally
-// non-interactive either way, so this only affects color, not behavior.
-export function getDayState(day, { today, bookedRanges, blockedSet }) {
-  if (day.getDay() === 0) return 'sunday';
+// Sundays are auto-blocked for self-drive/mixed cars (business is closed to
+// self-drive pickup that day - there's no staff to hand over keys). A
+// chauffeur-only car ships its own driver, so Sunday is open for those,
+// except within 24h of the pickup date itself (same-day Sunday chauffeur
+// pickups aren't allowed - see app/checkout/dates.js's matching renter-side
+// rule, which this must stay in sync with).
+export function isSundayBlockedForCar(day, car, today) {
+  if (day.getDay() !== 0) return false;
+  if (car?.drivenBy !== 'Chauffeur') return true;
+
+  const tomorrow = addDays(stripTime(today), 1);
+  return stripTime(day) < tomorrow;
+}
+
+// Past dates (with nothing booked) have nothing left to manage - neither
+// blocked Sundays nor past days are part of the vendor's own blockedDates
+// list, both are simply not tappable/actionable. A real booking always wins
+// over "past", though, so the read-only fleet Calendar tab can show
+// accurate history rather than hiding it behind a generic "past" grey -
+// both states are equally non-interactive either way, so this only affects
+// color, not behavior.
+export function getDayState(day, { today, bookedRanges, blockedSet, car }) {
+  if (isSundayBlockedForCar(day, car, today)) return 'sunday';
   if (bookedRanges.some((r) => day >= r.start && day <= r.end)) return 'booked';
   if (day < today) return 'past';
   if (blockedSet.has(toISODate(day))) return 'blocked';

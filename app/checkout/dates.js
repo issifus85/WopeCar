@@ -6,9 +6,11 @@ import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { getMinBookingDays } from '../../constants/pricing';
 import { fetchCarById, fetchCarAvailability } from '../../services/carsApi';
+import { isSundayBlockedForCar } from '../../services/vendorCalendar';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
+import ConfirmModal from '../../components/ConfirmModal';
 import { logScreen, logStartCheckout } from '../../services/analytics';
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
@@ -86,6 +88,36 @@ function RentalHoursNote({ days, startDate, returnDate, styles, colors }) {
   );
 }
 
+/**
+ * Chauffeur-only cars have Sundays open (unlike self-drive/mixed, which stay
+ * blocked every Sunday - see isSundayBlockedForCar), but a Sunday pickup
+ * still needs 24h notice, so this explains that the moment a Sunday is
+ * chosen as pickup, before the return date is even picked - same mount-time
+ * fade-in as RentalHoursNote, for the same reason (the parent's
+ * conditional remounts it fresh each time it becomes eligible to show).
+ */
+function SundayChauffeurNote({ styles, colors }) {
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(opacity, {
+      toValue: 1,
+      duration: 250,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  return (
+    <Animated.View style={[styles.hoursNoteCard, { opacity }]}>
+      <Ionicons name="information-circle-outline" size={20} color={colors.teal} style={styles.hoursNoteIcon} />
+      <View style={styles.hoursNoteTextWrap}>
+        <Text style={styles.sundayNoteText}>Sunday bookings require at least 24 hours notice.</Text>
+        <Text style={styles.sundayNoteText}>Same-day Sunday pickups are not available.</Text>
+      </View>
+    </Animated.View>
+  );
+}
+
 export default function CheckoutDatesScreen() {
   const { carId } = useLocalSearchParams();
   const router = useRouter();
@@ -110,6 +142,7 @@ export default function CheckoutDatesScreen() {
   const [bookedRanges, setBookedRanges] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showSundayNotice, setShowSundayNotice] = useState(false);
 
   const today = stripTime(new Date());
   const [viewMonth, setViewMonth] = useState(today);
@@ -139,7 +172,7 @@ export default function CheckoutDatesScreen() {
   };
 
   const handleDayPress = (day) => {
-    if (day < today || isDayBooked(day) || day.getDay() === 0) return;
+    if (day < today || isDayBooked(day) || isSundayBlockedForCar(day, car, today)) return;
     if (!tempStart || (tempStart && tempEnd)) {
       setTempStart(day);
       setTempEnd(null);
@@ -169,6 +202,16 @@ export default function CheckoutDatesScreen() {
   };
 
   const handleContinue = () => {
+    // Defense-in-depth against handleDayPress's own guard: the calendar
+    // grid can't let someone tap an already-blocked Sunday, but a Sunday
+    // picked as "tomorrow" stays selected if the app is left open across
+    // midnight - reusing isSundayBlockedForCar with a fresh `new Date()`
+    // (not the mount-time `today`) catches that instead of letting a
+    // same-day Sunday chauffeur booking silently through.
+    if (isSundayBlockedForCar(tempStart, car, new Date())) {
+      setShowSundayNotice(true);
+      return;
+    }
     updateDraft({ startDate: tempStart.toISOString(), endDate: tempEnd.toISOString() });
     // Rough default-rate estimate, not the final priced total - add-ons,
     // WopeCare, and discounts aren't chosen yet at this first checkout step.
@@ -212,6 +255,7 @@ export default function CheckoutDatesScreen() {
   const returnDate = tempEnd ? new Date(tempEnd) : null;
   if (returnDate) returnDate.setDate(returnDate.getDate() + 1);
   const showHoursNote = tempStart && tempEnd && car.drivenBy !== 'Chauffeur';
+  const showSundayChauffeurNote = car.drivenBy === 'Chauffeur' && tempStart?.getDay() === 0;
 
   return (
     <View style={styles.container}>
@@ -256,7 +300,7 @@ export default function CheckoutDatesScreen() {
 
             const isPast = day < today;
             const isBooked = isDayBooked(day);
-            const isSunday = day.getDay() === 0;
+            const isSunday = isSundayBlockedForCar(day, car, today);
             const isDisabled = isPast || isBooked || isSunday;
             const isStart = isSameDay(day, tempStart);
             const isEnd = isSameDay(day, tempEnd);
@@ -308,12 +352,26 @@ export default function CheckoutDatesScreen() {
         {showHoursNote && (
           <RentalHoursNote days={selectedDays} startDate={tempStart} returnDate={returnDate} styles={styles} colors={colors} />
         )}
+
+        {showSundayChauffeurNote && (
+          <SundayChauffeurNote styles={styles} colors={colors} />
+        )}
       </ScrollView>
 
       <CheckoutFooterButton
         label="Continue"
         onPress={handleContinue}
         disabled={!tempStart || !tempEnd || isBelowMinimum}
+      />
+
+      <ConfirmModal
+        visible={showSundayNotice}
+        title="Sunday Booking Notice"
+        message={'Sunday chauffeur bookings require at least 24 hours advance notice.\n\nPlease select a different pickup date or book for a future Sunday.'}
+        confirmLabel="OK — Change Dates"
+        cancelLabel={null}
+        onConfirm={() => setShowSundayNotice(false)}
+        onCancel={() => setShowSundayNotice(false)}
       />
     </View>
   );
@@ -499,6 +557,13 @@ function createStyles(colors) {
     fontSize: 12,
     color: colors.textMuted,
     marginBottom: 0,
+  },
+  sundayNoteText: {
+    fontFamily: FONTS.regular,
+    fontSize: 12,
+    color: colors.textMuted,
+    lineHeight: 17,
+    marginBottom: 2,
   },
   });
 }

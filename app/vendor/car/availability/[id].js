@@ -109,7 +109,7 @@ export default function VendorAvailabilityScreen() {
     (viewMonth.getFullYear() === today.getFullYear() && viewMonth.getMonth() > today.getMonth());
 
   const handleDayPress = (day) => {
-    const state = getDayState(day, { today, bookedRanges, blockedSet });
+    const state = getDayState(day, { today, bookedRanges, blockedSet, car });
     if (state === 'past' || state === 'sunday' || state === 'booked') return;
 
     if (mode === 'single') {
@@ -134,7 +134,7 @@ export default function VendorAvailabilityScreen() {
     const nextSet = new Set(blockedDates[car.id] ?? []);
     let cursor = rangeStart;
     while (cursor <= day) {
-      const cursorState = getDayState(cursor, { today, bookedRanges, blockedSet });
+      const cursorState = getDayState(cursor, { today, bookedRanges, blockedSet, car });
       if (cursorState !== 'past' && cursorState !== 'sunday' && cursorState !== 'booked') {
         nextSet.add(toISODate(cursor));
       }
@@ -210,7 +210,7 @@ export default function VendorAvailabilityScreen() {
             {cells.map((day, index) => {
               if (!day) return <View key={`empty-${index}`} style={styles.dayCell} />;
 
-              const state = getDayState(day, { today, bookedRanges, blockedSet });
+              const state = getDayState(day, { today, bookedRanges, blockedSet, car });
               const isDisabled = state === 'past' || state === 'sunday' || state === 'booked';
               const isRangeStart = mode === 'range' && rangeStart && day.getTime() === rangeStart.getTime();
 

@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import { fetchCarById, fetchCarAvailabilityByStatus } from '../../services/carsApi';
-import { WEEKDAYS, MONTH_NAMES, stripTime, toISODate, buildMonthGrid } from '../../services/vendorCalendar';
+import { WEEKDAYS, MONTH_NAMES, stripTime, toISODate, buildMonthGrid, isSundayBlockedForCar } from '../../services/vendorCalendar';
 import { getCarReviews, getCarReviewScore } from '../../services/reviewsApi';
 import { getCarDetailFaqs } from '../../services/faqsApi';
 import { getRentalTermsSections } from '../../services/rentalTermsApi';
@@ -341,7 +341,7 @@ export default function CarDetailScreen() {
 
                 const isPast = day < today;
                 const isUnavailable = unavailableDates.has(toISODate(day));
-                const isSunday = day.getDay() === 0;
+                const isSunday = isSundayBlockedForCar(day, car, today);
 
                 return (
                   <View key={toISODate(day)} style={styles.availabilityDayCell}>
