@@ -206,8 +206,10 @@ export default function ProtectionPlanScreen() {
 
       <View style={styles.footer}>
         <Text style={styles.footerText}>
-          This is a summary only. Full WopeCare Terms &amp; Conditions apply and are available at
-          wopecar.com/terms-and-conditions
+          This is a summary only. Full WopeCare Terms &amp; Conditions apply and are available at{' '}
+          <Text style={styles.footerLink} onPress={() => Linking.openURL('https://wopecar.com/wopecare-terms')}>
+            wopecar.com/wopecare-terms
+          </Text>
         </Text>
         <Text style={styles.footerLocation}>WopeCar — Accra, Ghana</Text>
       </View>
@@ -378,6 +380,10 @@ function createStyles(colors) {
       lineHeight: 17,
       fontStyle: 'italic',
       marginBottom: 8,
+    },
+    footerLink: {
+      color: colors.teal,
+      textDecorationLine: 'underline',
     },
     footerLocation: {
       fontFamily: FONTS.medium,
