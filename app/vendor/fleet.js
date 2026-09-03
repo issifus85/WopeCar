@@ -42,41 +42,47 @@ export default function VendorFleetScreen() {
         }
       />
 
-      {cars.length === 0 ? (
-        <View style={styles.centerState}>
-          <Ionicons name="car-outline" size={40} color={colors.disabled} />
-          <Text style={styles.emptyText}>You haven't listed any cars yet.</Text>
-          <TouchableOpacity style={styles.emptyAddButton} onPress={() => router.push('/vendor/add-car')}>
-            <Text style={styles.emptyAddButtonText}>Add Your First Car</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <FlatList
-          data={cars}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <VendorCarCard
-              car={item}
-              earningsThisMonth={carEarningsThisMonth[item.id] ?? 0}
-              onPress={() => {
-                if (item.image) {
-                  Image.prefetch(
-                    resizeImageUrl(item.image, { width: DETAIL_IMAGE_SIZE * PixelRatio.get(), height: DETAIL_IMAGE_SIZE * PixelRatio.get() }),
-                    'memory-disk'
-                  );
-                }
-                router.push(`/vendor/car/${item.id}`);
-              }}
-            />
-          )}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          initialNumToRender={6}
-          maxToRenderPerBatch={6}
-          windowSize={5}
-          refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refreshVendorData} tintColor={colors.teal} colors={[colors.teal]} />}
-        />
-      )}
+      {/* A single FlatList for both states (not a separate empty-state View)
+          so the empty case gets the same RefreshControl as the populated
+          one via ListEmptyComponent - previously a vendor with 0 cars had
+          no way to pull-to-refresh Fleet directly (only the Dashboard,
+          whose ScrollView wraps its own empty state too), so a car added
+          elsewhere wouldn't show up here without leaving and re-entering
+          the screen or a full app relaunch. */}
+      <FlatList
+        data={cars}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <VendorCarCard
+            car={item}
+            earningsThisMonth={carEarningsThisMonth[item.id] ?? 0}
+            onPress={() => {
+              if (item.image) {
+                Image.prefetch(
+                  resizeImageUrl(item.image, { width: DETAIL_IMAGE_SIZE * PixelRatio.get(), height: DETAIL_IMAGE_SIZE * PixelRatio.get() }),
+                  'memory-disk'
+                );
+              }
+              router.push(`/vendor/car/${item.id}`);
+            }}
+          />
+        )}
+        ListEmptyComponent={
+          <View style={styles.centerState}>
+            <Ionicons name="car-outline" size={40} color={colors.disabled} />
+            <Text style={styles.emptyText}>You haven't listed any cars yet.</Text>
+            <TouchableOpacity style={styles.emptyAddButton} onPress={() => router.push('/vendor/add-car')}>
+              <Text style={styles.emptyAddButtonText}>Add Your First Car</Text>
+            </TouchableOpacity>
+          </View>
+        }
+        contentContainerStyle={cars.length === 0 ? styles.emptyListContent : styles.list}
+        showsVerticalScrollIndicator={false}
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        windowSize={5}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refreshVendorData} tintColor={colors.teal} colors={[colors.teal]} />}
+      />
     </View>
   );
 }
