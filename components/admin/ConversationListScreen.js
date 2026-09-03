@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, FlatList, TouchableOpacity } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useNavigation, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { formatRelativeTime } from '../../constants/dateUtils';
@@ -56,14 +56,42 @@ function ConversationRow({ conversation, styles, colors }) {
  * scopes which conversations are fetched (server-side, via
  * list_conversations' p_category param): 'general' (no booking/car anchor -
  * Inbox) or 'support_ops' (booking/inquiry anchored - Ride Support).
+ *
+ * `backTo`, when given, replaces the default native-stack back button with
+ * a custom headerLeft that explicitly router.replace()s there - needed by
+ * app/staff-inbox/index.js, a root-level Stack.Screen pushed from inside
+ * the (tabs) group's own nested navigator, the same combination that
+ * leaves the default back button's bare GO_BACK action unresolved
+ * elsewhere in this app (see app/inbox/index.js's matching fix -
+ * canGoBack() isn't a safe guard either, it reports true even in the
+ * broken state). Omitted by app/admin/(tabs)/inbox.js, whose own tabs-root
+ * Stack.Screen is headerShown:false - there's no header/back button to
+ * replace there in the first place.
  */
-export default function ConversationListScreen({ category, title, subtitle }) {
+export default function ConversationListScreen({ category, title, subtitle, backTo }) {
   const router = useRouter();
+  const navigation = useNavigation();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [conversations, setConversations] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('all');
+
+  const handleBack = useCallback(() => {
+    router.replace(backTo);
+  }, [router, backTo]);
+
+  useLayoutEffect(() => {
+    if (!backTo) return;
+    navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity onPress={handleBack} hitSlop={10} style={styles.headerBackButton}>
+          <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+          <Text style={styles.headerBackLabel}>Account</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [backTo, navigation, handleBack, styles, colors]);
 
   const load = useCallback(() => {
     conversationsApi.getConversations({ scope: 'all', category })
@@ -131,6 +159,17 @@ export default function ConversationListScreen({ category, title, subtitle }) {
 
 function createStyles(colors) {
   return StyleSheet.create({
+    headerBackButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingRight: 8,
+    },
+    headerBackLabel: {
+      fontFamily: FONTS.regular,
+      fontSize: 17,
+      color: colors.textPrimary,
+      marginLeft: -4,
+    },
     container: {
       flex: 1,
       backgroundColor: colors.background,

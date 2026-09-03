@@ -11,6 +11,7 @@ export default function StaffInboxScreen() {
       category="support_ops"
       title="Ride Support"
       subtitle="Renter conversations, anchored to each booking or car inquiry."
+      backTo="/(tabs)/profile"
     />
   );
 }
