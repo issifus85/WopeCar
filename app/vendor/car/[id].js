@@ -95,7 +95,7 @@ export default function VendorCarManagementScreen() {
   if (!car) {
     return (
       <View style={styles.container}>
-        <VendorHeader title="Car Management" onBack={() => router.push('/vendor/fleet')} />
+        <VendorHeader title="Car Management" onBack={() => router.replace('/vendor/fleet')} />
         <View style={styles.centerState}>
           <Ionicons name="alert-circle-outline" size={40} color={colors.disabled} />
           <Text style={styles.emptyText}>This car couldn't be found.</Text>
@@ -144,7 +144,7 @@ export default function VendorCarManagementScreen() {
 
   return (
     <View style={styles.container}>
-      <VendorHeader title={car.name} subtitle={`${formatCurrency(car.pricePerDay, activeCurrency)}/day`} onBack={() => router.push('/vendor/fleet')} />
+      <VendorHeader title={car.name} subtitle={`${formatCurrency(car.pricePerDay, activeCurrency)}/day`} onBack={() => router.replace('/vendor/fleet')} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.summaryCard}>

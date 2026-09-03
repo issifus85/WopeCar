@@ -25,7 +25,7 @@ export default function VendorResourcesScreen() {
 
   return (
     <View style={styles.container}>
-      <VendorHeader title="Vendor Resources" subtitle="Guides for WopeCar hosts" onBack={() => router.push('/vendor/menu')} />
+      <VendorHeader title="Vendor Resources" subtitle="Guides for WopeCar hosts" onBack={() => router.replace('/vendor/menu')} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>

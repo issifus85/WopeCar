@@ -91,7 +91,7 @@ export default function VendorInspectionsScreen() {
       <VendorHeader
         title="Vehicle Inspections"
         subtitle="Pre & post-rental checklists"
-        onBack={() => router.push('/vendor/menu')}
+        onBack={() => router.replace('/vendor/menu')}
       />
 
       {inspectable.length === 0 ? (

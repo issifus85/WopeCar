@@ -55,7 +55,7 @@ export default function VendorSafetyGuideScreen() {
 
   return (
     <View style={styles.container}>
-      <VendorHeader title="Vehicle Requirements & Safety" subtitle="What your car needs to qualify" onBack={() => router.push('/vendor/resources')} />
+      <VendorHeader title="Vehicle Requirements & Safety" subtitle="What your car needs to qualify" onBack={() => router.replace('/vendor/resources')} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.intro}>

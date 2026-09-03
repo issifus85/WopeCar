@@ -9,14 +9,21 @@ import { useAppTheme } from '../contexts/ThemeContext';
 // hardcodes TOTAL_STEPS = 6 for the (unrelated) checkout flow.
 const TOTAL_STEPS = 5;
 
-export default function InspectionHeader({ title, step }) {
+// `onBack`, when given, overrides the default router.back() - same
+// optional-override convention as VendorHeader/VendorWizardHeader. Every
+// current caller in this wizard-like flow is only ever reached via a
+// same-Stack sibling push (never crosses a (tabs) group boundary the way
+// e.g. app/inbox/index.js's back button once did), so plain back() is
+// correct there today - this exists so a future entry point doesn't have
+// to modify this shared component to add one.
+export default function InspectionHeader({ title, step, onBack }) {
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity onPress={() => router.back()} hitSlop={10}>
+      <TouchableOpacity onPress={onBack ?? (() => router.back())} hitSlop={10}>
         <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
       </TouchableOpacity>
       <View style={styles.titleWrap}>

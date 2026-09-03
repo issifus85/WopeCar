@@ -69,7 +69,7 @@ export default function VendorGettingStartedScreen() {
 
   return (
     <View style={styles.container}>
-      <VendorHeader title="Getting Started as a Host" subtitle="From wopecar.com" onBack={() => router.push('/vendor/resources')} />
+      <VendorHeader title="Getting Started as a Host" subtitle="From wopecar.com" onBack={() => router.replace('/vendor/resources')} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>

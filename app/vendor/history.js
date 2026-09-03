@@ -82,7 +82,7 @@ export default function VendorHistoryScreen() {
 
   return (
     <View style={styles.container}>
-      <VendorHeader title="Booking History" subtitle="Past and confirmed bookings" onBack={() => router.push('/vendor')} />
+      <VendorHeader title="Booking History" subtitle="Past and confirmed bookings" onBack={() => router.replace('/vendor')} />
 
       <View style={styles.totalCard}>
         <Text style={styles.totalLabel}>

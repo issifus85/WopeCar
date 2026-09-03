@@ -135,7 +135,7 @@ export default function VendorCarDocumentsScreen() {
   if (!car) {
     return (
       <View style={styles.container}>
-        <VendorHeader title="Compliance Documents" onBack={() => router.back()} />
+        <VendorHeader title="Compliance Documents" onBack={() => router.replace('/vendor/fleet')} />
         <View style={styles.centerState}>
           <Ionicons name="alert-circle-outline" size={40} color={colors.disabled} />
           <Text style={styles.emptyText}>This car couldn't be found.</Text>
@@ -217,7 +217,7 @@ export default function VendorCarDocumentsScreen() {
 
   return (
     <View style={styles.container}>
-      <VendorHeader title="Compliance Documents" subtitle={car.name} onBack={() => router.back()} />
+      <VendorHeader title="Compliance Documents" subtitle={car.name} onBack={() => router.replace(`/vendor/car/${car.id}`)} />
 
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>

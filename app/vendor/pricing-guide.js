@@ -74,7 +74,7 @@ export default function VendorPricingGuideScreen() {
 
   return (
     <View style={styles.container}>
-      <VendorHeader title="Pricing Your Vehicle" subtitle="Guidance for setting your daily rate" onBack={() => router.push('/vendor/resources')} />
+      <VendorHeader title="Pricing Your Vehicle" subtitle="Guidance for setting your daily rate" onBack={() => router.replace('/vendor/resources')} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.intro}>

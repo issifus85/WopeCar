@@ -34,7 +34,7 @@ export default function VendorFleetScreen() {
       <VendorHeader
         title="My Fleet"
         subtitle={`${cars.length} ${cars.length === 1 ? 'car' : 'cars'} listed`}
-        onBack={() => router.push('/vendor')}
+        onBack={() => router.replace('/vendor')}
         right={
           <TouchableOpacity style={styles.addButton} onPress={() => router.push('/vendor/add-car')} hitSlop={10}>
             <Ionicons name="add" size={22} color={colors.white} />

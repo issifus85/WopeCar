@@ -83,7 +83,7 @@ export default function AddCarDetailsScreen() {
 
   return (
     <View style={styles.container}>
-      <VendorWizardHeader title="Vehicle Details" step={1} onBack={() => router.push('/vendor/fleet')} />
+      <VendorWizardHeader title="Vehicle Details" step={1} onBack={() => router.replace('/vendor/fleet')} />
 
       <KeyboardAvoidingView
         style={styles.flex}

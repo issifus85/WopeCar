@@ -62,7 +62,7 @@ export default function VendorCarPricingScreen() {
   if (!car) {
     return (
       <View style={styles.container}>
-        <VendorHeader title="Pricing & Discounts" onBack={() => router.back()} />
+        <VendorHeader title="Pricing & Discounts" onBack={() => router.replace('/vendor/fleet')} />
         <View style={styles.centerState}>
           <Ionicons name="alert-circle-outline" size={40} color={colors.disabled} />
           <Text style={styles.emptyText}>This car couldn't be found.</Text>
@@ -85,7 +85,7 @@ export default function VendorCarPricingScreen() {
         discountEndsAt: discount.endsAt,
         lengthOfStayDiscounts: cleanTiers,
       });
-      router.back();
+      router.replace(`/vendor/car/${car.id}`);
     } catch (e) {
       Alert.alert('Could not save changes', e?.message || 'Please check your connection and try again.');
     } finally {
@@ -95,7 +95,7 @@ export default function VendorCarPricingScreen() {
 
   return (
     <View style={styles.container}>
-      <VendorHeader title={car.name} subtitle="Pricing & Discounts" onBack={() => router.push(`/vendor/car/${car.id}`)} />
+      <VendorHeader title={car.name} subtitle="Pricing & Discounts" onBack={() => router.replace(`/vendor/car/${car.id}`)} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.sectionTitle}>Custom Date Pricing</Text>

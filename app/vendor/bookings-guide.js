@@ -49,7 +49,7 @@ export default function VendorBookingsGuideScreen() {
 
   return (
     <View style={styles.container}>
-      <VendorHeader title="Managing Bookings & Availability" subtitle="Keep requests and your calendar on track" onBack={() => router.push('/vendor/resources')} />
+      <VendorHeader title="Managing Bookings & Availability" subtitle="Keep requests and your calendar on track" onBack={() => router.replace('/vendor/resources')} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.intro}>

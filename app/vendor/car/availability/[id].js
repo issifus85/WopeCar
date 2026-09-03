@@ -91,7 +91,7 @@ export default function VendorAvailabilityScreen() {
   if (!car) {
     return (
       <View style={styles.container}>
-        <VendorHeader title="Manage Availability" onBack={() => router.push('/vendor/fleet')} />
+        <VendorHeader title="Manage Availability" onBack={() => router.replace('/vendor/fleet')} />
         <View style={styles.centerState}>
           <Ionicons name="alert-circle-outline" size={40} color={colors.disabled} />
           <Text style={styles.emptyText}>This car couldn't be found.</Text>
@@ -166,7 +166,7 @@ export default function VendorAvailabilityScreen() {
 
   return (
     <View style={styles.container}>
-      <VendorHeader title={car.name} subtitle="Manage Availability" onBack={() => router.push(`/vendor/car/${car.id}`)} />
+      <VendorHeader title={car.name} subtitle="Manage Availability" onBack={() => router.replace(`/vendor/car/${car.id}`)} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.modeRow}>

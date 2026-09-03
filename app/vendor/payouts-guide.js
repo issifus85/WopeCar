@@ -44,7 +44,7 @@ export default function VendorPayoutsGuideScreen() {
 
   return (
     <View style={styles.container}>
-      <VendorHeader title="Getting Paid" subtitle="How and when your payouts arrive" onBack={() => router.push('/vendor/resources')} />
+      <VendorHeader title="Getting Paid" subtitle="How and when your payouts arrive" onBack={() => router.replace('/vendor/resources')} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.intro}>

@@ -56,7 +56,7 @@ export default function VendorSettingsScreen() {
 
   return (
     <View style={styles.container}>
-      <VendorHeader title="Vendor Settings" subtitle="Fleet and listing preferences" onBack={() => router.push('/vendor/menu')} />
+      <VendorHeader title="Vendor Settings" subtitle="Fleet and listing preferences" onBack={() => router.replace('/vendor/menu')} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Section title="Payouts & Verification" styles={styles}>

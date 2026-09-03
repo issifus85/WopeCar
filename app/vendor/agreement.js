@@ -29,7 +29,7 @@ export default function VendorAgreementScreen() {
 
   return (
     <View style={styles.container}>
-      <VendorHeader title="Vendor Agreement" subtitle="Your terms as a WopeCar Partner" onBack={() => router.push('/vendor/menu')} />
+      <VendorHeader title="Vendor Agreement" subtitle="Your terms as a WopeCar Partner" onBack={() => router.replace('/vendor/menu')} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.intro}>
