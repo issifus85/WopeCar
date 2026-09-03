@@ -138,7 +138,14 @@ export default function VendorApplyScreen() {
 
   return (
     <View style={styles.container}>
-      <VendorHeader title="Become a Vendor" subtitle="Quick application to start listing your car" onBack={() => router.back()} />
+      {/* router.replace(), not router.back() - this screen is pushed from
+          app/(tabs)/profile.js's switchToHostMode(), a tab root inside the
+          root (tabs) group, to this root-Stack sibling - the exact
+          combination that leaves a bare back()/GO_BACK unresolved
+          elsewhere in this app (see app/inbox/index.js's matching fix -
+          canGoBack() isn't a safe guard either, it reports true even in
+          the broken state). */}
+      <VendorHeader title="Become a Vendor" subtitle="Quick application to start listing your car" onBack={() => router.replace('/(tabs)/profile')} />
 
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
