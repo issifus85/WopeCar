@@ -240,8 +240,14 @@ export async function updateCarListing(carId, patch) {
 // so an unfiltered select would return every vendor's active cars, not just
 // the caller's own. A vendor with no row yet correctly gets [] without a
 // query at all.
-export async function getMyCars() {
-  const vendor = await getVendorProfile();
+// Accepts an already-resolved vendor (VendorContext's loadVendorData passes
+// its own single getVendorProfile() result) to avoid a second independent
+// getCurrentUser()/vendors lookup - see that function's comment for why
+// firing this call's own internal getVendorProfile() concurrently with
+// others caused a real race. Falls back to fetching it here for any other
+// caller.
+export async function getMyCars(vendor) {
+  vendor = vendor ?? await getVendorProfile();
   if (!vendor) return [];
   const { data, error } = await supabase
     .from('cars')

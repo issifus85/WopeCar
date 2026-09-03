@@ -83,19 +83,32 @@ export function VendorProvider({ children }) {
   const [vendorProfile, setVendorProfile] = useState(null);
   const [hasLoadError, setHasLoadError] = useState(false);
 
+  // Resolves the vendor profile once, then hands it to getMyCars/
+  // getVendorBookingsSplit instead of letting each independently re-resolve
+  // it. They used to each call getVendorProfile() (and so getCurrentUser(),
+  // a real supabase.auth.getUser() network round-trip) on their own, meaning
+  // a single loadVendorData() call fired 3 concurrent, fully independent
+  // auth+vendor lookups. On a cold start racing the Supabase session
+  // restore, one of those three could transiently fail on its own while the
+  // others succeeded - most visibly when it was the direct getVendorProfile
+  // call, which silently bounced a real, approved vendor with real cars to
+  // the "Become a Vendor" screen even though their cars/bookings had loaded
+  // fine moments earlier. A single shared lookup makes that class of
+  // disagreement structurally impossible, and is strictly less work.
   const loadVendorData = useCallback(async () => {
-    const [carsResult, profileResult, bookingsResult] = await Promise.all([
-      withTimeout(vendorCarsApi.getMyCars(), []),
-      withTimeout(vendorCarsApi.getVendorProfile(), null),
-      withTimeout(vendorBookingsApi.getVendorBookingsSplit(), { bookingRequests: [], bookingHistory: [] }),
+    const profileResult = await withTimeout(vendorCarsApi.getVendorProfile(), null);
+    const vendor = profileResult.value;
+    const [carsResult, bookingsResult] = await Promise.all([
+      vendor ? withTimeout(vendorCarsApi.getMyCars(vendor), []) : { value: [], failed: false },
+      vendor ? withTimeout(vendorBookingsApi.getVendorBookingsSplit(vendor), { bookingRequests: [], bookingHistory: [] }) : { value: { bookingRequests: [], bookingHistory: [] }, failed: false },
     ]);
     const cars = carsResult.value;
     const bookingsSplit = bookingsResult.value;
     const blockedDatesResult = await withTimeout(vendorCarsApi.getBlockedDatesForCars(cars.map((c) => c.id)), {});
     const earningsHistory = deriveEarningsHistory(bookingsSplit.bookingHistory);
     setData({ cars, blockedDates: blockedDatesResult.value, earningsHistory, ...bookingsSplit });
-    setVendorProfile(profileResult.value);
-    setHasLoadError(carsResult.failed || profileResult.failed || bookingsResult.failed || blockedDatesResult.failed);
+    setVendorProfile(vendor);
+    setHasLoadError(profileResult.failed || carsResult.failed || bookingsResult.failed || blockedDatesResult.failed);
   }, []);
 
   // Depends on user?.id (not the whole `user` object, which may get a new

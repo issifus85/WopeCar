@@ -61,9 +61,15 @@ function normalizeVendorBooking(row) {
   };
 }
 
-/** Fetches this vendor's bookings and splits them the way the UI expects: still-pending requests vs. everything already resolved. */
-export async function getVendorBookingsSplit() {
-  const vendor = await getVendorProfile();
+/**
+ * Fetches this vendor's bookings and splits them the way the UI expects:
+ * still-pending requests vs. everything already resolved. Accepts an
+ * already-resolved vendor (see getMyCars in vendorCarsApi.js) to avoid a
+ * second independent getVendorProfile() lookup when VendorContext's
+ * loadVendorData already has one.
+ */
+export async function getVendorBookingsSplit(vendor) {
+  vendor = vendor ?? await getVendorProfile();
   if (!vendor) return { bookingRequests: [], bookingHistory: [] };
 
   const rows = await getVendorBookings(vendor.id);
