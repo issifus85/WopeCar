@@ -102,9 +102,18 @@ export function BookingsProvider({ children }) {
     refreshBookings();
   }, [refreshBookings]);
 
+  // Deduped by id (not a blind prepend) - a booking already present (e.g.
+  // this device's own refreshBookings() already picked it up, or handlePay
+  // is somehow invoked twice for the same reservation) gets replaced in
+  // place rather than duplicated. Without this, the Bookings list could
+  // show the same trip as two identical cards until the next successful
+  // refreshBookings() happened to overwrite local state with the server's
+  // deduped truth - a real, user-visible symptom of exactly that kind of
+  // double-add, even though the array's *server* side was never actually
+  // wrong.
   const addBooking = useCallback((booking) => {
     setBookings(prev => {
-      const next = [booking, ...prev];
+      const next = [booking, ...prev.filter((b) => b.id !== booking.id)];
       bookingsStorage.setBookings(next);
       return next;
     });
