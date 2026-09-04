@@ -362,7 +362,13 @@ export default function CheckoutDatesScreen() {
     <View style={styles.container}>
       <CheckoutHeader title="Dates, Time & Location" step={1} />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      {/* Visible on purpose, unlike every other checkout screen's ScrollView -
+          this is the longest screen in the flow (calendar + time pickers +
+          location fields all stacked), and it's easy to land here, see the
+          calendar fill the viewport, and not realize Pickup/Return Time and
+          the location fields are still below the fold. A visible scrollbar
+          is the standard, unobtrusive way to signal that. */}
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator>
         <Text style={styles.carName}>{car.name}</Text>
         <Text style={styles.carSubtitle}>Choose your pickup and return dates, times and location</Text>
 
