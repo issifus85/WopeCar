@@ -69,9 +69,16 @@ export default function DeleteAccountScreen() {
 
       <ConfirmModal
         visible={showConfirm}
-        title="Delete Account?"
-        message="This is permanent and cannot be undone."
-        confirmLabel="Delete"
+        title="Delete Account"
+        message={
+          'Are you sure you want to permanently delete your WopeCar account?\n\n' +
+          'This will delete:\n' +
+          '• Your profile and personal data\n' +
+          '• Your booking history\n' +
+          '• Your saved cars and favourites\n\n' +
+          'This action cannot be undone.'
+        }
+        confirmLabel="Delete My Account"
         destructive
         onConfirm={handleDelete}
         onCancel={() => setShowConfirm(false)}
