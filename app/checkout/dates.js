@@ -211,6 +211,34 @@ export default function CheckoutDatesScreen() {
   const [isPickupLocationModalVisible, setIsPickupLocationModalVisible] = useState(false);
   const [isReturnLocationModalVisible, setIsReturnLocationModalVisible] = useState(false);
 
+  // The plain native scroll indicator turned out too subtle to notice in
+  // practice (it's thin, and fades out ~1s after the finger lifts, same on
+  // both platforms) - this is the longest screen in the checkout flow now
+  // that dates/time/location all live on it, and it's easy to land here,
+  // see the calendar fill the viewport, and not realize there's more below.
+  // A bouncing "scroll for more" chevron is a much harder-to-miss cue, and
+  // it disappears on its own once there's nothing left to scroll to.
+  // Three plain numbers (not a single derived boolean in state) so the
+  // "is there more below" check stays correct as content height changes on
+  // its own too - e.g. the Sunday/24hr notice cards mounting in after a
+  // date range is picked, with no scroll event involved at all.
+  const [scrollLayoutHeight, setScrollLayoutHeight] = useState(0);
+  const [scrollContentHeight, setScrollContentHeight] = useState(0);
+  const [scrollOffsetY, setScrollOffsetY] = useState(0);
+  const hasMoreBelow = scrollContentHeight - (scrollOffsetY + scrollLayoutHeight) > 24;
+  const scrollHintBounce = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(scrollHintBounce, { toValue: 8, duration: 550, useNativeDriver: true }),
+        Animated.timing(scrollHintBounce, { toValue: 0, duration: 550, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [scrollHintBounce]);
+
   const handlePickupLocationChange = (text) => {
     setPickupLocation(text);
     if (sameAsPickup) setReturnLocation(text);
@@ -362,13 +390,18 @@ export default function CheckoutDatesScreen() {
     <View style={styles.container}>
       <CheckoutHeader title="Dates, Time & Location" step={1} />
 
-      {/* Visible on purpose, unlike every other checkout screen's ScrollView -
-          this is the longest screen in the flow (calendar + time pickers +
-          location fields all stacked), and it's easy to land here, see the
-          calendar fill the viewport, and not realize Pickup/Return Time and
-          the location fields are still below the fold. A visible scrollbar
-          is the standard, unobtrusive way to signal that. */}
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator>
+      {/* Indicator left on too (unlike every other checkout screen's
+          ScrollView) as a small extra signal for anyone who does notice it -
+          the real cue is the bouncing chevron rendered below, driven by
+          these same onScroll/onLayout/onContentSizeChange handlers. */}
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator
+        scrollEventThrottle={16}
+        onLayout={(e) => setScrollLayoutHeight(e.nativeEvent.layout.height)}
+        onContentSizeChange={(w, h) => setScrollContentHeight(h)}
+        onScroll={(e) => setScrollOffsetY(e.nativeEvent.contentOffset.y)}
+      >
         <Text style={styles.carName}>{car.name}</Text>
         <Text style={styles.carSubtitle}>Choose your pickup and return dates, times and location</Text>
 
@@ -527,6 +560,14 @@ export default function CheckoutDatesScreen() {
           <SundayChauffeurNote styles={styles} colors={colors} />
         )}
       </ScrollView>
+
+      {hasMoreBelow && (
+        <View style={styles.scrollHintWrap} pointerEvents="none">
+          <Animated.View style={[styles.scrollHintBubble, { transform: [{ translateY: scrollHintBounce }] }]}>
+            <Ionicons name="chevron-down" size={18} color={colors.white} />
+          </Animated.View>
+        </View>
+      )}
 
       <CheckoutFooterButton
         label="Continue"
@@ -856,6 +897,29 @@ function createStyles(colors) {
     color: colors.textMuted,
     lineHeight: 17,
     marginBottom: 2,
+  },
+  // Floats just above CheckoutFooterButton's own footer (padding 20 top +
+  // 28 bottom + ~50 button height ≈ 98) - not inside the ScrollView, so it
+  // stays put regardless of scroll position instead of scrolling away with
+  // the content it's meant to hint about.
+  scrollHintWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 94,
+    alignItems: 'center',
+  },
+  scrollHintBubble: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.teal,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.shadow,
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 4,
   },
   });
 }
