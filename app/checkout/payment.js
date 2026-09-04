@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, Text, View, ActivityIndicator, ScrollView, TouchableOpacity, PixelRatio } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -86,6 +86,12 @@ export default function CheckoutPaymentScreen() {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [savedExpiry, setSavedExpiry] = useState(null);
 
+  // Set synchronously (not via isProcessing state, which only takes effect
+  // on the next render) and holds the reservation itself once created -
+  // see handlePay's comment for why both of these exist.
+  const isSubmittingRef = useRef(false);
+  const reservedBookingRef = useRef(null);
+
   useEffect(() => {
     fetchCarById(carId)
       .then(setCar)
@@ -166,6 +172,13 @@ export default function CheckoutPaymentScreen() {
   };
 
   const handlePay = async () => {
+    // A synchronous latch, not just isProcessing state - state only takes
+    // effect on the next render, so two taps landing in the same JS tick
+    // (a fast real double-tap) could both pass CheckoutFooterButton's
+    // disabled={isProcessing} check before either render commits. This
+    // closes that window outright.
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     setIsProcessing(true);
     setError(null);
 
@@ -177,98 +190,125 @@ export default function CheckoutPaymentScreen() {
       // charge a card with no booking ever created; that's now structurally
       // impossible, since a Supabase write failure can only happen here,
       // before Paystack is ever called.
-      const { rentalCost, addonsCost, deliveryFee, securityDeposit, promoDiscountAmount, wopeCarePlanId, wopeCareDailyRate, wopeCareCost, wopeCareCoverage, billableDays } = await buildPricingBreakdown();
+      //
+      // reservedBookingRef makes this reservation happen at most once per
+      // mount, reused on every retry - a renter who tapped Pay again after
+      // a declined card, a dismissed Paystack sheet, or a dropped 3-D
+      // Secure page used to get a second, byte-identical "pending"/"unpaid"
+      // booking, since `reserved` used to be a function-local const with no
+      // memory across handlePay calls (the two duplicate cards a renter
+      // reported seeing were exactly this: same car, same dates, same
+      // total, both still "Pending"). redeemPromoCode/createQuickbooksInvoice/
+      // the document upload all have their own real side effects too
+      // (uses_count, a minted invoice, uploaded files) that must equally
+      // not repeat on a retry, so they all move inside this guard.
+      if (!reservedBookingRef.current) {
+        const { rentalCost, addonsCost, deliveryFee, securityDeposit, promoDiscountAmount, wopeCarePlanId, wopeCareDailyRate, wopeCareCost, wopeCareCoverage, billableDays } = await buildPricingBreakdown();
 
-      // Redeemed (uses_count incremented) here, immediately before the
-      // booking that actually spends it gets created - not back on the
-      // Cost Breakdown screen's "Apply" preview, so a code is only ever
-      // consumed by a booking that goes through. A failure here (e.g. it
-      // was just exhausted by someone else) aborts before any booking row
-      // or charge exists, same as every other failure in this block.
-      let promoCode = null;
-      if (draft.promoCode) {
-        const redeemed = await redeemPromoCode(draft.promoCode);
-        promoCode = redeemed.code;
+        // Redeemed (uses_count incremented) here, immediately before the
+        // booking that actually spends it gets created - not back on the
+        // Cost Breakdown screen's "Apply" preview, so a code is only ever
+        // consumed by a booking that goes through. A failure here (e.g. it
+        // was just exhausted by someone else) aborts before any booking row
+        // or charge exists, same as every other failure in this block.
+        let promoCode = null;
+        if (draft.promoCode) {
+          const redeemed = await redeemPromoCode(draft.promoCode);
+          promoCode = redeemed.code;
+        }
+
+        // Resuming a saved booking that already has a real (unpaid)
+        // QuickBooks invoice from Save & Pay Later time - read it back before
+        // reserving, so the reservation below can reuse the same invoice
+        // instead of quickbooks-create-invoice minting a duplicate for the
+        // same trip. Fire-and-forget invoice creation at save time means this
+        // can legitimately still be null (not landed yet) - degrades to the
+        // normal fresh-invoice path below either way.
+        const reusedInvoiceRef = resumedBooking?.pendingInvoiceId
+          ? await getPendingInvoiceQuickbooksRef(resumedBooking.pendingInvoiceId).catch(() => null)
+          : null;
+
+        const reserved = await createBooking({
+          renter_id: user.id,
+          car_id: carId,
+          vendor_id: car.vendorId,
+          start_date: draft.startDate,
+          end_date: draft.endDate,
+          pickup_time: draft.pickupTime,
+          return_time: draft.returnTime,
+          pickup_location: draft.pickupLocation,
+          return_location: draft.returnLocation,
+          drive_type: car.drivenBy,
+          addon_names: draft.addons.map((a) => a.name),
+          addon_days: draft.addons.map((a) => a.days),
+          rental_cost: rentalCost,
+          addons_cost: addonsCost,
+          delivery_fee: deliveryFee,
+          security_deposit: securityDeposit,
+          promo_code: promoCode,
+          promo_discount_amount: promoDiscountAmount,
+          wopecare_plan: wopeCarePlanId ?? 'none',
+          wopecare_daily_rate: wopeCareDailyRate,
+          wopecare_total_cost: wopeCareCost,
+          wopecare_coverage: wopeCareCoverage,
+          total_cost: draft.totalCost,
+          // vendor_payout_per_day/vendor_payout_total/wopecar_margin are
+          // NOT set here - the bookings_compute_vendor_payout trigger stamps
+          // them server-side from the car's admin-only payout_per_day, so
+          // this device (the renter's own) never fetches or handles that
+          // rate at all. billable_days is just a plain day count, not money.
+          billable_days: billableDays,
+          status: 'pending',
+          payment_status: 'unpaid',
+        });
+        reservedBookingRef.current = reserved;
+
+        if (reusedInvoiceRef?.qb_invoice_id) {
+          confirmSupabaseBooking(reserved.id, {
+            qb_invoice_id: reusedInvoiceRef.qb_invoice_id,
+            qb_invoice_number: reusedInvoiceRef.qb_invoice_number,
+            qb_customer_id: reusedInvoiceRef.qb_customer_id,
+            invoice_status: 'unpaid',
+          }).catch(() => {});
+        } else {
+          createQuickbooksInvoice(reserved.id).catch(() => {});
+        }
+
+        // Best-effort, in parallel: a failed upload shouldn't block the
+        // booking itself - same "local state/booking always wins, best-effort
+        // sync" spirit as the rest of this app. Uploaded under the booking's
+        // own id now that one exists. Each value is either a fresh local
+        // picker URI (string - genuinely new, needs uploadBookingDocument) or
+        // { existing: true, filePath } (already on file from a previous
+        // booking/the Documents Hub - checkout/form.js's auto-populate, just
+        // links this booking to the existing file via linkExistingBookingDocument
+        // rather than re-uploading the same bytes).
+        await Promise.all(
+          [
+            draft.licenseFront && ['license_front', draft.licenseFront],
+            draft.licenseBack && ['license_back', draft.licenseBack],
+            draft.proofOfAddress && ['proof_of_address', draft.proofOfAddress],
+          ]
+            .filter(Boolean)
+            .map(([type, value]) => (
+              typeof value === 'string'
+                ? uploadBookingDocument(user.id, reserved.id, type, value).catch(() => {})
+                : linkExistingBookingDocument(user.id, reserved.id, type, value.filePath).catch(() => {})
+            ))
+        );
       }
 
-      // Resuming a saved booking that already has a real (unpaid)
-      // QuickBooks invoice from Save & Pay Later time - read it back before
-      // reserving, so the reservation below can reuse the same invoice
-      // instead of quickbooks-create-invoice minting a duplicate for the
-      // same trip. Fire-and-forget invoice creation at save time means this
-      // can legitimately still be null (not landed yet) - degrades to the
-      // normal fresh-invoice path below either way.
-      const reusedInvoiceRef = resumedBooking?.pendingInvoiceId
-        ? await getPendingInvoiceQuickbooksRef(resumedBooking.pendingInvoiceId).catch(() => null)
-        : null;
-
-      const reserved = await createBooking({
-        renter_id: user.id,
-        car_id: carId,
-        vendor_id: car.vendorId,
-        start_date: draft.startDate,
-        end_date: draft.endDate,
-        pickup_time: draft.pickupTime,
-        return_time: draft.returnTime,
-        pickup_location: draft.pickupLocation,
-        return_location: draft.returnLocation,
-        drive_type: car.drivenBy,
-        addon_names: draft.addons.map((a) => a.name),
-        addon_days: draft.addons.map((a) => a.days),
-        rental_cost: rentalCost,
-        addons_cost: addonsCost,
-        delivery_fee: deliveryFee,
-        security_deposit: securityDeposit,
-        promo_code: promoCode,
-        promo_discount_amount: promoDiscountAmount,
-        wopecare_plan: wopeCarePlanId ?? 'none',
-        wopecare_daily_rate: wopeCareDailyRate,
-        wopecare_total_cost: wopeCareCost,
-        wopecare_coverage: wopeCareCoverage,
-        total_cost: draft.totalCost,
-        // vendor_payout_per_day/vendor_payout_total/wopecar_margin are
-        // NOT set here - the bookings_compute_vendor_payout trigger stamps
-        // them server-side from the car's admin-only payout_per_day, so
-        // this device (the renter's own) never fetches or handles that
-        // rate at all. billable_days is just a plain day count, not money.
-        billable_days: billableDays,
-        status: 'pending',
-        payment_status: 'unpaid',
-      });
-
-      if (reusedInvoiceRef?.qb_invoice_id) {
-        confirmSupabaseBooking(reserved.id, {
-          qb_invoice_id: reusedInvoiceRef.qb_invoice_id,
-          qb_invoice_number: reusedInvoiceRef.qb_invoice_number,
-          qb_customer_id: reusedInvoiceRef.qb_customer_id,
-          invoice_status: 'unpaid',
-        }).catch(() => {});
-      } else {
-        createQuickbooksInvoice(reserved.id).catch(() => {});
-      }
-
-      // Best-effort, in parallel: a failed upload shouldn't block the
-      // booking itself - same "local state/booking always wins, best-effort
-      // sync" spirit as the rest of this app. Uploaded under the booking's
-      // own id now that one exists. Each value is either a fresh local
-      // picker URI (string - genuinely new, needs uploadBookingDocument) or
-      // { existing: true, filePath } (already on file from a previous
-      // booking/the Documents Hub - checkout/form.js's auto-populate, just
-      // links this booking to the existing file via linkExistingBookingDocument
-      // rather than re-uploading the same bytes).
-      await Promise.all(
-        [
-          draft.licenseFront && ['license_front', draft.licenseFront],
-          draft.licenseBack && ['license_back', draft.licenseBack],
-          draft.proofOfAddress && ['proof_of_address', draft.proofOfAddress],
-        ]
-          .filter(Boolean)
-          .map(([type, value]) => (
-            typeof value === 'string'
-              ? uploadBookingDocument(user.id, reserved.id, type, value).catch(() => {})
-              : linkExistingBookingDocument(user.id, reserved.id, type, value.filePath).catch(() => {})
-          ))
-      );
+      // Read back off the reservation itself (fresh or reused) rather than
+      // keeping separate locals from buildPricingBreakdown - the row is the
+      // single source of truth for what's actually being charged/confirmed,
+      // and this way a retry that skips the block above still has correct
+      // values for the confirm/email/analytics/local-state steps below.
+      const reserved = reservedBookingRef.current;
+      const wopeCarePlanId = reserved.wopecare_plan && reserved.wopecare_plan !== 'none' ? reserved.wopecare_plan : null;
+      const wopeCareDailyRate = reserved.wopecare_daily_rate;
+      const wopeCareCost = reserved.wopecare_total_cost;
+      const wopeCareCoverage = reserved.wopecare_coverage;
+      const billableDays = reserved.billable_days;
 
       const reference = await payWithPaystack(draft.totalCost);
 
@@ -368,6 +408,12 @@ export default function CheckoutPaymentScreen() {
     } catch (e) {
       setError(e.message || 'Something went wrong. Please try again.');
       setIsProcessing(false);
+    } finally {
+      // Deliberately NOT resetting reservedBookingRef here - a reservation
+      // that was created must stay remembered across a failed attempt so
+      // the retry above reuses it instead of creating a duplicate. Only
+      // the tap-latch resets, so Pay is tappable again after an error.
+      isSubmittingRef.current = false;
     }
   };
 
