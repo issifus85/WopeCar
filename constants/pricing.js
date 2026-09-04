@@ -97,6 +97,34 @@ export function getSelfDriveDeliveryFee() {
   return cachedSelfDriveDeliveryFee;
 }
 
+// Admin > Settings > Business Rules > "With-Driver Add-on Fee" - an optional,
+// self-drive-only add-on: a self-drive renter can pay extra per day for a
+// WopeCar driver instead of driving themselves. Chauffeur cars already come
+// with a driver, so this only ever applies when drivenBy === 'Self-drive' -
+// see checkout/addons.js where the toggle is gated on that. Real and
+// live-editable (app_settings.with_driver_fee_per_day), same
+// stale-while-revalidate pattern as getSelfDriveDeliveryFee() above.
+export const WITH_DRIVER_FEE_PER_DAY = 200;
+
+let cachedWithDriverFeePerDay = WITH_DRIVER_FEE_PER_DAY;
+let withDriverFeePerDayFetchedAt = 0;
+
+export function getWithDriverFeePerDay() {
+  if (Date.now() - withDriverFeePerDayFetchedAt > SETTINGS_CACHE_TTL_MS) {
+    withDriverFeePerDayFetchedAt = Date.now();
+    import('../services/supabase')
+      .then(({ getAppSetting }) => getAppSetting('with_driver_fee_per_day'))
+      .then((value) => {
+        if (typeof value === 'number' && value >= 0) cachedWithDriverFeePerDay = value;
+      })
+      .catch(() => {
+        // Keep the last-known-good value - never let a settings-fetch
+        // failure block checkout.
+      });
+  }
+  return cachedWithDriverFeePerDay;
+}
+
 // Admin > Settings > Business Rules > "Latest Badge Window" - how many days
 // after a car is added it still shows the "New" badge and gets prioritized
 // by the Home screen's "Latest" sort. Same stale-while-revalidate pattern as

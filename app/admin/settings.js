@@ -32,6 +32,7 @@ const APP_WIDE_DISCOUNT_KEYS = {
 
 const BUSINESS_KEYS = [
   { key: 'self_drive_delivery_fee', label: 'Self-Drive Delivery Fee (GHS)' },
+  { key: 'with_driver_fee_per_day', label: 'With-Driver Add-on Fee (GHS/day, self-drive only)' },
   { key: 'security_deposit_flat', label: 'Security Deposit — Flat (GHS)' },
   { key: 'security_deposit_threshold', label: 'Security Deposit Threshold (GHS)' },
   { key: 'security_deposit_percentage', label: 'Security Deposit — Percentage (0–1)' },

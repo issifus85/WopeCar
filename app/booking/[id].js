@@ -11,6 +11,7 @@ import { useSettings } from '../../contexts/SettingsContext';
 import {
   formatCurrency,
   getSelfDriveDeliveryFee,
+  getWithDriverFeePerDay,
   calculateSecurityDeposit,
   calculateRentalPricing,
   getMinBookingDays,
@@ -320,8 +321,13 @@ export default function BookingDetailScreen() {
     const isSelfDrive = car.drivenBy === 'Self-drive';
     const deliveryFee = isSelfDrive ? getSelfDriveDeliveryFee() : 0;
     const securityDeposit = calculateSecurityDeposit(subtotal, car.drivenBy);
-    const total = subtotal + deliveryFee + securityDeposit + recomputedWopeCareCost;
-    return { rentalCost, addonsCost, deliveryFee, securityDeposit, total };
+    // Same "recompute live from the current admin-set rate" treatment as
+    // deliveryFee above, not a per-car snapshot like WopeCare's rate -
+    // with_driver_fee_per_day is a single global setting, so an extension
+    // bills the current rate × the new day count.
+    const withDriverCost = booking?.withDriver?.selected ? getWithDriverFeePerDay() * days : 0;
+    const total = subtotal + deliveryFee + securityDeposit + recomputedWopeCareCost + withDriverCost;
+    return { rentalCost, addonsCost, deliveryFee, securityDeposit, withDriverCost, total };
   }, [car, pricing, days, booking, originalDays, recomputedWopeCareCost]);
 
   const recomputedTotal = recomputedBreakdown.total;
@@ -364,6 +370,9 @@ export default function BookingDetailScreen() {
     billableDays: days,
     wopecareTotalCost: booking.wopeCare?.plan && booking.wopeCare.plan !== 'none'
       ? recomputedWopeCareCost
+      : undefined,
+    withDriverTotalCost: booking.withDriver?.selected
+      ? recomputedBreakdown.withDriverCost
       : undefined,
     ...extra,
   });
@@ -595,6 +604,15 @@ export default function BookingDetailScreen() {
                   <View>
                     <Text style={styles.modificationOldValue}>{formatCurrency(mod.old_wopecare_total_cost, activeCurrency)}</Text>
                     <Text style={styles.rowValue}>{formatCurrency(mod.new_wopecare_total_cost, activeCurrency)}</Text>
+                  </View>
+                </View>
+              )}
+              {mod.old_with_driver_total_cost !== mod.new_with_driver_total_cost && (mod.old_with_driver_total_cost > 0 || mod.new_with_driver_total_cost > 0) && (
+                <View style={styles.row}>
+                  <Text style={styles.rowLabel}>With Driver</Text>
+                  <View>
+                    <Text style={styles.modificationOldValue}>{formatCurrency(mod.old_with_driver_total_cost, activeCurrency)}</Text>
+                    <Text style={styles.rowValue}>{formatCurrency(mod.new_with_driver_total_cost, activeCurrency)}</Text>
                   </View>
                 </View>
               )}
@@ -835,6 +853,25 @@ export default function BookingDetailScreen() {
                 <Ionicons name="warning" size={16} color={colors.warning} />
                 <Text style={styles.rowLabel}>No WopeCare Protection</Text>
               </View>
+            </View>
+          )}
+        </View>
+      )}
+
+      {mode === 'view' && car?.drivenBy === 'Self-drive' && (
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Driver</Text>
+          {booking.withDriver?.selected ? (
+            <View style={[styles.row, styles.rowLast]}>
+              <View style={styles.wopeCareTitleRow}>
+                <Ionicons name="person" size={16} color={colors.success} />
+                <Text style={styles.rowLabel}>WopeCar Driver</Text>
+              </View>
+              <Text style={styles.rowValue}>{formatCurrency(booking.withDriver.totalCost, activeCurrency)}</Text>
+            </View>
+          ) : (
+            <View style={[styles.row, styles.rowLast]}>
+              <Text style={styles.rowLabel}>Self-drive (no driver)</Text>
             </View>
           )}
         </View>

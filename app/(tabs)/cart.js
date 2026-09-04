@@ -157,6 +157,7 @@ export default function CartScreen() {
       returnLocation: booking.returnLocation,
       addons: booking.addons,
       wopeCare: booking.wopeCare?.plan ?? 'none',
+      withDriver: booking.withDriver?.selected ?? false,
       totalCost: booking.totalCost,
       form: booking.form,
       licenseFront: booking.licenseFront,

@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { formatCurrency, calculateRentalPricing } from '../../constants/pricing';
+import { formatCurrency, calculateRentalPricing, getWithDriverFeePerDay } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
@@ -33,6 +33,7 @@ export default function CheckoutAddonsScreen() {
     (draft.addons ?? []).forEach((a) => { map[a.name] = a.days; });
     return map;
   });
+  const [withDriver, setWithDriver] = useState(!!draft.withDriver);
 
   useEffect(() => {
     fetchCarById(carId)
@@ -77,7 +78,10 @@ export default function CheckoutAddonsScreen() {
   };
 
   const handleContinue = () => {
-    updateDraft({ addons: Object.entries(selected).map(([name, addonDays]) => ({ name, days: addonDays })) });
+    updateDraft({
+      addons: Object.entries(selected).map(([name, addonDays]) => ({ name, days: addonDays })),
+      withDriver,
+    });
     router.push({ pathname: '/checkout/wopecare', params: { carId } });
   };
 
@@ -90,12 +94,35 @@ export default function CheckoutAddonsScreen() {
   }
 
   const addons = car?.regionalAddons ?? [];
+  const isSelfDrive = car?.drivenBy === 'Self-drive';
+  const withDriverFeePerDay = getWithDriverFeePerDay();
 
   return (
     <View style={styles.container}>
       <CheckoutHeader title="Regional Add-ons" step={2} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {isSelfDrive && (
+          <>
+            <Text style={styles.sectionTitle}>Driver Option</Text>
+            <Text style={styles.sectionSubtitle}>
+              Prefer not to drive yourself? Add a WopeCar driver for your entire trip.
+            </Text>
+            <View style={[styles.addonRow, withDriver && styles.addonRowSelected]}>
+              <TouchableOpacity style={styles.addonToggleRow} onPress={() => setWithDriver((prev) => !prev)}>
+                <View style={[styles.checkbox, withDriver && styles.checkboxChecked]}>
+                  {withDriver && <Ionicons name="checkmark" size={14} color={colors.white} />}
+                </View>
+                <View style={styles.addonInfo}>
+                  <Text style={styles.addonName}>Add a Driver</Text>
+                  <Text style={styles.addonType}>WopeCar provides a driver for the whole trip</Text>
+                </View>
+                <Text style={styles.addonPrice}>+{formatCurrency(withDriverFeePerDay, activeCurrency)}/day</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+
         <Text style={styles.sectionTitle}>Regional Travel Add-ons</Text>
         <Text style={styles.sectionSubtitle}>
           Select any regions outside the base rental area you plan to drive to.

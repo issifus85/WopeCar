@@ -133,6 +133,9 @@ function costBreakdownHtml(mod: any) {
   if (Number(mod.old_wopecare_total_cost) !== Number(mod.new_wopecare_total_cost) && (Number(mod.old_wopecare_total_cost) > 0 || Number(mod.new_wopecare_total_cost) > 0)) {
     rows += row('WopeCare', mod.old_wopecare_total_cost, mod.new_wopecare_total_cost);
   }
+  if (Number(mod.old_with_driver_total_cost) !== Number(mod.new_with_driver_total_cost) && (Number(mod.old_with_driver_total_cost) > 0 || Number(mod.new_with_driver_total_cost) > 0)) {
+    rows += row('With Driver', mod.old_with_driver_total_cost, mod.new_with_driver_total_cost);
+  }
   if (Number(mod.old_delivery_fee) !== Number(mod.new_delivery_fee)) {
     rows += row('Delivery fee', mod.old_delivery_fee, mod.new_delivery_fee);
   }
@@ -224,7 +227,7 @@ Deno.serve(async (req) => {
     const {
       bookingId, startDate, endDate, pickupTime, returnTime, pickupLocation, returnLocation,
       rentalCost, addonsCost, deliveryFee, securityDeposit, totalCost, billableDays,
-      wopecareTotalCost, paystackReference, amountCharged,
+      wopecareTotalCost, withDriverTotalCost, paystackReference, amountCharged,
     } = await req.json();
 
     if (!bookingId || !startDate || !endDate || totalCost == null) {
@@ -313,6 +316,9 @@ Deno.serve(async (req) => {
     if (wopecareTotalCost != null) {
       updatePatch.wopecare_total_cost = Number(wopecareTotalCost);
     }
+    if (withDriverTotalCost != null) {
+      updatePatch.with_driver_total_cost = Number(withDriverTotalCost);
+    }
 
     const { error: updateError } = await adminClient.from('bookings').update(updatePatch).eq('id', bookingId);
     if (updateError) {
@@ -333,6 +339,7 @@ Deno.serve(async (req) => {
       old_delivery_fee: booking.delivery_fee,
       old_security_deposit: booking.security_deposit,
       old_wopecare_total_cost: booking.wopecare_total_cost ?? 0,
+      old_with_driver_total_cost: booking.with_driver_total_cost ?? 0,
       old_total_cost: booking.total_cost,
       new_start_date: startDate,
       new_end_date: endDate,
@@ -345,6 +352,7 @@ Deno.serve(async (req) => {
       new_delivery_fee: Number(deliveryFee ?? booking.delivery_fee),
       new_security_deposit: Number(securityDeposit ?? booking.security_deposit),
       new_wopecare_total_cost: wopecareTotalCost != null ? Number(wopecareTotalCost) : (booking.wopecare_total_cost ?? 0),
+      new_with_driver_total_cost: withDriverTotalCost != null ? Number(withDriverTotalCost) : (booking.with_driver_total_cost ?? 0),
       new_total_cost: newTotalCost,
       amount_charged: Number(amountCharged ?? (newTotalCost - Number(booking.total_cost))),
       payment_ref: paystackReference ?? null,

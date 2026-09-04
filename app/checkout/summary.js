@@ -8,6 +8,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import {
   formatCurrency,
   getSelfDriveDeliveryFee,
+  getWithDriverFeePerDay,
   calculateSecurityDeposit,
   calculateRentalPricing,
   WOPECARE_PLANS,
@@ -108,6 +109,12 @@ export default function CheckoutSummaryScreen() {
   const wopeCareDailyRate = wopeCarePlan ? calculateWopeCareDailyRate(car.pricePerDay, draft.wopeCare) : 0;
   const wopeCareCost = wopeCarePlan ? calculateWopeCareCost(car.pricePerDay, draft.wopeCare, days) : 0;
 
+  // Self-drive-only add-on, recomputed live from the current admin-set rate
+  // (same "never trust a stale draft snapshot" reasoning as the fields
+  // above) - see constants/pricing.js's getWithDriverFeePerDay().
+  const withDriverDailyRate = draft.withDriver ? getWithDriverFeePerDay() : 0;
+  const withDriverCost = draft.withDriver ? withDriverDailyRate * days : 0;
+
   // Recomputed from the promo's own discount shape (not a stored amount) so
   // it stays correct if the renter goes back and changes dates/addons after
   // applying a code - see the comment on CheckoutContext's EMPTY_DRAFT.
@@ -119,7 +126,7 @@ export default function CheckoutSummaryScreen() {
     return Math.min(subtotal, Math.max(0, amount));
   }, [draft.promoCode, draft.promoDiscountType, draft.promoDiscountValue, subtotal]);
 
-  const total = subtotal - promoDiscountAmount + deliveryFee + securityDeposit + wopeCareCost;
+  const total = subtotal - promoDiscountAmount + deliveryFee + securityDeposit + wopeCareCost + withDriverCost;
 
   const [promoInput, setPromoInput] = useState('');
   const [isApplyingPromo, setIsApplyingPromo] = useState(false);
@@ -212,6 +219,13 @@ export default function CheckoutSummaryScreen() {
               </Text>
             </View>
           ))}
+
+          {!!draft.withDriver && (
+            <View style={styles.costRow}>
+              <Text style={styles.costLabel}>With Driver ({days} {days === 1 ? 'day' : 'days'})</Text>
+              <Text style={styles.costValue}>{formatCurrency(withDriverCost, activeCurrency)}</Text>
+            </View>
+          )}
 
           {wopeCarePlan ? (
             <View style={styles.costRow}>

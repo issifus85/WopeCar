@@ -12,6 +12,10 @@ const EMPTY_DRAFT = {
   // applies for (e.g. a per-day regional travel fee only charged for the
   // portion of the trip actually spent in that region, not the whole trip).
   addons: [],
+  // Optional self-drive-only add-on - a WopeCar driver for the whole trip,
+  // priced per day via constants/pricing.js's getWithDriverFeePerDay(). Never
+  // offered/settable for a Chauffeur car (see checkout/addons.js).
+  withDriver: false,
   totalCost: 0,
   // 'none' | 'basic' | 'plus' | 'premium' - see constants/pricing.js's
   // WOPECARE_PLANS. wopeCareDetails caches the selected plan object itself

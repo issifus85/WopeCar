@@ -11,6 +11,7 @@ import {
   calculateRentalPricing,
   calculateSecurityDeposit,
   getSelfDriveDeliveryFee,
+  getWithDriverFeePerDay,
   WOPECARE_PLANS,
   calculateWopeCareCost,
   calculateWopeCareDailyRate,
@@ -174,7 +175,15 @@ export default function CheckoutPaymentScreen() {
     const wopeCareDailyRate = wopeCarePlanId ? calculateWopeCareDailyRate(car.pricePerDay, wopeCarePlanId) : 0;
     const wopeCareCost = wopeCarePlanId ? calculateWopeCareCost(car.pricePerDay, wopeCarePlanId, pricing.billableDays) : 0;
     const wopeCareCoverage = wopeCarePlanId ? WOPECARE_PLANS[wopeCarePlanId].coverage : 0;
-    return { rentalCost, addonsCost, deliveryFee, securityDeposit, promoDiscountAmount, wopeCarePlanId, wopeCareDailyRate, wopeCareCost, wopeCareCoverage, billableDays: pricing.billableDays };
+    // Self-drive-only add-on - see checkout/summary.js's identical formula.
+    const withDriverDailyRate = draft.withDriver ? getWithDriverFeePerDay() : 0;
+    const withDriverCost = draft.withDriver ? withDriverDailyRate * pricing.billableDays : 0;
+    return {
+      rentalCost, addonsCost, deliveryFee, securityDeposit, promoDiscountAmount,
+      wopeCarePlanId, wopeCareDailyRate, wopeCareCost, wopeCareCoverage,
+      withDriverDailyRate, withDriverCost,
+      billableDays: pricing.billableDays,
+    };
   };
 
   const handlePay = async () => {
@@ -215,7 +224,11 @@ export default function CheckoutPaymentScreen() {
       // (uses_count, a minted invoice, uploaded files) that must equally
       // not repeat on a retry, so they all move inside this guard.
       if (!reservedBookingRef.current) {
-        const { rentalCost, addonsCost, deliveryFee, securityDeposit, promoDiscountAmount, wopeCarePlanId, wopeCareDailyRate, wopeCareCost, wopeCareCoverage, billableDays } = await buildPricingBreakdown();
+        const {
+          rentalCost, addonsCost, deliveryFee, securityDeposit, promoDiscountAmount,
+          wopeCarePlanId, wopeCareDailyRate, wopeCareCost, wopeCareCoverage,
+          withDriverDailyRate, withDriverCost, billableDays,
+        } = await buildPricingBreakdown();
 
         // Redeemed (uses_count incremented) here, immediately before the
         // booking that actually spends it gets created - not back on the
@@ -263,6 +276,9 @@ export default function CheckoutPaymentScreen() {
           wopecare_daily_rate: wopeCareDailyRate,
           wopecare_total_cost: wopeCareCost,
           wopecare_coverage: wopeCareCoverage,
+          with_driver: !!draft.withDriver,
+          with_driver_daily_rate: withDriverDailyRate,
+          with_driver_total_cost: withDriverCost,
           total_cost: draft.totalCost,
           // vendor_payout_per_day/vendor_payout_total/wopecar_margin are
           // NOT set here - the bookings_compute_vendor_payout trigger stamps
@@ -321,6 +337,9 @@ export default function CheckoutPaymentScreen() {
       const wopeCareCost = reserved.wopecare_total_cost;
       const wopeCareCoverage = reserved.wopecare_coverage;
       const billableDays = reserved.billable_days;
+      const withDriverSelected = !!reserved.with_driver;
+      const withDriverDailyRate = reserved.with_driver_daily_rate;
+      const withDriverCost = reserved.with_driver_total_cost;
 
       const reference = await payWithPaystack(draft.totalCost);
 
@@ -383,6 +402,7 @@ export default function CheckoutPaymentScreen() {
         totalDays: billableDays,
         driveType: car?.drivenBy === 'Chauffeur' ? 'chauffeur' : 'self_drive',
         wopecareSelected: !!wopeCarePlanId,
+        withDriverSelected,
         paymentMethod: 'paystack',
       });
 
@@ -403,6 +423,11 @@ export default function CheckoutPaymentScreen() {
           dailyRate: wopeCareDailyRate,
           totalCost: wopeCareCost,
           coverage: wopeCareCoverage,
+        },
+        withDriver: {
+          selected: withDriverSelected,
+          dailyRate: withDriverDailyRate,
+          totalCost: withDriverCost,
         },
         totalCost: draft.totalCost,
         form: draft.form,
@@ -442,7 +467,11 @@ export default function CheckoutPaymentScreen() {
     setIsSaving(true);
     setError(null);
     try {
-      const { rentalCost, addonsCost, deliveryFee, securityDeposit, wopeCarePlanId, wopeCareDailyRate, wopeCareCost, billableDays } = await buildPricingBreakdown();
+      const {
+        rentalCost, addonsCost, deliveryFee, securityDeposit,
+        wopeCarePlanId, wopeCareDailyRate, wopeCareCost,
+        withDriverDailyRate, withDriverCost, billableDays,
+      } = await buildPricingBreakdown();
       const expiresAt = new Date(Date.now() + SAVED_BOOKING_HOLD_MS);
 
       const pendingInvoice = await createPendingInvoiceRow({
@@ -466,6 +495,9 @@ export default function CheckoutPaymentScreen() {
         wopecare_plan: wopeCarePlanId ?? 'none',
         wopecare_daily_rate: wopeCareDailyRate,
         wopecare_total_cost: wopeCareCost,
+        with_driver: !!draft.withDriver,
+        with_driver_daily_rate: withDriverDailyRate,
+        with_driver_total_cost: withDriverCost,
         total_cost: draft.totalCost,
         expires_at: expiresAt.toISOString(),
       });
@@ -490,6 +522,7 @@ export default function CheckoutPaymentScreen() {
         driveType: car.drivenBy,
         addons: draft.addons,
         wopeCare: { plan: wopeCarePlanId ?? 'none', totalCost: wopeCareCost },
+        withDriver: { selected: !!draft.withDriver, dailyRate: withDriverDailyRate, totalCost: withDriverCost },
         deliveryFee,
         securityDeposit,
         rentalCost,

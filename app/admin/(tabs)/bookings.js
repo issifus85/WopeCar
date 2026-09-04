@@ -30,6 +30,7 @@ function BookingCard({ booking, onPress, styles, colors }) {
         <Text style={styles.ref}>{booking.booking_ref}</Text>
         <View style={styles.badgeGroup}>
           {!!booking.wopecare_plan && booking.wopecare_plan !== 'none' && <BadgeStatus label="WopeCare" tone="neutral" />}
+          {!!booking.with_driver && <BadgeStatus label="With Driver" tone="neutral" />}
           {booking.payment_status === 'paid' && <BadgeStatus label="Paid" tone="success" />}
           <BadgeStatus label={booking.status} tone={STATUS_TONE[booking.status] || 'muted'} />
         </View>
@@ -59,6 +60,7 @@ function CompactBookingRow({ booking, onPress, styles, colors }) {
         <Text style={styles.compactTotal}>{formatCurrency(booking.total_cost)}</Text>
         <View style={styles.badgeGroup}>
           {!!booking.wopecare_plan && booking.wopecare_plan !== 'none' && <BadgeStatus label="WopeCare" tone="neutral" />}
+          {!!booking.with_driver && <BadgeStatus label="With Driver" tone="neutral" />}
           {booking.payment_status === 'paid' && <BadgeStatus label="Paid" tone="success" />}
           <BadgeStatus label={booking.status} tone={STATUS_TONE[booking.status] || 'muted'} />
         </View>

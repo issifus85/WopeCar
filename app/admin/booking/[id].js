@@ -363,6 +363,13 @@ export default function AdminBookingDetailScreen() {
               <Row label="Pickup Location" value={booking.pickup_location} styles={styles} />
               <Row label="Return Location" value={booking.return_location} styles={styles} />
               <Row label="Drive Type" value={booking.drive_type} styles={styles} />
+              {booking.drive_type === 'Self-drive' && (
+                <Row
+                  label="Driver"
+                  value={booking.with_driver ? `WopeCar Driver (${formatCurrency(booking.with_driver_daily_rate)}/day)` : 'Self-drive (no driver)'}
+                  styles={styles}
+                />
+              )}
             </View>
 
             {!!booking.addon_names?.length && (
@@ -391,6 +398,9 @@ export default function AdminBookingDetailScreen() {
               <SectionHeading>Cost Breakdown</SectionHeading>
               <Row label="Rental Cost" value={formatCurrency(booking.rental_cost)} styles={styles} />
               <Row label="Add-ons Cost" value={formatCurrency(booking.addons_cost)} styles={styles} />
+              {!!booking.with_driver && (
+                <Row label="With Driver" value={formatCurrency(booking.with_driver_total_cost)} styles={styles} />
+              )}
               {!!booking.wopecare_plan && booking.wopecare_plan !== 'none' && (
                 <Row label="WopeCare" value={formatCurrency(booking.wopecare_total_cost)} styles={styles} />
               )}

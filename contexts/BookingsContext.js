@@ -37,6 +37,11 @@ function normalizeSupabaseBooking(row) {
       totalCost: row.wopecare_total_cost ?? 0,
       coverage: row.wopecare_coverage ?? 0,
     },
+    withDriver: {
+      selected: !!row.with_driver,
+      dailyRate: row.with_driver_daily_rate ?? 0,
+      totalCost: row.with_driver_total_cost ?? 0,
+    },
     totalCost: row.total_cost,
     paystackReference: row.payment_ref,
     status: STATUS_MAP[row.status] ?? 'Pending',
@@ -158,6 +163,7 @@ export function BookingsProvider({ children }) {
         totalCost: fields.totalCost,
         billableDays: fields.billableDays,
         wopecareTotalCost: fields.wopecareTotalCost,
+        withDriverTotalCost: fields.withDriverTotalCost,
         paystackReference: fields.paystackReference,
         amountCharged: fields.amountCharged,
       },
@@ -178,6 +184,9 @@ export function BookingsProvider({ children }) {
         wopeCare: fields.wopecareTotalCost != null && b.wopeCare?.plan && b.wopeCare.plan !== 'none'
           ? { ...b.wopeCare, totalCost: fields.wopecareTotalCost }
           : b.wopeCare,
+        withDriver: fields.withDriverTotalCost != null && b.withDriver?.selected
+          ? { ...b.withDriver, totalCost: fields.withDriverTotalCost }
+          : b.withDriver,
       } : b));
       bookingsStorage.setBookings(next);
       return next;
