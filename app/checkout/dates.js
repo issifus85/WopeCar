@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { getMinBookingDays } from '../../constants/pricing';
 import { fetchCarById, fetchCarAvailability } from '../../services/carsApi';
 import { isSundayBlockedForCar } from '../../services/vendorCalendar';
@@ -11,6 +12,8 @@ import { useCheckout } from '../../contexts/CheckoutContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 import ConfirmModal from '../../components/ConfirmModal';
+import OptionPickerModal from '../../components/OptionPickerModal';
+import LocationSearchModal from '../../components/LocationSearchModal';
 import { logScreen, logStartCheckout } from '../../services/analytics';
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
@@ -20,6 +23,18 @@ const MONTH_NAMES = [
 ];
 const SHORT_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const SELF_DRIVE_SLOTS = [
+  '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
+  '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM',
+];
+
+// Chauffeur bookings get a wider window on both ends (a driver can start
+// earlier and finish later than a self-drive handover requires) - the
+// self-drive list is untouched, just extended at either end rather than
+// redefined, so the two stay obviously in sync if the base hours ever move.
+const CHAUFFEUR_PICKUP_SLOTS = ['5:30 AM', '6:00 AM', '7:00 AM', ...SELF_DRIVE_SLOTS];
+const CHAUFFEUR_RETURN_SLOTS = [...SELF_DRIVE_SLOTS, '7:00 PM', '8:00 PM', '8:30 PM'];
 
 // e.g. "Mon 17 Aug" - used by the 24hr rental note below, distinct from
 // the calendar grid's 2-letter WEEKDAYS and the month-nav's full MONTH_NAMES.
@@ -81,7 +96,6 @@ function RentalHoursNote({ days, startDate, returnDate, styles, colors }) {
         <Text style={styles.hoursNoteBody}>
           {`You've selected ${days} ${dayWord}. With a 24-hour rental, if you pick up at 8:00 AM on ${formatShortDate(startDate)}, your car must be returned by 8:00 AM on ${formatShortDate(returnDate)} to use your full ${days} ${dayWord}.`}
         </Text>
-        <Text style={styles.hoursNoteBody}>You&apos;ll set your exact pickup time on the next screen.</Text>
         <Text style={styles.hoursNoteFootnote}>Returning late may incur additional charges.</Text>
       </View>
     </Animated.View>
@@ -118,11 +132,31 @@ function SundayChauffeurNote({ styles, colors }) {
   );
 }
 
+// Compact "Select time" dropdown pill - replaces the old full slot-grid
+// (11+ buttons per field) now that time selection shares a screen with the
+// calendar and location fields; opens the same OptionPickerModal bottom
+// sheet already used elsewhere (e.g. account.js's ID Type picker) rather
+// than introducing a new picker pattern.
+function TimeField({ label, value, onPress, styles, colors }) {
+  return (
+    <View style={styles.timeField}>
+      <Text style={styles.label}>{label}</Text>
+      <TouchableOpacity style={styles.timePill} onPress={onPress}>
+        <Text style={[styles.timePillText, !value && styles.timePillPlaceholder]}>
+          {value || 'Select time'}
+        </Text>
+        <Ionicons name="chevron-down" size={16} color={colors.textSubtle} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 export default function CheckoutDatesScreen() {
   const { carId } = useLocalSearchParams();
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const { user } = useAuth();
   const { draft, updateDraft, startCheckout } = useCheckout();
 
   // Reached directly after a login redirect (cart.js only calls
@@ -149,6 +183,34 @@ export default function CheckoutDatesScreen() {
   const draftMatchesCar = draft.carId === String(carId);
   const [tempStart, setTempStart] = useState(draftMatchesCar && draft.startDate ? new Date(draft.startDate) : null);
   const [tempEnd, setTempEnd] = useState(draftMatchesCar && draft.endDate ? new Date(draft.endDate) : null);
+
+  // Time & location - same fields/behavior as the old checkout/details.js,
+  // just living on this screen now instead of a separate step.
+  const [pickupTime, setPickupTime] = useState(draft.pickupTime);
+  const [returnTime, setReturnTime] = useState(draft.returnTime);
+  // Falls back to the user's saved preferred pickup location (a profile
+  // field that previously had no real behavior anywhere in the app) when
+  // checkout hasn't collected one yet.
+  const [pickupLocation, setPickupLocation] = useState(draft.pickupLocation || user?.preferredPickupLocation || '');
+  const [returnLocation, setReturnLocation] = useState(draft.returnLocation);
+  const [sameAsPickup, setSameAsPickup] = useState(
+    !!draft.pickupLocation && draft.pickupLocation === draft.returnLocation
+  );
+  const [isPickupTimeModalVisible, setIsPickupTimeModalVisible] = useState(false);
+  const [isReturnTimeModalVisible, setIsReturnTimeModalVisible] = useState(false);
+  const [isPickupLocationModalVisible, setIsPickupLocationModalVisible] = useState(false);
+  const [isReturnLocationModalVisible, setIsReturnLocationModalVisible] = useState(false);
+
+  const handlePickupLocationChange = (text) => {
+    setPickupLocation(text);
+    if (sameAsPickup) setReturnLocation(text);
+  };
+
+  const toggleSameAsPickup = () => {
+    const next = !sameAsPickup;
+    setSameAsPickup(next);
+    if (next) setReturnLocation(pickupLocation);
+  };
 
   useEffect(() => {
     setIsLoading(true);
@@ -212,7 +274,14 @@ export default function CheckoutDatesScreen() {
       setShowSundayNotice(true);
       return;
     }
-    updateDraft({ startDate: tempStart.toISOString(), endDate: tempEnd.toISOString() });
+    updateDraft({
+      startDate: tempStart.toISOString(),
+      endDate: tempEnd.toISOString(),
+      pickupTime,
+      returnTime,
+      pickupLocation,
+      returnLocation,
+    });
     // Rough default-rate estimate, not the final priced total - add-ons,
     // WopeCare, and discounts aren't chosen yet at this first checkout step.
     logStartCheckout({
@@ -221,7 +290,7 @@ export default function CheckoutDatesScreen() {
       totalDays: selectedDays,
       estimatedCost: car.pricePerDay * selectedDays,
     });
-    router.push({ pathname: '/checkout/details', params: { carId } });
+    router.push({ pathname: '/checkout/addons', params: { carId } });
   };
 
   if (isLoading) {
@@ -257,13 +326,20 @@ export default function CheckoutDatesScreen() {
   const showHoursNote = tempStart && tempEnd && car.drivenBy !== 'Chauffeur';
   const showSundayChauffeurNote = car.drivenBy === 'Chauffeur' && tempStart?.getDay() === 0;
 
+  const isChauffeur = car.drivenBy === 'Chauffeur';
+  const pickupSlots = isChauffeur ? CHAUFFEUR_PICKUP_SLOTS : SELF_DRIVE_SLOTS;
+  const returnSlots = isChauffeur ? CHAUFFEUR_RETURN_SLOTS : SELF_DRIVE_SLOTS;
+
+  const isValid = tempStart && tempEnd && !isBelowMinimum &&
+    pickupTime && returnTime && pickupLocation.trim() && returnLocation.trim();
+
   return (
     <View style={styles.container}>
-      <CheckoutHeader title="Select Dates" step={1} />
+      <CheckoutHeader title="Dates, Time & Location" step={1} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.carName}>{car.name}</Text>
-        <Text style={styles.carSubtitle}>Choose your pickup and return dates</Text>
+        <Text style={styles.carSubtitle}>Choose your pickup and return dates, times and location</Text>
 
         <View style={styles.legendRow}>
           <View style={styles.legendItem}>
@@ -349,6 +425,40 @@ export default function CheckoutDatesScreen() {
           </View>
         )}
 
+        <View style={styles.timeRow}>
+          <TimeField label="Pickup Time" value={pickupTime} onPress={() => setIsPickupTimeModalVisible(true)} styles={styles} colors={colors} />
+          <TimeField label="Return Time" value={returnTime} onPress={() => setIsReturnTimeModalVisible(true)} styles={styles} colors={colors} />
+        </View>
+
+        <View style={styles.field}>
+          <Text style={styles.label}>Vehicle Delivery Location</Text>
+          <TouchableOpacity style={styles.locationPill} onPress={() => setIsPickupLocationModalVisible(true)}>
+            <Ionicons name="location-outline" size={18} color={colors.teal} />
+            <Text style={[styles.locationPillText, !pickupLocation && styles.locationPillPlaceholder]} numberOfLines={1}>
+              {pickupLocation || 'Search for a vehicle delivery location...'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity style={styles.checkboxRow} onPress={toggleSameAsPickup}>
+          <View style={[styles.checkbox, sameAsPickup && styles.checkboxChecked]}>
+            {sameAsPickup && <Ionicons name="checkmark" size={14} color={colors.white} />}
+          </View>
+          <Text style={styles.checkboxLabel}>Return to the same location</Text>
+        </TouchableOpacity>
+
+        {!sameAsPickup && (
+          <View style={styles.field}>
+            <Text style={styles.label}>Vehicle Pickup Location</Text>
+            <TouchableOpacity style={styles.locationPill} onPress={() => setIsReturnLocationModalVisible(true)}>
+              <Ionicons name="location-outline" size={18} color={colors.teal} />
+              <Text style={[styles.locationPillText, !returnLocation && styles.locationPillPlaceholder]} numberOfLines={1}>
+                {returnLocation || 'Search for a vehicle pickup location...'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {showHoursNote && (
           <RentalHoursNote days={selectedDays} startDate={tempStart} returnDate={returnDate} styles={styles} colors={colors} />
         )}
@@ -361,7 +471,7 @@ export default function CheckoutDatesScreen() {
       <CheckoutFooterButton
         label="Continue"
         onPress={handleContinue}
-        disabled={!tempStart || !tempEnd || isBelowMinimum}
+        disabled={!isValid}
       />
 
       <ConfirmModal
@@ -372,6 +482,35 @@ export default function CheckoutDatesScreen() {
         cancelLabel={null}
         onConfirm={() => setShowSundayNotice(false)}
         onCancel={() => setShowSundayNotice(false)}
+      />
+
+      <OptionPickerModal
+        visible={isPickupTimeModalVisible}
+        title="Pickup Time"
+        options={pickupSlots}
+        value={pickupTime}
+        onSelect={setPickupTime}
+        onClose={() => setIsPickupTimeModalVisible(false)}
+      />
+      <OptionPickerModal
+        visible={isReturnTimeModalVisible}
+        title="Return Time"
+        options={returnSlots}
+        value={returnTime}
+        onSelect={setReturnTime}
+        onClose={() => setIsReturnTimeModalVisible(false)}
+      />
+      <LocationSearchModal
+        visible={isPickupLocationModalVisible}
+        onClose={() => setIsPickupLocationModalVisible(false)}
+        title="Vehicle Delivery Location"
+        onSelect={handlePickupLocationChange}
+      />
+      <LocationSearchModal
+        visible={isReturnLocationModalVisible}
+        onClose={() => setIsReturnLocationModalVisible(false)}
+        title="Vehicle Pickup Location"
+        onSelect={setReturnLocation}
       />
     </View>
   );
@@ -523,6 +662,86 @@ function createStyles(colors) {
     color: colors.error,
     flex: 1,
   },
+  timeRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 22,
+  },
+  timeField: {
+    flex: 1,
+  },
+  timePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.background,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  timePillText: {
+    fontFamily: FONTS.regular,
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  timePillPlaceholder: {
+    color: colors.textSubtle,
+  },
+  field: {
+    marginTop: 22,
+  },
+  label: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 14,
+    color: colors.textPrimary,
+    marginBottom: 10,
+  },
+  locationPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.background,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  locationPillText: {
+    flex: 1,
+    fontFamily: FONTS.regular,
+    fontSize: 15,
+    color: colors.textPrimary,
+  },
+  locationPillPlaceholder: {
+    color: colors.textSubtle,
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 22,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: colors.disabled,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: colors.teal,
+    borderColor: colors.teal,
+  },
+  checkboxLabel: {
+    fontFamily: FONTS.regular,
+    fontSize: 13,
+    color: colors.textPrimary,
+  },
   hoursNoteCard: {
     flexDirection: 'row',
     backgroundColor: colors.highlight,
@@ -530,7 +749,7 @@ function createStyles(colors) {
     borderLeftColor: colors.teal,
     borderRadius: 10,
     padding: 14,
-    marginTop: 12,
+    marginTop: 22,
   },
   hoursNoteIcon: {
     marginRight: 10,

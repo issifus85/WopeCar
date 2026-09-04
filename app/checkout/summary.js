@@ -160,7 +160,7 @@ export default function CheckoutSummaryScreen() {
 
   return (
     <View style={styles.container}>
-      <CheckoutHeader title="Cost Breakdown" step={5} />
+      <CheckoutHeader title="Cost Breakdown" step={4} />
 
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>

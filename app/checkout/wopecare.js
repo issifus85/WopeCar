@@ -61,7 +61,7 @@ export default function CheckoutWopeCareScreen() {
 
   return (
     <View style={styles.container}>
-      <CheckoutHeader title="Extra Add-ons" step={4} />
+      <CheckoutHeader title="Extra Add-ons" step={3} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <WopeCareSelector

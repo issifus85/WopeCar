@@ -93,7 +93,7 @@ export default function CheckoutAddonsScreen() {
 
   return (
     <View style={styles.container}>
-      <CheckoutHeader title="Regional Add-ons" step={3} />
+      <CheckoutHeader title="Regional Add-ons" step={2} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.sectionTitle}>Regional Travel Add-ons</Text>

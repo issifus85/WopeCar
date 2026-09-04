@@ -203,8 +203,8 @@ export default function WopeCareSelector({ pricePerDay, days, selectedPlan, onSe
 }
 
 // Defined outside the main component (can't close over its useMemo'd
-// styles/colors) - passed down explicitly, matching e.g. TimeSlotPicker in
-// checkout/details.js. See PROJECT.md 6.9.
+// styles/colors) - passed down explicitly, matching e.g. TimeField in
+// checkout/dates.js. See PROJECT.md 6.9.
 function ScenarioBox({ styles, damage, covered, youPay }) {
   return (
     <View style={styles.scenarioBox}>

@@ -74,7 +74,7 @@ export default function CheckoutPaymentScreen() {
   const { user } = useAuth();
 
   // Set when this screen was reached via Cart's "Complete Payment" (skips
-  // straight here from checkout/(tabs)/cart.js, bypassing the other 6
+  // straight here from checkout/(tabs)/cart.js, bypassing the other 5
   // steps) rather than the normal end of the checkout flow.
   const resumedBooking = resumedBookingId ? savedBookings.find(b => b.id === resumedBookingId) : null;
 
@@ -534,7 +534,7 @@ export default function CheckoutPaymentScreen() {
 
   return (
     <View style={styles.container}>
-      <CheckoutHeader title="Payment" step={7} />
+      <CheckoutHeader title="Payment" step={6} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {!!resumedBooking && (

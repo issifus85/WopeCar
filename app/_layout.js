@@ -271,8 +271,7 @@ function RootNavigator({ authRedirectType }) {
               false - title only exists as the back-button fallback label for
               a screen pushed on top without its own headerBackTitle (e.g.
               Terms of Service, reached via the checkbox link on Payment). */}
-          <Stack.Screen name="checkout/dates" options={{ headerShown: false, title: 'Select Dates' }} />
-          <Stack.Screen name="checkout/details" options={{ headerShown: false, title: 'Pickup & Return' }} />
+          <Stack.Screen name="checkout/dates" options={{ headerShown: false, title: 'Dates, Time & Location' }} />
           <Stack.Screen name="checkout/addons" options={{ headerShown: false, title: 'Regional Add-ons' }} />
           <Stack.Screen name="checkout/wopecare" options={{ headerShown: false, title: 'Extra Add-ons' }} />
           <Stack.Screen name="checkout/summary" options={{ headerShown: false, title: 'Cost Breakdown' }} />
