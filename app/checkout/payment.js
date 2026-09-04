@@ -85,6 +85,12 @@ export default function CheckoutPaymentScreen() {
   const [error, setError] = useState(null);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [savedExpiry, setSavedExpiry] = useState(null);
+  // Same "always tappable, validate on tap" pattern as checkout/dates.js
+  // and checkout/form.js - Pay is never disabled just because terms aren't
+  // agreed yet (isProcessing is a separate, still-real disable - see
+  // isSubmittingRef below for why that one must stay).
+  const [showTermsError, setShowTermsError] = useState(false);
+  const [termsErrorMessage, setTermsErrorMessage] = useState('');
 
   // Set synchronously (not via isProcessing state, which only takes effect
   // on the next render) and holds the reservation itself once created -
@@ -172,6 +178,12 @@ export default function CheckoutPaymentScreen() {
   };
 
   const handlePay = async () => {
+    if (!agreedToTerms) {
+      setShowTermsError(true);
+      setTermsErrorMessage('Please agree to the Terms of Service to continue.');
+      return;
+    }
+
     // A synchronous latch, not just isProcessing state - state only takes
     // effect on the next render, so two taps landing in the same JS tick
     // (a fast real double-tap) could both pass CheckoutFooterButton's
@@ -613,7 +625,7 @@ export default function CheckoutPaymentScreen() {
 
         <View style={styles.termsRow}>
           <TouchableOpacity
-            style={[styles.checkbox, agreedToTerms && styles.checkboxChecked]}
+            style={[styles.checkbox, agreedToTerms && styles.checkboxChecked, showTermsError && !agreedToTerms && styles.checkboxError]}
             onPress={() => setAgreedToTerms((prev) => !prev)}
             hitSlop={8}
           >
@@ -631,10 +643,20 @@ export default function CheckoutPaymentScreen() {
       <CheckoutFooterButton
         label={isProcessing ? 'Processing...' : `Pay ${formatCurrency(draft.totalCost, activeCurrency)}`}
         onPress={handlePay}
-        disabled={isProcessing || !agreedToTerms}
+        disabled={isProcessing}
         secondaryVisible={!agreedToTerms}
         secondaryLabel={isSaving ? 'Saving...' : 'Save & Pay Later'}
         onSecondaryPress={handleSaveToCart}
+      />
+
+      <ConfirmModal
+        visible={!!termsErrorMessage}
+        title="A Few Things Missing"
+        message={termsErrorMessage}
+        confirmLabel="OK"
+        cancelLabel={null}
+        onConfirm={() => setTermsErrorMessage('')}
+        onCancel={() => setTermsErrorMessage('')}
       />
 
       <ConfirmModal
@@ -833,6 +855,9 @@ function createStyles(colors) {
     checkboxChecked: {
       backgroundColor: colors.teal,
       borderColor: colors.teal,
+    },
+    checkboxError: {
+      borderColor: colors.error,
     },
     checkboxLabel: {
       flex: 1,
