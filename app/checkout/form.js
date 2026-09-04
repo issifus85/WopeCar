@@ -12,6 +12,7 @@ import { pickImage } from '../../services/imagePicker';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 import PhotoSourceSheet from '../../components/PhotoSourceSheet';
+import ConfirmModal from '../../components/ConfirmModal';
 import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
 
 const UPLOAD_TILE_SIZE = 48;
@@ -27,11 +28,11 @@ function splitName(fullName) {
 // booking or the Documents Hub - see getMyVerificationDocumentsByType).
 // Tapping either state calls onPick, which always hands back a fresh local
 // URI - so replacing an on-file document is just "tap it and pick again".
-function DocumentUploadTile({ label, value, disabled, onPick, styles, colors }) {
+function DocumentUploadTile({ label, value, disabled, onPick, error, styles, colors }) {
   const isExisting = value && typeof value === 'object';
   const previewUri = isExisting ? value.signedUrl : value;
   return (
-    <TouchableOpacity style={styles.uploadTile} onPress={onPick} disabled={disabled}>
+    <TouchableOpacity style={[styles.uploadTile, error && styles.uploadTileError]} onPress={onPick} disabled={disabled}>
       {previewUri ? (
         <Image
           source={{ uri: resizeImageUrl(previewUri, { width: UPLOAD_TILE_SIZE * PixelRatio.get(), height: UPLOAD_TILE_SIZE * PixelRatio.get() }) }}
@@ -78,6 +79,13 @@ export default function CheckoutFormScreen() {
   const [isPicking, setIsPicking] = useState(false); // guards against a double-tap launching two overlapping native pickers, which can leave the picker sheet stuck open and unresponsive
   const [pickerField, setPickerField] = useState(null); // 'licenseFront' | 'licenseBack' | 'proofOfAddress' | null - which tile opened the Take Photo/Choose from Library sheet
 
+  // Same "always tappable, validate on tap" pattern as checkout/dates.js -
+  // see its own showFieldErrors comment for why. Checkout is never
+  // disabled/greyed out; tapping it with something missing shows exactly
+  // what's missing instead of just doing nothing.
+  const [showFieldErrors, setShowFieldErrors] = useState(false);
+  const [missingFieldsMessage, setMissingFieldsMessage] = useState('');
+
   // One-time seed from whatever this renter already has on file (a prior
   // booking, or a direct Documents Hub upload) - so a returning renter
   // doesn't have to re-upload the same ID every time. Only fills fields
@@ -112,11 +120,23 @@ export default function CheckoutFormScreen() {
     }
   };
 
-  const isValid =
-    firstName.trim() && lastName.trim() && email.trim() && phone.trim() && address.trim() &&
-    licenseFront && licenseBack && proofOfAddress;
-
   const handleContinue = () => {
+    const missing = [];
+    if (!firstName.trim()) missing.push('Enter your first name.');
+    if (!lastName.trim()) missing.push('Enter your last name.');
+    if (!email.trim()) missing.push('Enter your email address.');
+    if (!phone.trim()) missing.push('Enter your phone number.');
+    if (!address.trim()) missing.push('Enter your address.');
+    if (!licenseFront) missing.push("Upload your driver's licence or ID (front).");
+    if (!licenseBack) missing.push("Upload your driver's licence or ID (back).");
+    if (!proofOfAddress) missing.push('Upload a proof of address.');
+
+    if (missing.length) {
+      setShowFieldErrors(true);
+      setMissingFieldsMessage(missing.join('\n'));
+      return;
+    }
+
     updateForm({ firstName, lastName, email, phone, address });
     updateDraft({ licenseFront, licenseBack, proofOfAddress });
     // Best-effort sync back to the profile - so an address typed on a first
@@ -140,38 +160,38 @@ export default function CheckoutFormScreen() {
         <View style={styles.row}>
           <View style={[styles.field, styles.halfField]}>
             <Text style={styles.label}>First Name</Text>
-            <TextInput style={styles.input} value={firstName} onChangeText={setFirstName} placeholder="First name" placeholderTextColor={colors.textSubtle} />
+            <TextInput style={[styles.input, showFieldErrors && !firstName.trim() && styles.inputError]} value={firstName} onChangeText={setFirstName} placeholder="First name" placeholderTextColor={colors.textSubtle} />
           </View>
           <View style={[styles.field, styles.halfField]}>
             <Text style={styles.label}>Last Name</Text>
-            <TextInput style={styles.input} value={lastName} onChangeText={setLastName} placeholder="Last name" placeholderTextColor={colors.textSubtle} />
+            <TextInput style={[styles.input, showFieldErrors && !lastName.trim() && styles.inputError]} value={lastName} onChangeText={setLastName} placeholder="Last name" placeholderTextColor={colors.textSubtle} />
           </View>
         </View>
 
         <View style={styles.field}>
           <Text style={styles.label}>Email</Text>
-          <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="you@example.com" placeholderTextColor={colors.textSubtle} keyboardType="email-address" autoCapitalize="none" />
+          <TextInput style={[styles.input, showFieldErrors && !email.trim() && styles.inputError]} value={email} onChangeText={setEmail} placeholder="you@example.com" placeholderTextColor={colors.textSubtle} keyboardType="email-address" autoCapitalize="none" />
         </View>
 
         <View style={styles.field}>
           <Text style={styles.label}>Phone</Text>
-          <TextInput style={styles.input} value={phone} onChangeText={setPhone} placeholder="Phone number" placeholderTextColor={colors.textSubtle} keyboardType="phone-pad" />
+          <TextInput style={[styles.input, showFieldErrors && !phone.trim() && styles.inputError]} value={phone} onChangeText={setPhone} placeholder="Phone number" placeholderTextColor={colors.textSubtle} keyboardType="phone-pad" />
         </View>
 
         <View style={styles.field}>
           <Text style={styles.label}>Address</Text>
-          <TextInput style={styles.input} value={address} onChangeText={setAddress} placeholder="Street address, city" placeholderTextColor={colors.textSubtle} />
+          <TextInput style={[styles.input, showFieldErrors && !address.trim() && styles.inputError]} value={address} onChangeText={setAddress} placeholder="Street address, city" placeholderTextColor={colors.textSubtle} />
         </View>
 
         <Text style={styles.sectionTitle}>Driver's License or ID (for Chauffeur)</Text>
-        <DocumentUploadTile label="License - Front" value={licenseFront} disabled={isPicking} onPick={() => setPickerField('licenseFront')} styles={styles} colors={colors} />
-        <DocumentUploadTile label="License - Back" value={licenseBack} disabled={isPicking} onPick={() => setPickerField('licenseBack')} styles={styles} colors={colors} />
+        <DocumentUploadTile label="License - Front" value={licenseFront} disabled={isPicking} error={showFieldErrors && !licenseFront} onPick={() => setPickerField('licenseFront')} styles={styles} colors={colors} />
+        <DocumentUploadTile label="License - Back" value={licenseBack} disabled={isPicking} error={showFieldErrors && !licenseBack} onPick={() => setPickerField('licenseBack')} styles={styles} colors={colors} />
 
         <Text style={styles.sectionTitle}>Proof of Address (eg. Utility bill, hotel reservation, etc)</Text>
-        <DocumentUploadTile label="Utility Bill / Bank Statement" value={proofOfAddress} disabled={isPicking} onPick={() => setPickerField('proofOfAddress')} styles={styles} colors={colors} />
+        <DocumentUploadTile label="Utility Bill / Bank Statement" value={proofOfAddress} disabled={isPicking} error={showFieldErrors && !proofOfAddress} onPick={() => setPickerField('proofOfAddress')} styles={styles} colors={colors} />
       </ScrollView>
 
-      <CheckoutFooterButton label="Checkout" onPress={handleContinue} disabled={!isValid} />
+      <CheckoutFooterButton label="Checkout" onPress={handleContinue} />
       </KeyboardAvoidingView>
 
       <PhotoSourceSheet
@@ -179,6 +199,16 @@ export default function CheckoutFormScreen() {
         onClose={() => setPickerField(null)}
         onChooseCamera={() => handlePickSource('camera')}
         onChooseLibrary={() => handlePickSource('library')}
+      />
+
+      <ConfirmModal
+        visible={!!missingFieldsMessage}
+        title="A Few Things Missing"
+        message={missingFieldsMessage}
+        confirmLabel="OK"
+        cancelLabel={null}
+        onConfirm={() => setMissingFieldsMessage('')}
+        onCancel={() => setMissingFieldsMessage('')}
       />
     </View>
   );
@@ -231,6 +261,10 @@ function createStyles(colors) {
       borderColor: colors.border,
       color: colors.textPrimary,
     },
+    inputError: {
+      borderColor: colors.error,
+      borderWidth: 1.5,
+    },
     uploadTile: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -239,6 +273,11 @@ function createStyles(colors) {
       borderRadius: 12,
       padding: 12,
       marginBottom: 12,
+      borderWidth: 1.5,
+      borderColor: 'transparent',
+    },
+    uploadTileError: {
+      borderColor: colors.error,
     },
     uploadPreview: {
       width: 48,

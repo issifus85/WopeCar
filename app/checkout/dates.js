@@ -137,11 +137,11 @@ function SundayChauffeurNote({ styles, colors }) {
 // calendar and location fields; opens the same OptionPickerModal bottom
 // sheet already used elsewhere (e.g. account.js's ID Type picker) rather
 // than introducing a new picker pattern.
-function TimeField({ label, value, onPress, styles, colors }) {
+function TimeField({ label, value, onPress, error, styles, colors }) {
   return (
     <View style={styles.timeField}>
       <Text style={styles.label}>{label}</Text>
-      <TouchableOpacity style={styles.timePill} onPress={onPress}>
+      <TouchableOpacity style={[styles.timePill, error && styles.fieldError]} onPress={onPress}>
         <Text style={[styles.timePillText, !value && styles.timePillPlaceholder]}>
           {value || 'Select time'}
         </Text>
@@ -177,6 +177,16 @@ export default function CheckoutDatesScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showSundayNotice, setShowSundayNotice] = useState(false);
+  // Set on the first Continue tap that finds something missing - from then
+  // on, every still-empty required field gets a red border live as the
+  // user fixes them (each field's own error style is just `showFieldErrors
+  // && <that field is still empty>`, recomputed every render), and stays
+  // set for the rest of this screen's life so a field fixed then emptied
+  // again still gets flagged. Continue itself is never disabled/greyed out
+  // any more - tapping it with something missing shows what's missing
+  // instead of just doing nothing.
+  const [showFieldErrors, setShowFieldErrors] = useState(false);
+  const [missingFieldsMessage, setMissingFieldsMessage] = useState('');
 
   const today = stripTime(new Date());
   const [viewMonth, setViewMonth] = useState(today);
@@ -264,6 +274,22 @@ export default function CheckoutDatesScreen() {
   };
 
   const handleContinue = () => {
+    const missing = [];
+    if (!tempStart || !tempEnd) missing.push('Select your pickup and return dates.');
+    if (tempStart && tempEnd && isBelowMinimum) {
+      missing.push(`${car.drivenBy} bookings need at least ${minDays} ${minDays === 1 ? 'day' : 'days'} - you've selected ${selectedDays}.`);
+    }
+    if (!pickupTime) missing.push('Select a pickup time.');
+    if (!returnTime) missing.push('Select a return time.');
+    if (!pickupLocation.trim()) missing.push('Enter a vehicle delivery location.');
+    if (!sameAsPickup && !returnLocation.trim()) missing.push('Enter a vehicle pickup location.');
+
+    if (missing.length) {
+      setShowFieldErrors(true);
+      setMissingFieldsMessage(missing.join('\n'));
+      return;
+    }
+
     // Defense-in-depth against handleDayPress's own guard: the calendar
     // grid can't let someone tap an already-blocked Sunday, but a Sunday
     // picked as "tomorrow" stays selected if the app is left open across
@@ -330,8 +356,7 @@ export default function CheckoutDatesScreen() {
   const pickupSlots = isChauffeur ? CHAUFFEUR_PICKUP_SLOTS : SELF_DRIVE_SLOTS;
   const returnSlots = isChauffeur ? CHAUFFEUR_RETURN_SLOTS : SELF_DRIVE_SLOTS;
 
-  const isValid = tempStart && tempEnd && !isBelowMinimum &&
-    pickupTime && returnTime && pickupLocation.trim() && returnLocation.trim();
+  const showMissingDatesError = showFieldErrors && (!tempStart || !tempEnd);
 
   return (
     <View style={styles.container}>
@@ -425,14 +450,40 @@ export default function CheckoutDatesScreen() {
           </View>
         )}
 
+        {showMissingDatesError && (
+          <View style={[styles.summaryBox, styles.summaryBoxWarning]}>
+            <Ionicons name="alert-circle-outline" size={18} color={colors.error} />
+            <Text style={[styles.summaryText, styles.summaryTextWarning]}>
+              Select your pickup and return dates.
+            </Text>
+          </View>
+        )}
+
         <View style={styles.timeRow}>
-          <TimeField label="Pickup Time" value={pickupTime} onPress={() => setIsPickupTimeModalVisible(true)} styles={styles} colors={colors} />
-          <TimeField label="Return Time" value={returnTime} onPress={() => setIsReturnTimeModalVisible(true)} styles={styles} colors={colors} />
+          <TimeField
+            label="Pickup Time"
+            value={pickupTime}
+            onPress={() => setIsPickupTimeModalVisible(true)}
+            error={showFieldErrors && !pickupTime}
+            styles={styles}
+            colors={colors}
+          />
+          <TimeField
+            label="Return Time"
+            value={returnTime}
+            onPress={() => setIsReturnTimeModalVisible(true)}
+            error={showFieldErrors && !returnTime}
+            styles={styles}
+            colors={colors}
+          />
         </View>
 
         <View style={styles.field}>
           <Text style={styles.label}>Vehicle Delivery Location</Text>
-          <TouchableOpacity style={styles.locationPill} onPress={() => setIsPickupLocationModalVisible(true)}>
+          <TouchableOpacity
+            style={[styles.locationPill, showFieldErrors && !pickupLocation.trim() && styles.fieldError]}
+            onPress={() => setIsPickupLocationModalVisible(true)}
+          >
             <Ionicons name="location-outline" size={18} color={colors.teal} />
             <Text style={[styles.locationPillText, !pickupLocation && styles.locationPillPlaceholder]} numberOfLines={1}>
               {pickupLocation || 'Search for a vehicle delivery location...'}
@@ -450,7 +501,10 @@ export default function CheckoutDatesScreen() {
         {!sameAsPickup && (
           <View style={styles.field}>
             <Text style={styles.label}>Vehicle Pickup Location</Text>
-            <TouchableOpacity style={styles.locationPill} onPress={() => setIsReturnLocationModalVisible(true)}>
+            <TouchableOpacity
+              style={[styles.locationPill, showFieldErrors && !returnLocation.trim() && styles.fieldError]}
+              onPress={() => setIsReturnLocationModalVisible(true)}
+            >
               <Ionicons name="location-outline" size={18} color={colors.teal} />
               <Text style={[styles.locationPillText, !returnLocation && styles.locationPillPlaceholder]} numberOfLines={1}>
                 {returnLocation || 'Search for a vehicle pickup location...'}
@@ -471,7 +525,6 @@ export default function CheckoutDatesScreen() {
       <CheckoutFooterButton
         label="Continue"
         onPress={handleContinue}
-        disabled={!isValid}
       />
 
       <ConfirmModal
@@ -482,6 +535,16 @@ export default function CheckoutDatesScreen() {
         cancelLabel={null}
         onConfirm={() => setShowSundayNotice(false)}
         onCancel={() => setShowSundayNotice(false)}
+      />
+
+      <ConfirmModal
+        visible={!!missingFieldsMessage}
+        title="A Few Things Missing"
+        message={missingFieldsMessage}
+        confirmLabel="OK"
+        cancelLabel={null}
+        onConfirm={() => setMissingFieldsMessage('')}
+        onCancel={() => setMissingFieldsMessage('')}
       />
 
       <OptionPickerModal
@@ -688,6 +751,10 @@ function createStyles(colors) {
   },
   timePillPlaceholder: {
     color: colors.textSubtle,
+  },
+  fieldError: {
+    borderColor: colors.error,
+    borderWidth: 1.5,
   },
   field: {
     marginTop: 22,
