@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { FONTS } from '../../../constants/theme';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 import { useInbox } from '../../../contexts/InboxContext';
 import { pickAndUploadChatImage, pickAndUploadChatDocument, getCurrentLocationForChat } from '../../../services/chatAttachmentsApi';
@@ -18,14 +20,43 @@ export default function VendorSupportScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { getMessages, sendMessage, markConversationRead, syncMessages, startVendorSupport } = useInbox();
   const [conversationId, setConversationId] = useState(null);
+  const [hasLoadError, setHasLoadError] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
+
+  // Previously this just did startVendorSupport().then(setConversationId)
+  // .catch(() => {}) - any failure (a real network hiccup, not just the "no
+  // vendor row" exception the underlying RPC can raise) silently swallowed
+  // the error and left the vendor stuck on an infinite spinner with no way
+  // to recover short of leaving the tab. hasLoadError gives this the same
+  // recover-in-place shape as the Dashboard's own "Couldn't load your
+  // data" retry screen. `isMountedRef` is only checked on the mount-effect
+  // call, not the Retry button's - a manual retry's own component is by
+  // definition still mounted while its own await is in flight.
+  const resolveConversation = useCallback((isMountedRef) => {
+    setHasLoadError(false);
+    return startVendorSupport()
+      .then((id) => {
+        if (!isMountedRef || isMountedRef.current) setConversationId(id);
+      })
+      .catch(() => {
+        if (!isMountedRef || isMountedRef.current) setHasLoadError(true);
+      });
+  }, [startVendorSupport]);
 
   useEffect(() => {
-    let cancelled = false;
-    startVendorSupport().then((id) => {
-      if (!cancelled) setConversationId(id);
-    }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [startVendorSupport]);
+    const isMountedRef = { current: true };
+    resolveConversation(isMountedRef);
+    return () => { isMountedRef.current = false; };
+  }, [resolveConversation]);
+
+  const handleRetry = async () => {
+    setIsRetrying(true);
+    try {
+      await resolveConversation();
+    } finally {
+      setIsRetrying(false);
+    }
+  };
 
   const messages = conversationId ? getMessages(conversationId) : [];
 
@@ -56,6 +87,21 @@ export default function VendorSupportScreen() {
     }
     if (attachment) await sendMessage(conversationId, '', attachment);
   };
+
+  if (!conversationId && hasLoadError) {
+    return (
+      <View style={styles.container}>
+        <VendorHeader title="Vendor Support" subtitle="WopeCar Support - vendor & admin only" showBack={false} />
+        <View style={styles.centerState}>
+          <Ionicons name="cloud-offline-outline" size={40} color={colors.disabled} />
+          <Text style={styles.errorText}>Couldn't open your support conversation. Check your connection and try again.</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={handleRetry} disabled={isRetrying}>
+            <Text style={styles.retryButtonText}>{isRetrying ? 'Retrying…' : 'Retry'}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   if (!conversationId) {
     return (
@@ -96,6 +142,27 @@ function createStyles(colors) {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
+      gap: 8,
+      padding: 20,
+    },
+    errorText: {
+      fontFamily: FONTS.regular,
+      fontSize: 14,
+      color: colors.textSubtle,
+      textAlign: 'center',
+      lineHeight: 20,
+    },
+    retryButton: {
+      backgroundColor: colors.teal,
+      borderRadius: 12,
+      paddingHorizontal: 24,
+      paddingVertical: 13,
+      marginTop: 4,
+    },
+    retryButtonText: {
+      fontFamily: FONTS.semiBold,
+      color: colors.white,
+      fontSize: 14,
     },
   });
 }
