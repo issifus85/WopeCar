@@ -16,6 +16,12 @@ const ENV_LABELS = {
   preview: 'STAGING',
 };
 
+// TEMPORARY - flip back to false once App Store/Play Store screenshots are
+// captured. Hides the banner regardless of APP_ENV so store screenshots
+// (taken from a preview/test build, since there's no production build yet)
+// don't show "Test build. Not live." across the top of every shot.
+const HIDE_FOR_STORE_SCREENSHOTS = true;
+
 // Orange (not COLORS.teal) and read directly off COLORS rather than
 // useAppTheme() - deliberately theme-invariant, same exception pattern as
 // login.js's teal overlay, so it stays equally jarring in dark mode.
@@ -24,7 +30,7 @@ export default function EnvironmentBanner() {
   const appEnv = Constants.expoConfig?.extra?.APP_ENV;
   const label = ENV_LABELS[appEnv];
 
-  if (!label) return null;
+  if (!label || HIDE_FOR_STORE_SCREENSHOTS) return null;
 
   return (
     <View style={[styles.container, { height: insets.top + BANNER_HEIGHT }]}>
