@@ -1,4 +1,5 @@
 import supabase, { getCurrentUser } from './supabase';
+import { PHOTO_ANGLES } from '../constants/inspectionPhotos';
 
 // checklist stays an opaque jsonb blob, matching how Laravel itself treated
 // interior_checklist as a plain unconverted JSON blob - no per-key mapping
@@ -145,20 +146,21 @@ export async function uploadInspectionSignature(inspectionId, role, uri) {
   return fetchById(inspectionId);
 }
 
-const REQUIRED_ANGLES = ['front', 'back', 'left', 'right', 'odometer'];
+const REQUIRED_ANGLES = PHOTO_ANGLES.map((a) => a.key);
 
 /**
  * Validates the same completeness requirements Laravel enforced server-side
- * before generating its PDF (all 5 photos + both signatures) - there's no
- * PDF anymore, but the underlying "is this inspection actually complete"
- * contract should stay the same.
+ * before generating its PDF (all required photos + both signatures) - a
+ * later feature brought PDF generation back (see generate-inspection-report),
+ * but the underlying "is this inspection actually complete" contract stays
+ * the same, now checked against the current 15-photo set.
  */
 export async function submitInspection(inspectionId) {
   const inspection = await fetchById(inspectionId);
   if (!inspection) throw new Error('Inspection not found.');
 
   const hasAllPhotos = REQUIRED_ANGLES.every((angle) => inspection.photos.some((p) => p.angle === angle));
-  if (!hasAllPhotos) throw new Error('All 5 photos are required before submitting.');
+  if (!hasAllPhotos) throw new Error(`All ${REQUIRED_ANGLES.length} photos are required before submitting.`);
   if (!inspection.hasRenterSignature || !inspection.hasAgentSignature) {
     throw new Error('Both signatures are required before submitting.');
   }

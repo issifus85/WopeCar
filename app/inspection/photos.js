@@ -10,16 +10,9 @@ import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useInspection } from '../../contexts/InspectionContext';
 import { syncInspection, uploadInspectionPhoto } from '../../services/inspectionsApi';
+import { PHOTO_CATEGORIES, PHOTO_ANGLES } from '../../constants/inspectionPhotos';
 import InspectionHeader from '../../components/InspectionHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
-
-const ANGLES = [
-  { key: 'front', label: 'Front' },
-  { key: 'back', label: 'Back' },
-  { key: 'left', label: 'Left Side' },
-  { key: 'right', label: 'Right Side' },
-  { key: 'odometer', label: 'Odometer' },
-];
 
 // The picker/camera's returned uri lives in a transient OS cache that isn't
 // guaranteed to survive an app restart mid-inspection - copying it into the
@@ -115,8 +108,8 @@ export default function InspectionPhotosScreen() {
     }
   };
 
-  const capturedCount = ANGLES.filter((a) => draft.photos[a.key]).length;
-  const isValid = capturedCount === ANGLES.length;
+  const capturedCount = PHOTO_ANGLES.filter((a) => draft.photos[a.key]).length;
+  const isValid = capturedCount === PHOTO_ANGLES.length;
 
   const handleContinue = () => {
     router.push({ pathname: '/inspection/signatures', params: { bookingId, localId, type } });
@@ -128,43 +121,66 @@ export default function InspectionPhotosScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.hint}>
-          Capture all 5 required photos ({capturedCount} of {ANGLES.length}). Tap a tile to open the camera.
+          Capture all {PHOTO_ANGLES.length} required photos ({capturedCount} of {PHOTO_ANGLES.length}). Tap a tile to open the camera.
         </Text>
 
-        <View style={styles.grid}>
-          {ANGLES.map((a) => {
-            const uri = draft.photos[a.key];
-            const isCapturing = capturingAngle === a.key;
-            return (
-              <TouchableOpacity
-                key={a.key}
-                style={styles.tile}
-                onPress={() => captureAngle(a.key)}
-                disabled={isCapturing}
-              >
-                {uri ? (
-                  <Image source={{ uri }} style={styles.thumbnail} contentFit="cover" />
-                ) : (
-                  <Ionicons name="camera-outline" size={28} color={colors.textSubtle} />
-                )}
-                {isCapturing && (
-                  <View style={styles.tileOverlay}>
-                    <ActivityIndicator color={colors.white} />
-                  </View>
-                )}
-                {!!uri && !isCapturing && (
-                  <View style={styles.checkBadge}>
-                    <Ionicons name="checkmark-circle" size={18} color={colors.teal} />
-                  </View>
-                )}
-                <Text style={styles.tileLabel}>{a.label}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        {PHOTO_CATEGORIES.map((category) => {
+          const categoryCaptured = category.angles.filter((a) => draft.photos[a.key]).length;
+          const categoryComplete = categoryCaptured === category.angles.length;
+          return (
+            <View key={category.key} style={styles.categorySection}>
+              <View style={styles.categoryHeaderRow}>
+                <Text style={styles.categoryTitle}>
+                  {category.title.toUpperCase()} — {categoryCaptured} of {category.angles.length}
+                </Text>
+                {categoryComplete && <Ionicons name="checkmark-circle" size={14} color={colors.success} />}
+              </View>
+
+              <View style={styles.grid}>
+                {category.angles.map((a) => {
+                  const uri = draft.photos[a.key];
+                  const isCapturing = capturingAngle === a.key;
+                  return (
+                    <TouchableOpacity
+                      key={a.key}
+                      style={styles.tileWrap}
+                      onPress={() => captureAngle(a.key)}
+                      disabled={isCapturing}
+                    >
+                      <View style={styles.tile}>
+                        {uri ? (
+                          <Image source={{ uri }} style={styles.thumbnail} contentFit="cover" />
+                        ) : (
+                          <Ionicons name="camera-outline" size={28} color={colors.textSubtle} />
+                        )}
+                        {isCapturing && (
+                          <View style={styles.tileOverlay}>
+                            <ActivityIndicator color={colors.white} />
+                          </View>
+                        )}
+                        {!!uri && !isCapturing && (
+                          <View style={styles.checkBadge}>
+                            <Ionicons name="checkmark-circle" size={18} color={colors.teal} />
+                          </View>
+                        )}
+                        {!uri && !isCapturing && <View style={styles.requiredDot} />}
+                        <Text style={styles.tileLabel} numberOfLines={1}>{a.label}</Text>
+                      </View>
+                      <Text style={styles.tileHint} numberOfLines={1}>{a.hint ?? ' '}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          );
+        })}
+
+        <Text style={[styles.captureCount, isValid && styles.captureCountComplete]}>
+          {isValid ? `${PHOTO_ANGLES.length} of ${PHOTO_ANGLES.length} photos captured ✓` : `${capturedCount} of ${PHOTO_ANGLES.length} photos captured`}
+        </Text>
       </ScrollView>
 
-      <CheckoutFooterButton label="Continue" onPress={handleContinue} disabled={!isValid} />
+      <CheckoutFooterButton label="Continue →" onPress={handleContinue} disabled={!isValid} />
     </View>
   );
 }
@@ -183,15 +199,34 @@ function createStyles(colors) {
       fontFamily: FONTS.regular,
       fontSize: 13,
       color: colors.textSubtle,
-      marginBottom: 16,
+      marginBottom: 20,
+    },
+    categorySection: {
+      marginBottom: 22,
+    },
+    categoryHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 10,
+    },
+    categoryTitle: {
+      fontFamily: FONTS.bold,
+      fontSize: 11,
+      color: colors.teal,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
     },
     grid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
       gap: 12,
     },
-    tile: {
+    tileWrap: {
       width: '31%',
+    },
+    tile: {
+      width: '100%',
       aspectRatio: 1,
       borderRadius: 12,
       backgroundColor: colors.background,
@@ -222,6 +257,15 @@ function createStyles(colors) {
       backgroundColor: colors.surface,
       borderRadius: 10,
     },
+    requiredDot: {
+      position: 'absolute',
+      top: 6,
+      right: 6,
+      width: 7,
+      height: 7,
+      borderRadius: 4,
+      backgroundColor: colors.error,
+    },
     tileLabel: {
       position: 'absolute',
       bottom: 4,
@@ -233,6 +277,25 @@ function createStyles(colors) {
       paddingVertical: 2,
       borderRadius: 6,
       overflow: 'hidden',
+      maxWidth: '92%',
+      textAlign: 'center',
+    },
+    tileHint: {
+      fontFamily: FONTS.regular,
+      fontSize: 9,
+      color: colors.textSubtle,
+      textAlign: 'center',
+      marginTop: 4,
+    },
+    captureCount: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 13,
+      color: colors.textSubtle,
+      textAlign: 'center',
+      marginTop: 4,
+    },
+    captureCountComplete: {
+      color: colors.success,
     },
   });
 }

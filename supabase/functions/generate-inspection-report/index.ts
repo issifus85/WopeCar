@@ -55,7 +55,7 @@ function formatDate(iso: string | null) {
 }
 
 // String.fromCharCode(...bytes) blows the call stack on anything past a
-// few tens of KB - this PDF embeds 5 photos + 2 signatures, easily into
+// few tens of KB - this PDF embeds 15 photos + 2 signatures, easily into
 // the hundreds of KB, so the base64 conversion has to be chunked.
 function bytesToBase64(bytes: Uint8Array) {
   let binary = '';
@@ -146,12 +146,48 @@ const SECTIONS = [
   },
 ];
 
-const PHOTO_ANGLES: { key: string; label: string }[] = [
-  { key: 'front', label: 'Front' },
-  { key: 'back', label: 'Back' },
-  { key: 'left', label: 'Left' },
-  { key: 'right', label: 'Right' },
-  { key: 'odometer', label: 'Odometer' },
+// Mirrors constants/inspectionPhotos.js's PHOTO_CATEGORIES exactly (WopeCar
+// repo) - can't import it directly (separate Deno runtime/deploy), same
+// duplication precedent as this file's own SECTIONS copy of interior.js's
+// checklist above. Pre-expansion legacy angles ('back'/'left'/'right' -
+// 'front'/'odometer' are unchanged) are never in this list; a legacy-only
+// inspection just renders fewer tiles than a current 15-photo one.
+const PHOTO_CATEGORIES: { title: string; angles: { key: string; label: string }[] }[] = [
+  {
+    title: 'Exterior',
+    angles: [
+      { key: 'front', label: 'Front' },
+      { key: 'rear', label: 'Rear' },
+      { key: 'driver_side', label: 'Driver Side' },
+      { key: 'passenger_side', label: 'Passenger Side' },
+      { key: 'windshield_front', label: 'Front Windshield' },
+      { key: 'windshield_rear', label: 'Rear Windshield' },
+    ],
+  },
+  {
+    title: 'Doors & Panels',
+    angles: [
+      { key: 'door_driver_front', label: 'Driver Front Door' },
+      { key: 'door_driver_rear', label: 'Driver Rear Door' },
+      { key: 'door_passenger_front', label: 'Passenger Front Door' },
+      { key: 'door_passenger_rear', label: 'Passenger Rear Door' },
+    ],
+  },
+  {
+    title: 'Under Hood & Boot',
+    angles: [
+      { key: 'engine_bay', label: 'Engine Bay' },
+      { key: 'boot', label: 'Boot / Trunk' },
+    ],
+  },
+  {
+    title: 'Interior',
+    angles: [
+      { key: 'interior_front', label: 'Front Interior' },
+      { key: 'interior_rear', label: 'Rear Interior' },
+      { key: 'odometer', label: 'Odometer' },
+    ],
+  },
 ];
 
 const BRAND = rgb(0.0824, 0.294, 0.349); // #154B59
@@ -232,45 +268,52 @@ async function buildReportPdf(inspection: any, booking: any, adminClient: Return
   const photosByAngle: Record<string, { file_path: string } | undefined> = {};
   for (const p of inspection.vehicle_inspection_photos ?? []) photosByAngle[p.angle] = p;
 
-  const cols = 2;
-  const gap = 20;
+  const cols = 3;
+  const gap = 16;
   const colW = (PAGE_WIDTH - MARGIN * 2 - gap * (cols - 1)) / cols;
-  const imgH = 150;
-  const rowH = imgH + 34;
+  const imgH = 110;
+  const rowH = imgH + 30;
 
-  let rowY = y;
-  for (let i = 0; i < PHOTO_ANGLES.length; i++) {
-    const col = i % cols;
-    if (col === 0) {
-      ensureSpace(rowH);
-      rowY = y;
-    }
-    const x = MARGIN + col * (colW + gap);
-    page.drawText(PHOTO_ANGLES[i].label, { x, y: rowY - 10, size: 10, font: helvBold, color: rgb(0.1, 0.1, 0.1) });
-    const boxTop = rowY - 26;
-    const boxBottom = boxTop - imgH;
-    page.drawRectangle({ x, y: boxBottom, width: colW, height: imgH, borderColor: BORDER, borderWidth: 1 });
+  for (const category of PHOTO_CATEGORIES) {
+    ensureSpace(18);
+    text(category.title, { size: 11, bold: true, color: BRAND, lineHeight: 16 });
 
-    const photo = photosByAngle[PHOTO_ANGLES[i].key];
-    let drew = false;
-    if (photo) {
-      const bytes = await downloadBytes(photo.file_path);
-      if (bytes) {
-        try {
-          const img = await pdfDoc.embedJpg(bytes);
-          const scaled = img.scaleToFit(colW - 8, imgH - 8);
-          page.drawImage(img, { x: x + (colW - scaled.width) / 2, y: boxBottom + (imgH - scaled.height) / 2, width: scaled.width, height: scaled.height });
-          drew = true;
-        } catch { /* fall through to placeholder */ }
+    let rowY = y;
+    for (let i = 0; i < category.angles.length; i++) {
+      const col = i % cols;
+      if (col === 0) {
+        ensureSpace(rowH);
+        rowY = y;
+      }
+      const x = MARGIN + col * (colW + gap);
+      const angle = category.angles[i];
+      page.drawText(angle.label, { x, y: rowY - 9, size: 9, font: helvBold, color: rgb(0.1, 0.1, 0.1) });
+      const boxTop = rowY - 22;
+      const boxBottom = boxTop - imgH;
+      page.drawRectangle({ x, y: boxBottom, width: colW, height: imgH, borderColor: BORDER, borderWidth: 1 });
+
+      const photo = photosByAngle[angle.key];
+      let drew = false;
+      if (photo) {
+        const bytes = await downloadBytes(photo.file_path);
+        if (bytes) {
+          try {
+            const img = await pdfDoc.embedJpg(bytes);
+            const scaled = img.scaleToFit(colW - 8, imgH - 8);
+            page.drawImage(img, { x: x + (colW - scaled.width) / 2, y: boxBottom + (imgH - scaled.height) / 2, width: scaled.width, height: scaled.height });
+            drew = true;
+          } catch { /* fall through to placeholder */ }
+        }
+      }
+      if (!drew) {
+        page.drawText('Photo not available', { x: x + 8, y: boxBottom + imgH / 2, size: 8, font: helv, color: MUTED });
+      }
+
+      if (col === cols - 1 || i === category.angles.length - 1) {
+        y = boxBottom - 12;
       }
     }
-    if (!drew) {
-      page.drawText('Photo not available', { x: x + 10, y: boxBottom + imgH / 2, size: 9, font: helv, color: MUTED });
-    }
-
-    if (col === cols - 1 || i === PHOTO_ANGLES.length - 1) {
-      y = boxBottom - 16;
-    }
+    y -= 8;
   }
 
   // ---- Page 3: Damage Points ----

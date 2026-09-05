@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { getInspection } from '../../services/inspectionsApi';
+import { PHOTO_ANGLES, LEGACY_PHOTO_LABELS } from '../../constants/inspectionPhotos';
 import supabase from '../../services/supabase';
 
 // Mirrors interior.js's own SECTIONS exactly, so the report reads back the
@@ -55,14 +56,6 @@ const SECTIONS = [
       { key: 'fireExtinguisher', label: 'Fire extinguisher' },
     ],
   },
-];
-
-const PHOTO_ANGLES = [
-  { key: 'front', label: 'Front' },
-  { key: 'back', label: 'Back' },
-  { key: 'left', label: 'Left' },
-  { key: 'right', label: 'Right' },
-  { key: 'odometer', label: 'Odometer' },
 ];
 
 function formatDate(value) {
@@ -144,7 +137,16 @@ export default function InspectionReportScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Photos</Text>
           <View style={styles.photoGrid}>
-            {PHOTO_ANGLES.map(({ key, label }) => (
+            {/* Always shows the current 15 slots (even if empty, matching
+                the capture screen), plus any orphaned pre-expansion angle
+                ('back'/'left'/'right') this specific record still has -
+                see constants/inspectionPhotos.js. */}
+            {[
+              ...PHOTO_ANGLES,
+              ...Object.entries(LEGACY_PHOTO_LABELS)
+                .filter(([key]) => inspection.photos.some((p) => p.angle === key))
+                .map(([key, label]) => ({ key, label })),
+            ].map(({ key, label }) => (
               <PhotoThumb key={key} label={label} path={inspection.photos.find((p) => p.angle === key)} styles={styles} colors={colors} />
             ))}
           </View>

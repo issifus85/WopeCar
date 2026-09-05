@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import * as inspectionStorage from '../services/inspectionStorage';
+import { PHOTO_ANGLES } from '../constants/inspectionPhotos';
 
 // bookingId/type identify which booking+pre|post this draft belongs to.
 // serverId is set once store() has synced at least once (needed for the
@@ -14,7 +15,7 @@ const EMPTY_DRAFT = {
   mileage: '',
   fuelLevel: '',
   damagePoints: [],
-  photos: { front: null, back: null, left: null, right: null, odometer: null },
+  photos: Object.fromEntries(PHOTO_ANGLES.map((a) => [a.key, null])),
   checklist: {
     // Mirrors the client's official Vehicle Inspection Checklist PDF
     // (sections 2-6 - "Requirements for Rental" is client ID docs, already
