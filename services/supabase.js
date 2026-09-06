@@ -4,17 +4,33 @@
 import 'react-native-url-polyfill/auto';
 import { AppState, Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
+import Constants from 'expo-constants';
 import { createClient } from '@supabase/supabase-js';
+
+// Wopecar-preprod - the ongoing dev/test project every build profile except
+// `production` (EAS eas.json) points at, per this repo's permanent
+// key-separation policy: preprod always carries test/sandbox integration
+// keys, production always carries live ones.
+const PREPROD_URL = 'https://qvactycnufaowwsiqdrz.supabase.co';
+const PREPROD_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF2YWN0eWNudWZhb3d3c2lxZHJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjkwMDcsImV4cCI6MjEwMDg0NTAwN30.VRzansMc5kimTQKjUWZbodwRjYfJsQDRwLm24UR1VtM';
+
+// wopecar-production - the real live project, launched 2026-09-05. Only the
+// `production` EAS build profile (which sets extra.APP_ENV via
+// app.config.js) should ever talk to this.
+const PRODUCTION_URL = 'https://tndkuzxaddrwrunhbrap.supabase.co';
+const PRODUCTION_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRuZGt1enhhZGRyd3J1bmhicmFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc4Nzc3MjMsImV4cCI6MjEwMzQ1MzcyM30.Xy9eNlzGSiB-DcjHUFhLDCEQMmdViEbIuSSck4hA3U8';
+
+const isProductionBuild = Constants.expoConfig?.extra?.APP_ENV === 'production';
 
 // Named exports (not just the default client) so other service files that
 // need a throwaway second client - e.g. supabaseAuthApi.js's password
 // re-verification, which must never touch the real signed-in session -
 // don't hardcode these a second time.
-export const SUPABASE_URL = 'https://qvactycnufaowwsiqdrz.supabase.co';
+export const SUPABASE_URL = isProductionBuild ? PRODUCTION_URL : PREPROD_URL;
 // Public by design - Supabase's security model is anon key + Row Level
 // Security policies, not a secret key. The service_role key (which bypasses
 // RLS) must never appear here or anywhere else client-side.
-export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF2YWN0eWNudWZhb3d3c2lxZHJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjkwMDcsImV4cCI6MjEwMDg0NTAwN30.VRzansMc5kimTQKjUWZbodwRjYfJsQDRwLm24UR1VtM';
+export const SUPABASE_ANON_KEY = isProductionBuild ? PRODUCTION_ANON_KEY : PREPROD_ANON_KEY;
 
 // Same web-localStorage / native-SecureStore split already used by
 // services/tokenStorage.js for the Laravel auth token - kept consistent
