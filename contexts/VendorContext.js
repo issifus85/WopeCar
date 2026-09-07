@@ -205,6 +205,14 @@ export function VendorProvider({ children }) {
     return updated;
   }, []);
 
+  // Self-service Car Leasing Agreement signing (app/vendor/agreement.js) -
+  // same setVendorProfile-after-write pattern as saveVendorProfile above.
+  const signVendorAgreement = useCallback(async (dataUri) => {
+    const updated = await vendorCarsApi.uploadVendorAgreementSignature(dataUri);
+    setVendorProfile(updated);
+    return updated;
+  }, []);
+
   // Every new listing starts Pending, with no bypass - it only goes live
   // once WopeCar support has completed the photo verification/vetting visit
   // scheduled in the Add Car wizard and approved it (createCar() forces
@@ -289,11 +297,12 @@ export function VendorProvider({ children }) {
     setAvailabilitySettings,
     setBlockedDates,
     saveVendorProfile,
+    signVendorAgreement,
     respondToBookingRequest,
     refreshBookings,
   }), [
     data, isLoading, isRefreshing, hasLoadError, vendorProfile, refreshVendorProfile, refreshVendorData, currentMonthEarnings, bookingsThisMonthCount, carEarningsThisMonth, getAvailabilitySettings,
-    updateCar, addCar, setAvailabilitySettings, setBlockedDates, saveVendorProfile,
+    updateCar, addCar, setAvailabilitySettings, setBlockedDates, saveVendorProfile, signVendorAgreement,
     respondToBookingRequest, refreshBookings,
   ]);
 

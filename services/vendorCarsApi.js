@@ -123,6 +123,8 @@ function normalizeVendor(row) {
     businessRegDocumentRejectionReason: row.business_reg_document_rejection_reason ?? null,
     businessInfo: row.business_info ?? {},
     payoutMethod: row.payout_method ?? {},
+    agreementSignaturePath: row.agreement_signature_path ?? null,
+    agreementSignedAt: row.agreement_signed_at ?? null,
   };
 }
 
@@ -154,6 +156,35 @@ export async function updateVendorProfile(patch) {
   const { data, error } = await supabase
     .from('vendors')
     .update(row)
+    .eq('user_id', user.id)
+    .select()
+    .single();
+  if (error) throw error;
+  return normalizeVendor(data);
+}
+
+// Self-service signing of the Car Leasing Agreement (app/vendor/agreement.js)
+// - a drawn signature captured with the same SignaturePad/react-native-
+// signature-canvas component vehicle inspections already use. Mirrors
+// uploadInspectionSignature's own storage.upload() + column write, just
+// against the vendor's own row instead of a vehicle_inspections row, and
+// under the vendors' own <user_id>/... prefix in the existing `documents`
+// bucket (covered by 0003_storage_policies.sql's documents_owner_insert,
+// no new storage policy needed). dataUri is the data:image/png;base64,...
+// string SignaturePad's onOK callback hands back.
+export async function uploadVendorAgreementSignature(dataUri) {
+  const user = await getCurrentUser();
+  const path = `${user.id}/vendor-agreement/signature-${Date.now()}.png`;
+
+  const arrayBuffer = await fetch(dataUri).then((res) => res.arrayBuffer());
+  const { error: uploadError } = await supabase.storage
+    .from('documents')
+    .upload(path, arrayBuffer, { contentType: 'image/png' });
+  if (uploadError) throw uploadError;
+
+  const { data, error } = await supabase
+    .from('vendors')
+    .update({ agreement_signature_path: path, agreement_signed_at: new Date().toISOString() })
     .eq('user_id', user.id)
     .select()
     .single();

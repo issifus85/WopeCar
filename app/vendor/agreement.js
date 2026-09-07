@@ -1,10 +1,17 @@
-import { useMemo } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
+import { useMemo, useRef, useState } from 'react';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { useVendor } from '../../contexts/VendorContext';
 import VendorHeader from '../../components/VendorHeader';
 import RichBody from '../../components/RichBody';
+import SignaturePad from '../../components/SignaturePad';
+
+const SIGNATURE_MODES = [
+  { key: 'draw', label: 'Signature' },
+  { key: 'initials', label: 'Initials' },
+];
 
 // The real Car Leasing Agreement between ACRE Logistics Ltd (WopeCar Group,
 // "the Lessee") and the vehicle-owning Partner ("the Lessor") - replaces the
@@ -131,6 +138,30 @@ export default function VendorAgreementScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const { vendorProfile, signVendorAgreement } = useVendor();
+
+  const [isSigning, setIsSigning] = useState(false);
+  const [mode, setMode] = useState('draw');
+  const [signature, setSignature] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const padRef = useRef(null);
+
+  const isSigned = !!vendorProfile?.agreementSignedAt;
+
+  const handleSubmit = async () => {
+    if (!signature) return;
+    setIsSubmitting(true);
+    try {
+      await signVendorAgreement(signature);
+      setIsSigning(false);
+      setSignature(null);
+      Alert.alert('Agreement Signed', 'Your signature has been saved to this agreement.');
+    } catch (e) {
+      Alert.alert('Could not save your signature', e?.message || 'Please check your connection and try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -146,6 +177,68 @@ export default function VendorAgreementScreen() {
         <TouchableOpacity style={styles.linkButton} onPress={() => router.push({ pathname: '/terms', params: { from: 'vendor-agreement' } })}>
           <Text style={styles.linkButtonText}>View Full Terms of Service</Text>
         </TouchableOpacity>
+
+        <View style={styles.signSection}>
+          {isSigned ? (
+            <View style={styles.signedBanner}>
+              <Text style={styles.signedBannerText}>
+                You signed this agreement on {new Date(vendorProfile.agreementSignedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}.
+              </Text>
+            </View>
+          ) : isSigning ? (
+            <View>
+              <Text style={styles.sectionTitle}>Sign Agreement</Text>
+              <Text style={styles.hint}>By signing below, you agree to the terms of this Car Leasing Agreement.</Text>
+
+              {!signature && (
+                <View style={styles.modeToggle}>
+                  {SIGNATURE_MODES.map((m) => (
+                    <TouchableOpacity
+                      key={m.key}
+                      style={[styles.modeButton, mode === m.key && styles.modeButtonActive]}
+                      onPress={() => setMode(m.key)}
+                    >
+                      <Text style={[styles.modeButtonText, mode === m.key && styles.modeButtonTextActive]}>{m.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              <View pointerEvents={signature ? 'none' : 'auto'}>
+                <SignaturePad key={mode} ref={padRef} mode={mode} onOK={setSignature} onEmpty={() => {}} />
+              </View>
+
+              {signature ? (
+                <View style={styles.signedActions}>
+                  <TouchableOpacity
+                    style={styles.secondaryButton}
+                    onPress={() => {
+                      padRef.current?.clearSignature();
+                      setSignature(null);
+                    }}
+                  >
+                    <Text style={styles.secondaryButtonText}>Clear</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.primaryButton} onPress={handleSubmit} disabled={isSubmitting}>
+                    <Text style={styles.primaryButtonText}>{isSubmitting ? 'Saving...' : 'Confirm & Sign'}</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity style={styles.confirmButton} onPress={() => padRef.current?.readSignature()}>
+                  <Text style={styles.confirmButtonText}>Confirm {mode === 'initials' ? 'Initials' : 'Signature'}</Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity style={styles.cancelButton} onPress={() => { setIsSigning(false); setSignature(null); }}>
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.primaryButton} onPress={() => setIsSigning(true)}>
+              <Text style={styles.primaryButtonText}>Sign Agreement</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </ScrollView>
     </View>
   );
@@ -177,6 +270,116 @@ function createStyles(colors) {
       fontSize: 14,
       color: colors.teal,
       textDecorationLine: 'underline',
+    },
+    signSection: {
+      marginTop: 28,
+      paddingTop: 20,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
+    signedBanner: {
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 14,
+    },
+    signedBannerText: {
+      fontFamily: FONTS.medium,
+      fontSize: 13,
+      color: colors.textPrimary,
+      lineHeight: 19,
+    },
+    sectionTitle: {
+      fontFamily: FONTS.bold,
+      fontSize: 15,
+      color: colors.textPrimary,
+      marginBottom: 6,
+    },
+    hint: {
+      fontFamily: FONTS.regular,
+      fontSize: 13,
+      color: colors.textSubtle,
+      marginBottom: 14,
+    },
+    modeToggle: {
+      flexDirection: 'row',
+      gap: 8,
+      marginBottom: 10,
+    },
+    modeButton: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 8,
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    modeButtonActive: {
+      backgroundColor: colors.teal,
+      borderColor: colors.teal,
+    },
+    modeButtonText: {
+      fontFamily: FONTS.medium,
+      fontSize: 12,
+      color: colors.textMuted,
+    },
+    modeButtonTextActive: {
+      fontFamily: FONTS.semiBold,
+      color: colors.white,
+    },
+    confirmButton: {
+      marginTop: 10,
+      alignSelf: 'flex-start',
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.teal,
+    },
+    confirmButtonText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 13,
+      color: colors.teal,
+    },
+    signedActions: {
+      flexDirection: 'row',
+      gap: 10,
+      marginTop: 12,
+    },
+    primaryButton: {
+      backgroundColor: colors.teal,
+      borderRadius: 10,
+      paddingVertical: 13,
+      alignItems: 'center',
+      flex: 1,
+    },
+    primaryButtonText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 14,
+      color: colors.white,
+    },
+    secondaryButton: {
+      borderRadius: 10,
+      paddingVertical: 13,
+      paddingHorizontal: 20,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    secondaryButtonText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 14,
+      color: colors.textPrimary,
+    },
+    cancelButton: {
+      marginTop: 14,
+      alignSelf: 'center',
+    },
+    cancelButtonText: {
+      fontFamily: FONTS.medium,
+      fontSize: 13,
+      color: colors.textSubtle,
     },
   });
 }
