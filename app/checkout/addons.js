@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { formatCurrency, calculateRentalPricing, getWithDriverFeePerDay } from '../../constants/pricing';
+import { formatCurrency, getWithDriverFeePerDay } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
@@ -41,21 +41,23 @@ export default function CheckoutAddonsScreen() {
       .finally(() => setIsLoading(false));
   }, [carId]);
 
-  // Trip length in billable days - a per-day addon can never apply for more
+  // Trip length in calendar days - a per-day addon can never apply for more
   // days than the trip itself lasts, and defaults to the full trip (the
   // common case: touring the other region for the whole rental) so cost
   // stays unchanged unless the user actually shortens it.
+  //
+  // Deliberately calendar days (matching dates.js's own "X day rental
+  // selected" count), NOT calculateRentalPricing's billableDays - those
+  // diverge for Chauffeur bookings, which bill in 12-hour cycles
+  // (CHAUFFEUR_CYCLE_HOURS) rather than calendar days. A same-day chauffeur
+  // trip with pickup/return times more than 12 hours apart (e.g. 5:30 AM to
+  // 8:30 PM) is still only 1 calendar day, but previously computed as 2
+  // billableDays, letting this stepper default/cap to "2 days in this
+  // region" for what the user picked as a 1-day rental.
   const days = useMemo(() => {
-    if (!draft.startDate || !draft.endDate || !car) return 0;
-    return calculateRentalPricing({
-      startDate: draft.startDate,
-      endDate: draft.endDate,
-      pickupTime: draft.pickupTime,
-      returnTime: draft.returnTime,
-      drivenBy: car.drivenBy,
-      dailyRate: car.pricePerDay,
-    }).billableDays;
-  }, [draft.startDate, draft.endDate, draft.pickupTime, draft.returnTime, car]);
+    if (!draft.startDate || !draft.endDate) return 0;
+    return Math.round((new Date(draft.endDate) - new Date(draft.startDate)) / (1000 * 60 * 60 * 24)) + 1;
+  }, [draft.startDate, draft.endDate]);
 
   const toggleAddon = (addon) => {
     setSelected((prev) => {
