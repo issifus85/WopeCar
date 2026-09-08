@@ -13,8 +13,6 @@
 //
 // Deploy with: supabase functions deploy places-autocomplete
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -33,22 +31,24 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Supabase's function gateway (verify_jwt) already rejects anything
+    // that isn't a legitimately signed project key/session before this code
+    // runs, so no further identity check happens here. Deliberately doesn't
+    // require a real user session (unlike most other Edge Functions this
+    // project deploys) - the website's guest checkout doesn't mint one
+    // until final submit (see website-guest-checkout), so a guest typing
+    // into the pickup/return location field mid-checkout only ever has the
+    // public anon key at this point, not a session - unlike mobile, where
+    // every caller is already signed in. This proxy exposes no sensitive
+    // data (just Google Places predictions), so that's a safe relaxation -
+    // the same anon-safe, read-only precedent as validate_promo_code (see
+    // [[website_instant_booking_cart]]).
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return jsonResponse({ error: 'Missing Authorization header.' }, 401);
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const googlePlacesApiKey = Deno.env.get('GOOGLE_PLACES_API_KEY');
-
-    const callerClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: getUserError } = await callerClient.auth.getUser();
-    if (getUserError || !user) {
-      return jsonResponse({ error: 'Invalid or expired session.' }, 401);
-    }
 
     if (!googlePlacesApiKey) {
       return jsonResponse({ error: 'GOOGLE_PLACES_API_KEY is not configured for this project.' }, 500);
