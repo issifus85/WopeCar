@@ -4,24 +4,40 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { getWithDriverFeePerDay } from '../../constants/pricing';
 import VendorHeader from '../../components/VendorHeader';
 
-// Base daily-rate ranges (GHS) per vehicle tier. This is general market
-// guidance, not a published WopeCar rate card - grounded in this app's own
-// real data: the mock vendor fleet (Toyota Camry/Hyundai Tucson/Kia
-// Sportage) already lists at GHS 350-480/day and sits squarely in the
-// Comfort band below, and the example makes per tier are pulled from the
-// real constants/vehicleCatalog.js catalog rather than invented.
+// Base daily-rate ranges (GHS) per vehicle tier, self-drive. These replace an
+// earlier invented table (Economy 150-300, Comfort 300-600, Luxury 700-2000)
+// that undershot every real listing on production by a wide margin. Re-based
+// 2026-09-07 on the live wopecar-production `cars` table's own
+// price_per_day for active self-drive listings, using the 10th-90th
+// percentile per vehicle_class (luxury/economy-1="Comfort"/economy-2=
+// "Economy" - see constants/vehicleCatalog.js's VEHICLE_CLASSES for that
+// slug<->label mapping) rather than raw min/max, since a handful of
+// mis-tiered outliers otherwise blurred the Economy/Comfort boundary.
+// Examples are this app's own most-listed real cars per tier, not invented.
 const TYPES = [
-  { key: 'economy', label: 'Economy', icon: 'wallet-outline', min: 150, max: 300, examples: ['Kia Picanto', 'Hyundai i10', 'Toyota Yaris'] },
-  { key: 'comfort', label: 'Comfort', icon: 'car-outline', min: 300, max: 600, examples: ['Toyota Camry', 'Hyundai Tucson', 'Kia Sportage'] },
-  { key: 'luxury', label: 'Luxury', icon: 'diamond-outline', min: 700, max: 2000, examples: ['Mercedes-Benz', 'BMW', 'Land Rover', 'Lexus'] },
+  { key: 'economy', label: 'Economy', icon: 'wallet-outline', min: 650, max: 1200, examples: ['Toyota Corolla', 'Hyundai Elantra', 'Honda Accord'] },
+  { key: 'comfort', label: 'Comfort', icon: 'car-outline', min: 850, max: 1250, examples: ['Honda CR-V', 'Toyota RAV4', 'Hyundai Tucson'] },
+  { key: 'luxury', label: 'Luxury', icon: 'diamond-outline', min: 1200, max: 2000, examples: ['Toyota Land Cruiser Prado', 'Mercedes-Benz', 'Lexus GX'] },
 ];
 
 const AGE_BANDS = [
   { key: 'new', label: '0-2 yrs', multiplier: 1.15 },
   { key: 'mid', label: '3-5 yrs', multiplier: 1.0 },
   { key: 'old', label: '6+ yrs', multiplier: 0.85 },
+];
+
+// A Chauffeur listing's suggested rate is its self-drive range plus the
+// same flat per-day driver fee a self-drive renter pays to add a WopeCar
+// driver (app_settings.with_driver_fee_per_day, GHS 200 by default) -
+// matching how the two are already priced relative to each other elsewhere
+// in the app (checkout/addons.js), rather than a second, independently
+// invented Chauffeur table.
+const DRIVEN_BY_OPTIONS = [
+  { key: 'self-drive', label: 'Self-Drive' },
+  { key: 'chauffeur', label: 'Chauffeur' },
 ];
 
 const PROMO_OPTIONS = [10, 15, 20];
@@ -40,7 +56,7 @@ const FACTORS = [
   {
     icon: 'car-sport-outline',
     title: 'Driven By',
-    body: 'Chauffeur listings often price higher than self-drive, since the fare bundles in the driver\'s time and fuel.',
+    body: 'A Chauffeur listing should price at your self-drive rate plus WopeCar\'s standard per-day driver fee, since the fare now bundles in the driver\'s time and fuel.',
   },
 ];
 
@@ -61,14 +77,16 @@ export default function VendorPricingGuideScreen() {
 
   const [typeKey, setTypeKey] = useState('comfort');
   const [ageKey, setAgeKey] = useState('mid');
+  const [drivenByKey, setDrivenByKey] = useState('self-drive');
   const [promoOn, setPromoOn] = useState(false);
   const [promoPct, setPromoPct] = useState(10);
 
   const type = TYPES.find((t) => t.key === typeKey);
   const age = AGE_BANDS.find((a) => a.key === ageKey);
+  const driverFee = drivenByKey === 'chauffeur' ? getWithDriverFeePerDay() : 0;
 
-  const baseMin = roundTo10(type.min * age.multiplier);
-  const baseMax = roundTo10(type.max * age.multiplier);
+  const baseMin = roundTo10(type.min * age.multiplier) + driverFee;
+  const baseMax = roundTo10(type.max * age.multiplier) + driverFee;
   const promoMin = roundTo10(baseMin * (1 - promoPct / 100));
   const promoMax = roundTo10(baseMax * (1 - promoPct / 100));
 
@@ -124,6 +142,22 @@ export default function VendorPricingGuideScreen() {
               </TouchableOpacity>
             ))}
           </View>
+
+          <Text style={styles.controlLabel}>Driven By</Text>
+          <View style={styles.pillRow}>
+            {DRIVEN_BY_OPTIONS.map((d) => (
+              <TouchableOpacity
+                key={d.key}
+                style={[styles.pill, drivenByKey === d.key && styles.pillActive]}
+                onPress={() => setDrivenByKey(d.key)}
+              >
+                <Text style={[styles.pillText, drivenByKey === d.key && styles.pillTextActive]}>{d.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {drivenByKey === 'chauffeur' && (
+            <Text style={styles.driverFeeNote}>Includes WopeCar's GHS {driverFee}/day driver fee.</Text>
+          )}
 
           <View style={styles.promoHeader}>
             <Text style={styles.controlLabel}>Add a Promotional Rate</Text>
@@ -306,6 +340,13 @@ function createStyles(colors) {
     pillTextActive: {
       fontFamily: FONTS.semiBold,
       color: colors.white,
+    },
+    driverFeeNote: {
+      fontFamily: FONTS.regular,
+      fontSize: 11,
+      color: 'rgba(255,255,255,0.6)',
+      marginTop: -10,
+      marginBottom: 18,
     },
     promoHeader: {
       flexDirection: 'row',
