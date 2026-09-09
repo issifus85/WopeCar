@@ -25,6 +25,17 @@
         "simulator": false
       }
     },
+    "preview-store": {
+      "autoIncrement": true,
+      "distribution": "store",
+      "channel": "preview-store",
+      "env": {
+        "APP_ENV": "preview"
+      },
+      "android": {
+        "buildType": "app-bundle"
+      }
+    },
     "production": {
       "autoIncrement": true,
       "distribution": "store",
