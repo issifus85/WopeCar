@@ -66,6 +66,12 @@ Deno.serve(async (req) => {
       transaction_status: paystackJson.data.status,
       amount: paystackJson.data.amount,
       reference: paystackJson.data.reference,
+      // Additive fields for the website's booking-confirmed page (payment
+      // method + paid-at display) - mobile's payment.js only ever reads
+      // transaction_status, so these are safe to add without touching it.
+      channel: paystackJson.data.channel ?? null,
+      channel_bank: paystackJson.data.authorization?.bank ?? null,
+      paid_at: paystackJson.data.paid_at ?? null,
     });
   } catch (e) {
     return jsonResponse({ error: e instanceof Error ? e.message : 'Unexpected error.' }, 500);
