@@ -41,6 +41,7 @@ module.exports = ({ config }) => ({
     '@react-native-firebase/analytics',
     '@react-native-firebase/crashlytics',
     require('./plugins/withModularHeaders'),
+    require('./plugins/withRemoveAdIdPermission'),
   ],
   extra: {
     ...config.extra,
