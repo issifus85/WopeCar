@@ -128,18 +128,121 @@ Deno.serve(async (req) => {
     }
 
     // Step 3: only now, with identity + password both confirmed, use
-    // service_role to actually delete. Cascades to public.users (ON DELETE
-    // CASCADE, see supabase/migrations/0001_initial_schema.sql) and
-    // everywhere else with a users FK - same end state as Laravel revoking
-    // every Sanctum token and removing the account.
+    // service_role to actually delete.
+    //
+    // This used to be a plain hard delete (adminClient.auth.admin.
+    // deleteUser(user.id)), which cascades to public.users (ON DELETE
+    // CASCADE) and from there hits every OTHER table with a users FK. Most
+    // of those are CASCADE too (documents, reviews, pending_invoices,
+    // notifications, push_tokens, conversation_participants, vendors) -
+    // but several are deliberately NOT: bookings.renter_id,
+    // booking_modifications.modified_by, conversations.customer_id/
+    // last_message_sender_id, conversation_messages.sender_id,
+    // conversation_participants.invited_by_user_id, blog_posts.author_id
+    // and quickbooks_tokens.connected_by are all `ON DELETE NO ACTION` -
+    // real financial/audit/platform-integrity records that must survive a
+    // renter deleting their own account (QuickBooks reporting, vendor
+    // payout history, admin booking history, support chat transcripts).
+    // A hard delete failed outright the moment a renter had so much as one
+    // booking or chat message - confirmed live via a real 500 "Database
+    // error deleting user" - which meant almost no real renter could ever
+    // successfully delete their account.
+    //
+    // Fix: soft-delete the auth identity instead (shouldSoftDelete=true
+    // below) - Supabase keeps the auth.users row but scrambles its
+    // credentials and invalidates every session/refresh token, so the
+    // renter can never sign in again, without physically removing the row
+    // (so public.users is never cascade-removed, and every NO ACTION FK
+    // into it stays valid). We then explicitly scrub public.users' own PII
+    // columns (this table isn't touched by Supabase's auth-side soft
+    // delete) and remove the renter's own sensitive uploads (documents -
+    // driver's licence/national ID/proof-of-address photos - and
+    // push_tokens, so a "deleted" account never receives a push again).
+    // Reviews/pending_invoices/notifications/conversation_participants are
+    // deliberately left alone even though their FK says CASCADE - deleting
+    // them isn't needed for account deletion to succeed, and destroying a
+    // renter's reviews would unfairly erase real vendor rating history.
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    // Read the display name before it's gone for good - the cascade below
-    // takes public.users with it, and the support notice reads better with
-    // a name than just an email.
+    // Read the display name before it's scrubbed - the support notice
+    // below reads better with a name than just an email.
     const { data: profile } = await adminClient.from('users').select('full_name').eq('id', user.id).maybeSingle();
 
-    const { error: deleteError } = await adminClient.auth.admin.deleteUser(user.id);
+    // Best-effort - a user's own uploaded ID/licence photos are sensitive
+    // and should genuinely go away, but a storage hiccup here must never
+    // block the rest of account deletion (the important part - identity +
+    // login - still has to succeed).
+    try {
+      const { data: docs } = await adminClient.from('documents').select('id, file_path').eq('user_id', user.id);
+      if (docs && docs.length > 0) {
+        const paths = docs.map((d) => d.file_path).filter(Boolean);
+        if (paths.length > 0) {
+          await adminClient.storage.from('documents').remove(paths);
+        }
+        await adminClient.from('documents').delete().eq('user_id', user.id);
+      }
+    } catch (e) {
+      console.error('Failed to remove documents during account deletion:', e);
+    }
+
+    // Best-effort - stop any future push notifications to a "deleted"
+    // account; not required for the deletion itself to succeed.
+    try {
+      await adminClient.from('push_tokens').delete().eq('user_id', user.id);
+    } catch (e) {
+      console.error('Failed to remove push_tokens during account deletion:', e);
+    }
+
+    // Scrub PII from the retained profile row. Must succeed before we
+    // touch the auth side below - if this fails, the account should stay
+    // fully intact/usable rather than ending up half-deleted.
+    const anonymizedEmail = `deleted-${user.id}@wopecar-deleted.invalid`;
+    const { error: scrubError } = await adminClient
+      .from('users')
+      .update({
+        full_name: 'Deleted User',
+        first_name: null,
+        last_name: null,
+        nickname: null,
+        email: anonymizedEmail,
+        phone: null,
+        avatar_url: null,
+        birthday: null,
+        address: null,
+        address2: null,
+        city: null,
+        state: null,
+        country: null,
+        zip_code: null,
+        driver_license_number: null,
+        driver_license_expiry: null,
+        driver_license_country: null,
+        // NOT NULL columns - 'pending' is their own column default, i.e.
+        // the same neutral state a fresh signup starts in; there's no
+        // "null"/"deleted" status value in the check constraint for these.
+        license_verification_status: 'pending',
+        national_id_type: null,
+        national_id_number: null,
+        national_id_expiry: null,
+        national_id_status: 'pending',
+        national_id_rejection_reason: null,
+        preferred_pickup_location: null,
+        emergency_contact_name: null,
+        emergency_contact_phone: null,
+        referral_code: null,
+        email_verified_at: null,
+        phone_verified_at: null,
+      })
+      .eq('id', user.id);
+    if (scrubError) {
+      return jsonResponse({ error: scrubError.message }, 500);
+    }
+
+    // Soft delete: keeps the auth.users row (Supabase scrambles its own
+    // credentials/identifiers and invalidates every session internally),
+    // so it never cascades public.users away - see the long comment above
+    // for why that matters here.
+    const { error: deleteError } = await adminClient.auth.admin.deleteUser(user.id, true);
     if (deleteError) {
       return jsonResponse({ error: deleteError.message }, 500);
     }
