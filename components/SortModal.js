@@ -6,7 +6,7 @@ import { useAppTheme } from '../contexts/ThemeContext';
 
 export const SORT_OPTIONS = [
   { value: 'recommended', label: 'Best Value' },
-  { value: 'latest', label: 'Newest' },
+  { value: 'latest', label: 'Latest Cars' },
   { value: 'price_low_high', label: 'Price (Low to high)' },
   { value: 'price_high_low', label: 'Price (High to low)' },
   { value: 'rate_high_low', label: 'Rating (High to low)' },

@@ -1,5 +1,6 @@
 import supabase from './supabase';
 import { CAR_FEATURES, GHANA_CITIES_BY_REGION, GHANA_REGIONS } from '../constants/vehicleCatalog';
+import { getLatestBadgeDays } from '../constants/pricing';
 import { toISODate } from './vendorCalendar';
 
 const FEATURE_BY_SLUG = new Map(CAR_FEATURES.map((f) => [f.slug, f]));
@@ -213,13 +214,20 @@ function resolveLocationRegionName(term) {
  * 'price_high_low' | 'rate_high_low' - sorts by real review data, see
  * attachRatings/sortByRatingDesc; 'recommended' - admin-curated via
  * cars.is_recommended, see app/admin/car/edit/[id].js, tagged cars first,
- * newest-first tiebreak; 'latest' - newest first by created_at, real
- * column, no tagging needed), limit, page.
+ * newest-first tiebreak; 'latest' - "Latest Cars", newest first AND
+ * filtered down to only cars still inside the same isCarNew()/
+ * getLatestBadgeDays() window the "New" badge itself uses (see
+ * constants/pricing.js) - mirrors wopecar-website's /book-a-car "Latest
+ * Cars" sort exactly, so this option can never show a car that isn't
+ * actually wearing the badge), limit, page.
  *
- * 'recommended' and 'latest' both order the *whole* list rather than
- * filtering down to just the tagged/recent subset - a "sort" that could
- * return an empty or tiny list whenever nothing currently qualifies would
- * be a worse experience than just deprioritizing the rest.
+ * 'recommended' orders the *whole* list rather than filtering down to just
+ * the tagged subset - a "sort" that could return an empty or tiny list
+ * whenever nothing currently qualifies would be a worse experience than
+ * just deprioritizing the rest. 'latest' is deliberately the exception:
+ * it's framed to the user as a genuine "what's new" filter (see SortModal's
+ * "Latest Cars" label), so an empty result when nothing is new is the
+ * correct, expected outcome rather than a degraded one.
  *
  * When params.startDate/endDate (both 'YYYY-MM-DD') are given, cars with an
  * overlapping paid booking or a vendor-set blocked date in that range are
@@ -269,7 +277,10 @@ export async function fetchCars(params = {}) {
   if (params.orderBy === 'price_low_high') query = query.order('price_per_day', { ascending: true });
   else if (params.orderBy === 'price_high_low') query = query.order('price_per_day', { ascending: false });
   else if (params.orderBy === 'recommended') query = query.order('is_recommended', { ascending: false }).order('created_at', { ascending: false });
-  else if (params.orderBy === 'latest') query = query.order('created_at', { ascending: false });
+  else if (params.orderBy === 'latest') {
+    const cutoff = new Date(Date.now() - getLatestBadgeDays() * 24 * 60 * 60 * 1000).toISOString();
+    query = query.gte('created_at', cutoff).order('created_at', { ascending: false });
+  }
 
   if (params.limit) query = query.limit(params.limit);
 
