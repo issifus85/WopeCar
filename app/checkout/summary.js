@@ -169,7 +169,17 @@ export default function CheckoutSummaryScreen() {
     <View style={styles.container}>
       <CheckoutHeader title="Cost Breakdown" step={4} />
 
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        // 'height' fights the OS's own resize under Android edge-to-edge
+        // (mandatory since Android 15, and this app's edgeToEdgeEnabled) -
+        // per Expo SDK 54's keyboard-handling guidance, Android should defer
+        // to windowSoftInputMode="adjustResize" (already set in
+        // AndroidManifest.xml) instead of layering RN's manual height
+        // calculation on top of it. That double-handling could leave the
+        // fixed "Proceed" footer button sitting behind the keyboard.
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.carName}>{car.name}</Text>
 

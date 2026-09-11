@@ -658,7 +658,18 @@ function EditFieldModal({ visible, label, value, onChangeValue, numeric, isSavin
   if (!visible) return null;
 
   return (
-    <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <KeyboardAvoidingView
+      style={styles.modalBackdrop}
+      // 'height' fights the OS's own resize under Android edge-to-edge
+      // (mandatory since Android 15, and this app's edgeToEdgeEnabled) -
+      // per Expo SDK 54's keyboard-handling guidance, Android should defer
+      // to windowSoftInputMode="adjustResize" (already set in
+      // AndroidManifest.xml) instead of layering RN's manual height
+      // calculation on top of it. That double-handling could leave this
+      // sheet's TextInput/Save button sitting behind the keyboard - there's
+      // no ScrollView here to fall back on to scroll them into view.
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onCancel} />
       <View style={styles.modalSheet}>
         <Text style={styles.modalTitle}>{label}</Text>

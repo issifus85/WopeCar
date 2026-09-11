@@ -32,7 +32,14 @@ export default function AddCarLocationScreen() {
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        // 'height' fights the OS's own resize under Android edge-to-edge
+        // (mandatory since Android 15, and this app's edgeToEdgeEnabled) -
+        // per Expo SDK 54's keyboard-handling guidance, Android should defer
+        // to windowSoftInputMode="adjustResize" (already set in
+        // AndroidManifest.xml) instead of layering RN's manual height
+        // calculation on top of it. That double-handling could leave the
+        // fixed "Continue" footer button sitting behind the keyboard.
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.label}>Region</Text>
