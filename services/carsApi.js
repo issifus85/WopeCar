@@ -525,3 +525,17 @@ export async function fetchCarAvailabilityByStatus(id) {
   const [booked, blocked] = await Promise.all([fetchBookedDatesForCar(id), fetchBlockedDatesForCar(id)]);
   return { bookedDates: new Set(booked), blockedDates: new Set(blocked) };
 }
+
+/**
+ * Reports a car listing to WopeCar support (car detail screen's "Report
+ * this listing" link) - Apple 1.2.0 User Generated Content requires a way
+ * to flag objectionable listings. No local DB write; the report-listing
+ * Edge Function just emails support, and resolves the reporter's real
+ * identity from their own session rather than trusting whatever this
+ * call passes.
+ */
+export async function reportListing(carId, reason) {
+  const { data, error } = await supabase.functions.invoke('report-listing', { body: { carId, reason } });
+  if (error) throw error;
+  return data;
+}

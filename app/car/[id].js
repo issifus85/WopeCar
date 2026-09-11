@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
-import { fetchCarById, fetchCarAvailabilityByStatus } from '../../services/carsApi';
+import { fetchCarById, fetchCarAvailabilityByStatus, reportListing } from '../../services/carsApi';
 import { WEEKDAYS, MONTH_NAMES, stripTime, toISODate, buildMonthGrid, isSundayBlockedForCar } from '../../services/vendorCalendar';
 import { getCarReviews, getCarReviewScore } from '../../services/reviewsApi';
 import { getCarDetailFaqs } from '../../services/faqsApi';
@@ -21,9 +21,11 @@ import CarOwnerCard from '../../components/CarOwnerCard';
 import ReviewsSection from '../../components/ReviewsSection';
 import RentalTermsSection from '../../components/RentalTermsSection';
 import BookingChoiceModal from '../../components/BookingChoiceModal';
+import ReportListingModal from '../../components/ReportListingModal';
 import { useFavorites } from '../../contexts/FavoritesContext';
 import { useCart } from '../../contexts/CartContext';
 import { useInbox } from '../../contexts/InboxContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { getAvailabilityBadge } from '../../utils/carAvailability';
 import { logScreen, logViewCar } from '../../services/analytics';
 
@@ -38,11 +40,13 @@ export default function CarDetailScreen() {
   const { isFavorite, toggleFavorite } = useFavorites();
   const { addToCart } = useCart();
   const { startInquiry } = useInbox();
+  const { user } = useAuth();
   const [car, setCar] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isBookingModalVisible, setIsBookingModalVisible] = useState(false);
+  const [isReportModalVisible, setIsReportModalVisible] = useState(false);
   const [reviewScore, setReviewScore] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [faqs, setFaqs] = useState([]);
@@ -177,6 +181,32 @@ export default function CarDetailScreen() {
     addToCart(car.id);
     setIsBookingModalVisible(false);
     router.push('/cart');
+  };
+
+  // Apple 1.2.0 (User Generated Content) requires a way to report
+  // objectionable listings - see report-listing Edge Function and
+  // services/carsApi.js's reportListing(). No local state change on
+  // success; the report only ever exists as the email it sends.
+  const handleReportListing = async (reason) => {
+    setIsReportModalVisible(false);
+    try {
+      await reportListing(car.id, reason);
+      Alert.alert('Report Submitted', 'Thank you — your report has been submitted. Our team will review it within 24 hours.');
+    } catch (e) {
+      Alert.alert('Could not submit report', e.message || 'Please check your connection and try again.');
+    }
+  };
+
+  // Link must always be visible for App Review to find it (see profile.js's
+  // switchToHostMode for the same signed-out -> /login pattern); reporting
+  // itself still requires a real signed-in identity, enforced here on tap
+  // rather than by hiding the entry point.
+  const handleReportLinkPress = () => {
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+    setIsReportModalVisible(true);
   };
 
   return (
@@ -405,6 +435,14 @@ export default function CarDetailScreen() {
           <View style={styles.section}>
             <ReviewsSection reviewScore={reviewScore} reviews={reviews} />
           </View>
+
+          {/* Apple 1.2.0 (User Generated Content) - a way to flag an
+              objectionable listing. Always visible so App Review can find
+              it regardless of sign-in state; tapping while signed out
+              redirects to /login instead of opening the report modal. */}
+          <TouchableOpacity style={styles.reportLink} onPress={handleReportLinkPress}>
+            <Text style={styles.reportLinkText}>Report this listing</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
 
@@ -434,6 +472,12 @@ export default function CarDetailScreen() {
         onClose={() => setIsBookingModalVisible(false)}
         onInquiry={handleInquiry}
         onContinue={handleContinue}
+      />
+
+      <ReportListingModal
+        visible={isReportModalVisible}
+        onCancel={() => setIsReportModalVisible(false)}
+        onConfirm={handleReportListing}
       />
     </View>
   );
@@ -610,6 +654,17 @@ function createStyles(colors) {
     paddingTop: 24,
     borderTopWidth: 1,
     borderTopColor: colors.divider,
+  },
+  reportLink: {
+    alignItems: 'center',
+    marginTop: 20,
+    paddingVertical: 4,
+  },
+  reportLinkText: {
+    fontFamily: FONTS.regular,
+    fontSize: 13,
+    color: colors.textMuted,
+    textDecorationLine: 'underline',
   },
   description: {
     fontFamily: FONTS.regular,
