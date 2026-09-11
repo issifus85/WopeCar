@@ -408,6 +408,10 @@ function RootNavigator({ authRedirectType }) {
             options={{ headerShown: true, title: 'Terms of Service', ...themedHeader }}
           />
           <Stack.Screen
+            name="eula"
+            options={{ headerShown: true, title: 'EULA', ...themedHeader }}
+          />
+          <Stack.Screen
             name="rental-terms"
             options={{ headerShown: true, title: 'Rental Terms', ...themedHeader }}
           />
