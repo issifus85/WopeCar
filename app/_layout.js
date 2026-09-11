@@ -203,37 +203,38 @@ function RootNavigator({ authRedirectType }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Native: both the recovery link and the confirmation link open in the
-  // system browser, which redirects to reset-password-callback
-  // (Linking.createURL() in requestPasswordReset) or email-confirmed
-  // (Linking.createURL() in register()) respectively - the OS then hands
-  // that off to this app. No automatic session detection like web's
-  // detectSessionInUrl, so the tokens are parsed and set manually, same as
-  // performOAuthFlow does for OAuth.
+  // Native: the confirmation link opens in the system browser, which
+  // redirects to email-confirmed (Linking.createURL() in register()) - the
+  // OS then hands that off to this app. No automatic session detection like
+  // web's detectSessionInUrl, so the tokens are parsed and set manually,
+  // same as performOAuthFlow does for OAuth.
+  //
+  // The equivalent recovery-link handling used to live here too, but
+  // reset-password-callback has no file-based route of its own, so
+  // expo-router's own linking showed its "Unmatched Route" screen for that
+  // deep link regardless of whether this listener eventually ran - confirmed
+  // live on a real Android build. app/reset-password-callback.js now owns
+  // that handling entirely (real route = no Unmatched Route, plus no race
+  // between two separate listeners parsing the same URL).
   useEffect(() => {
     if (Platform.OS === 'web') return;
 
     const handleUrl = async (url) => {
-      const isRecovery = url?.includes('reset-password-callback');
       const isEmailConfirmed = url?.includes('email-confirmed');
-      if (!isRecovery && !isEmailConfirmed) return;
+      if (!isEmailConfirmed) return;
 
       const { access_token, refresh_token } = parseTokensFromUrl(url);
       if (!access_token || !refresh_token) {
         // No token means Supabase considered this link already used/expired
         // (see parseAuthErrorFromUrl's own comment) rather than a real
-        // failure to act on - only email-confirmed has a landing screen
-        // built to explain that; reset-password-callback silently doing
-        // nothing here matches its pre-existing behavior, unchanged.
-        if (isEmailConfirmed) {
-          const linkError = parseAuthErrorFromUrl(url) || 'This confirmation link is no longer valid.';
-          router.replace({ pathname: '/email-confirmed', params: { linkError } });
-        }
+        // failure to act on.
+        const linkError = parseAuthErrorFromUrl(url) || 'This confirmation link is no longer valid.';
+        router.replace({ pathname: '/email-confirmed', params: { linkError } });
         return;
       }
 
       const { error } = await supabase.auth.setSession({ access_token, refresh_token });
-      if (!error) router.replace(isRecovery ? '/reset-password' : '/email-confirmed');
+      if (!error) router.replace('/email-confirmed');
     };
 
     Linking.getInitialURL().then((url) => { if (url) handleUrl(url); });
@@ -357,6 +358,10 @@ function RootNavigator({ authRedirectType }) {
           <Stack.Screen
             name="reset-password"
             options={{ headerShown: true, title: 'Reset Password', headerBackVisible: false, ...themedHeader }}
+          />
+          <Stack.Screen
+            name="reset-password-callback"
+            options={{ headerShown: false }}
           />
           <Stack.Screen
             name="email-confirmed"
