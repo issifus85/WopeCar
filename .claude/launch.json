@@ -9,6 +9,13 @@
       "autoPort": true
     },
     {
+      "name": "wopecar-web-production",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "APP_ENV=production npx expo start --web --port 8090 --clear"],
+      "port": 8090,
+      "autoPort": true
+    },
+    {
       "name": "wopecar-admin",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "/Users/aljumah/wopecar-admin", "run", "dev"],
