@@ -2,6 +2,7 @@ import supabase from './supabase';
 import { CAR_FEATURES, GHANA_CITIES_BY_REGION, GHANA_REGIONS } from '../constants/vehicleCatalog';
 import { getLatestBadgeDays } from '../constants/pricing';
 import { toISODate } from './vendorCalendar';
+import { getBlockedVendorIds } from './vendorBlockingApi';
 
 const FEATURE_BY_SLUG = new Map(CAR_FEATURES.map((f) => [f.slug, f]));
 
@@ -300,15 +301,28 @@ export async function fetchCars(params = {}) {
     cars = cars.filter((car) => !unavailableIds.has(car.id));
   }
 
+  // Apple 1.2.0 - blocking a vendor (see services/vendorBlockingApi.js) must
+  // remove their content from the blocker's feed instantly. This IS that
+  // feed - every other car-browsing surface in the app (Home, Search,
+  // Favorites) goes through fetchCars.
+  const blockedVendorIds = await getBlockedVendorIds();
+  if (blockedVendorIds.size > 0) {
+    cars = cars.filter((car) => !car.vendorId || !blockedVendorIds.has(car.vendorId));
+  }
+
   cars = await attachRatings(cars);
   cars = await attachAvailability(cars);
   if (params.orderBy === 'rate_high_low') {
     cars = sortByRatingDesc(cars);
   }
 
+  // meta.total must reflect every client-side filter above (dates, blocked
+  // vendors), not just the raw query count - otherwise "X Cars Available"
+  // stays stale (e.g. still counting a just-blocked vendor's cars).
+  const wasFilteredClientSide = hasDateRange || blockedVendorIds.size > 0;
   return {
     cars,
-    meta: { total: hasDateRange ? cars.length : (count ?? data.length) },
+    meta: { total: wasFilteredClientSide ? cars.length : (count ?? data.length) },
   };
 }
 

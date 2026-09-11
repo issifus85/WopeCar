@@ -112,7 +112,7 @@ function normalizeUser(profile) {
  * full_name/phone/role straight out of the signup metadata below - nothing
  * here inserts or updates that row directly.
  */
-export async function register({ name, email, password, phone, role }) {
+export async function register({ name, email, password, phone, role, termsAcceptedAt }) {
   // Same getAuthRedirectUrl() pattern as requestPasswordReset()'s
   // reset-password-callback below - without an explicit emailRedirectTo,
   // Supabase falls back to the project's dashboard-configured Site URL
@@ -122,10 +122,16 @@ export async function register({ name, email, password, phone, role }) {
   // email-confirmed handling (mirroring its existing reset-password-callback
   // handling) picks it up on both web and native.
   const emailRedirectTo = getAuthRedirectUrl('email-confirmed');
+  // termsAcceptedAt (Apple 1.2.0 - a real audit trail, not just a client-
+  // side gate) is read straight off signup metadata by the new-user trigger
+  // (handle_new_auth_user(), see supabase/migrations/
+  // add_blocked_vendors_and_terms_acceptance.sql) into public.users -
+  // app/login.js's signup form is the only caller that sets it, since it's
+  // the only screen that shows the checkbox this records.
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { full_name: name, phone, role }, emailRedirectTo },
+    options: { data: { full_name: name, phone, role, terms_accepted_at: termsAcceptedAt }, emailRedirectTo },
   });
   if (error) throw error;
 

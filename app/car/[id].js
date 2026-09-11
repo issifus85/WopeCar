@@ -22,6 +22,8 @@ import ReviewsSection from '../../components/ReviewsSection';
 import RentalTermsSection from '../../components/RentalTermsSection';
 import BookingChoiceModal from '../../components/BookingChoiceModal';
 import ReportListingModal from '../../components/ReportListingModal';
+import BlockHostModal from '../../components/BlockHostModal';
+import { blockVendor, unblockVendor, isVendorBlocked } from '../../services/vendorBlockingApi';
 import { useFavorites } from '../../contexts/FavoritesContext';
 import { useCart } from '../../contexts/CartContext';
 import { useInbox } from '../../contexts/InboxContext';
@@ -47,6 +49,8 @@ export default function CarDetailScreen() {
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isBookingModalVisible, setIsBookingModalVisible] = useState(false);
   const [isReportModalVisible, setIsReportModalVisible] = useState(false);
+  const [isBlockModalVisible, setIsBlockModalVisible] = useState(false);
+  const [isHostBlocked, setIsHostBlocked] = useState(false);
   const [reviewScore, setReviewScore] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [faqs, setFaqs] = useState([]);
@@ -90,6 +94,17 @@ export default function CarDetailScreen() {
       .then(({ bookedDates, blockedDates }) => setUnavailableDates(new Set([...bookedDates, ...blockedDates])))
       .catch(() => setUnavailableDates(new Set()));
   }, [id]);
+
+  // Reflects this car's real, current block state - not just "block was
+  // tapped" local state - so a renter revisiting a listing (or a car whose
+  // vendor they blocked from a different listing) sees the right label.
+  useEffect(() => {
+    if (!user || !car?.vendorId) {
+      setIsHostBlocked(false);
+      return;
+    }
+    isVendorBlocked(car.vendorId).then(setIsHostBlocked).catch(() => setIsHostBlocked(false));
+  }, [user, car?.vendorId]);
 
   if (isLoading) {
     return (
@@ -207,6 +222,37 @@ export default function CarDetailScreen() {
       return;
     }
     setIsReportModalVisible(true);
+  };
+
+  // Apple 1.2.0 also requires a way to block an abusive user. Blocking a
+  // vendor removes their cars from this renter's browse/search feed
+  // instantly (see services/carsApi.js's fetchCars) and notifies support
+  // (see the on_vendor_blocked_notify_admin trigger) - unblocking is a
+  // single tap, no confirmation modal, since it only restores visibility
+  // rather than reporting anything.
+  const handleBlockLinkPress = () => {
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+    if (isHostBlocked) {
+      unblockVendor(car.vendorId)
+        .then(() => setIsHostBlocked(false))
+        .catch((e) => Alert.alert('Could not unblock host', e.message || 'Please check your connection and try again.'));
+      return;
+    }
+    setIsBlockModalVisible(true);
+  };
+
+  const handleBlockHost = async (reason) => {
+    setIsBlockModalVisible(false);
+    try {
+      await blockVendor(car.vendorId, reason);
+      setIsHostBlocked(true);
+      Alert.alert('Host Blocked', "You won't see this host's listings anymore. Our team will review your report within 24 hours.");
+    } catch (e) {
+      Alert.alert('Could not block host', e.message || 'Please check your connection and try again.');
+    }
   };
 
   return (
@@ -437,12 +483,23 @@ export default function CarDetailScreen() {
           </View>
 
           {/* Apple 1.2.0 (User Generated Content) - a way to flag an
-              objectionable listing. Always visible so App Review can find
-              it regardless of sign-in state; tapping while signed out
-              redirects to /login instead of opening the report modal. */}
-          <TouchableOpacity style={styles.reportLink} onPress={handleReportLinkPress}>
-            <Text style={styles.reportLinkText}>Report this listing</Text>
-          </TouchableOpacity>
+              objectionable listing and a way to block the abusive user
+              behind it. Both always visible so App Review can find them
+              regardless of sign-in state; tapping while signed out
+              redirects to /login instead of opening either modal. */}
+          <View style={styles.reportRow}>
+            <TouchableOpacity onPress={handleReportLinkPress}>
+              <Text style={styles.reportLinkText}>Report this listing</Text>
+            </TouchableOpacity>
+            {!!car.owner && (
+              <>
+                <Text style={styles.reportLinkDivider}>·</Text>
+                <TouchableOpacity onPress={handleBlockLinkPress}>
+                  <Text style={styles.reportLinkText}>{isHostBlocked ? 'Unblock this host' : 'Block this host'}</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
         </View>
       </ScrollView>
 
@@ -478,6 +535,12 @@ export default function CarDetailScreen() {
         visible={isReportModalVisible}
         onCancel={() => setIsReportModalVisible(false)}
         onConfirm={handleReportListing}
+      />
+
+      <BlockHostModal
+        visible={isBlockModalVisible}
+        onCancel={() => setIsBlockModalVisible(false)}
+        onConfirm={handleBlockHost}
       />
     </View>
   );
@@ -655,8 +718,11 @@ function createStyles(colors) {
     borderTopWidth: 1,
     borderTopColor: colors.divider,
   },
-  reportLink: {
+  reportRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     marginTop: 20,
     paddingVertical: 4,
   },
@@ -665,6 +731,11 @@ function createStyles(colors) {
     fontSize: 13,
     color: colors.textMuted,
     textDecorationLine: 'underline',
+  },
+  reportLinkDivider: {
+    fontFamily: FONTS.regular,
+    fontSize: 13,
+    color: colors.textSubtle,
   },
   description: {
     fontFamily: FONTS.regular,

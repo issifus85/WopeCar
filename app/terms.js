@@ -77,6 +77,8 @@ By making any content available on or through the Services, you grant us an irre
 
 Violations. If we believe you are abusing the platform, our users, or any other person, or violating the letter or spirit of these Terms, we may limit, suspend, or terminate your Account and access to the Services, remove content or listings, reduce or eliminate discounts, and take technical or legal steps to prevent further use, at our sole discretion.
 
+Zero tolerance for objectionable content and abusive users. Wopecar has zero tolerance for objectionable content (including content that is illegal, threatening, harassing, hateful, obscene, or fraudulent) and for abusive users. You can report an objectionable listing directly from its detail page in the app, and you can block a host, which immediately removes their listings from your search results and notifies our team. We review every report and block within 24 hours of receipt and will remove violating content and may suspend or terminate the account responsible for it.
+
 Communication with you. You agree that we may contact you using pre-recorded messages, calls, or text messages to confirm signup, provide Account notices, investigate or prevent fraud, or communicate urgent messages. We will not share your phone number with third parties for their own purposes without your consent.
 
 Insurance and protection plans. We are not an insurance company and do not insure Partners or Riders. Protection plans made available through the Services are available to members at Wopecar's sole discretion, and eligibility for coverage requires compliance with these Terms.`,

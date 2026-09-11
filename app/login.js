@@ -13,7 +13,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { FontAwesome } from '@expo/vector-icons';
+import { FontAwesome, Ionicons } from '@expo/vector-icons';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { COLORS, FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
@@ -36,6 +36,7 @@ export default function LoginScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [socialProvider, setSocialProvider] = useState(null);
   const [error, setError] = useState(null);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const isSignUp = mode === 'signup';
   const isBusy = isSubmitting || !!socialProvider;
@@ -70,11 +71,21 @@ export default function LoginScreen() {
       setError('Passwords do not match.');
       return;
     }
+    if (isSignUp && !acceptedTerms) {
+      setError('Please agree to the Terms of Service and EULA to continue.');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
       if (isSignUp) {
-        const newUser = await register({ name, email, password, passwordConfirmation: confirmPassword });
+        const newUser = await register({
+          name,
+          email,
+          password,
+          passwordConfirmation: confirmPassword,
+          termsAcceptedAt: new Date().toISOString(),
+        });
         logSignUp({ method: 'email' });
         setUserProperties({ userId: newUser.id, userType: newUser.role ?? 'renter' });
       } else {
@@ -229,6 +240,36 @@ export default function LoginScreen() {
               <TouchableOpacity style={styles.forgotLink} onPress={() => router.push('/forgot-password')}>
                 <Text style={styles.forgotText}>Forgot password?</Text>
               </TouchableOpacity>
+            )}
+
+            {/* Apple 1.2.0 (User Generated Content) requires users to agree
+                to terms making clear there's no tolerance for objectionable
+                content/abusive users before registering. Sign-in doesn't
+                re-gate on this (the account was already created under it),
+                but the terms stay one tap away below the button either way. */}
+            {isSignUp ? (
+              <TouchableOpacity
+                style={styles.termsRow}
+                onPress={() => setAcceptedTerms((v) => !v)}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.checkbox, acceptedTerms && styles.checkboxChecked]}>
+                  {acceptedTerms && <Ionicons name="checkmark" size={14} color={colors.white} />}
+                </View>
+                <Text style={styles.termsText}>
+                  I agree to the{' '}
+                  <Text style={styles.termsLink} onPress={() => router.push('/terms')}>Terms of Service</Text>
+                  {' '}and{' '}
+                  <Text style={styles.termsLink} onPress={() => router.push({ pathname: '/eula', params: { from: 'signup' } })}>EULA</Text>
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={styles.termsFootnote}>
+                By continuing you agree to our{' '}
+                <Text style={styles.termsLink} onPress={() => router.push('/terms')}>Terms of Service</Text>
+                {' '}and{' '}
+                <Text style={styles.termsLink} onPress={() => router.push({ pathname: '/eula', params: { from: 'signup' } })}>EULA</Text>
+              </Text>
             )}
 
             {!!error && <Text style={styles.errorText}>{error}</Text>}
@@ -429,6 +470,45 @@ function createStyles(colors) {
   forgotText: {
     fontFamily: FONTS.medium,
     fontSize: 13,
+    color: colors.teal,
+  },
+  termsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 16,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  checkboxChecked: {
+    backgroundColor: colors.teal,
+    borderColor: colors.teal,
+  },
+  termsText: {
+    flex: 1,
+    fontFamily: FONTS.regular,
+    fontSize: 13,
+    color: colors.textMuted,
+    lineHeight: 18,
+  },
+  termsFootnote: {
+    fontFamily: FONTS.regular,
+    fontSize: 12,
+    color: colors.textSubtle,
+    textAlign: 'center',
+    lineHeight: 17,
+    marginBottom: 16,
+  },
+  termsLink: {
+    fontFamily: FONTS.semiBold,
     color: colors.teal,
   },
   errorText: {
