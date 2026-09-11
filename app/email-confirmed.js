@@ -43,14 +43,6 @@ export default function EmailConfirmedScreen() {
 
   const linkError = webLinkError || nativeLinkError;
 
-  if (!linkError && isLoading) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color={colors.teal} style={styles.loading} />
-      </View>
-    );
-  }
-
   // Genuine failure state is rare (an actually-expired, >1-hour-old link)
   // vs. the common "already used by a scanner" case - both land here since
   // there's nothing actionable to tell them apart, and the fix is the same
@@ -60,11 +52,27 @@ export default function EmailConfirmedScreen() {
   // Server-side idempotent (see send-welcome-email), so it's safe to just
   // fire this whenever this screen renders a genuine first-time success -
   // no local "have we sent this" tracking needed here.
+  //
+  // Must run unconditionally, before the isLoading early return below -
+  // React requires the exact same hooks in the exact same order on every
+  // render. This used to sit after that return, so the very first render
+  // (isLoading still true, before useAuth() resolves) skipped it while a
+  // later render (isLoading now false) called it - a real "Rendered more
+  // hooks than during the previous render" crash on every successful
+  // confirmation, live-verified while auditing this flow.
   useEffect(() => {
     if (!isAlreadyHandled && user) {
       sendWelcomeEmail().catch(() => {});
     }
   }, [isAlreadyHandled, user]);
+
+  if (!linkError && isLoading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color={colors.teal} style={styles.loading} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
