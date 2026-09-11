@@ -70,9 +70,30 @@ export default function LocationSearchModal({ visible, onClose, title = 'Search 
           {isSearching ? (
             <ActivityIndicator style={styles.loader} color={colors.teal} />
           ) : results.length === 0 ? (
-            <Text style={styles.emptyText}>
-              {query.trim().length < MIN_QUERY_LENGTH ? 'Start typing to search.' : 'No matching locations.'}
-            </Text>
+            query.trim().length < MIN_QUERY_LENGTH ? (
+              <Text style={styles.emptyText}>Start typing to search.</Text>
+            ) : (
+              // No Google suggestions is never a dead end - this proxy
+              // restricts results to Ghana (see supabase/functions/places-
+              // autocomplete), so any address outside it, plus any real
+              // Ghana address Google's index just doesn't have, legitimately
+              // comes back empty. pickupLocation/returnLocation are stored
+              // as plain display text (no placeId/geocoding downstream - see
+              // app/checkout/dates.js), so typed-as-entered is always a
+              // valid, complete answer here, not a degraded fallback.
+              <View>
+                <Text style={styles.emptyText}>No matching suggestions.</Text>
+                <TouchableOpacity
+                  style={styles.optionRow}
+                  onPress={() => handleSelect({ description: query.trim() })}
+                >
+                  <Ionicons name="create-outline" size={18} color={colors.teal} />
+                  <Text style={styles.optionText} numberOfLines={2}>
+                    Use &quot;{query.trim()}&quot; as entered
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )
           ) : (
             <ScrollView style={styles.resultsList} showsVerticalScrollIndicator={false}>
               {results.map((place) => (
