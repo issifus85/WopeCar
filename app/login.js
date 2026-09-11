@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { COLORS, FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -267,6 +268,27 @@ export default function LoginScreen() {
                   </>
                 )}
               </TouchableOpacity>
+
+              {/* iOS only - the native module isn't available on Android/web,
+                  and Apple 4.8's equivalent-login-option requirement is an
+                  iOS App Store review guideline in the first place. */}
+              {Platform.OS === 'ios' && (
+                socialProvider === 'apple' ? (
+                  <View style={[styles.socialButton, styles.socialButtonDisabled]}>
+                    <ActivityIndicator color={colors.textMuted} size="small" />
+                  </View>
+                ) : (
+                  <View style={styles.appleButtonWrap} pointerEvents={isBusy ? 'none' : 'auto'}>
+                    <AppleAuthentication.AppleAuthenticationButton
+                      buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                      buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                      cornerRadius={10}
+                      style={styles.appleButton}
+                      onPress={() => handleSocialLogin('apple')}
+                    />
+                  </View>
+                )
+              )}
             </View>
 
             <Text style={styles.switchModeText}>
@@ -471,6 +493,13 @@ function createStyles(colors) {
     fontFamily: FONTS.semiBold,
     fontSize: 14,
     color: colors.textPrimary,
+  },
+  appleButtonWrap: {
+    flex: 1,
+  },
+  appleButton: {
+    width: '100%',
+    height: 44,
   },
   switchModeText: {
     fontFamily: FONTS.regular,

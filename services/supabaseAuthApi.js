@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import Constants from 'expo-constants';
 import { createClient } from '@supabase/supabase-js';
 import supabase, { SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase';
@@ -254,6 +255,59 @@ async function performOAuthFlow(provider) {
 
 export const loginWithGoogle = () => performOAuthFlow('google');
 export const loginWithFacebook = () => performOAuthFlow('facebook');
+
+/**
+ * Apple 4.8 requires an equivalent, privacy-preserving login option
+ * alongside Google - Sign in with Apple is Apple's own named example of one.
+ * Deliberately NOT performOAuthFlow('apple') (the web OAuth path Google/
+ * Facebook use): that needs a Services ID + Team ID + Key ID + a .p8 secret
+ * that Apple requires rotating every 6 months. The native flow below only
+ * needs this app's bundle id registered as a Client ID in Supabase's Apple
+ * provider config - no secret to rotate - and is Apple's own recommended
+ * approach for a native app anyway.
+ */
+export async function loginWithApple() {
+  let credential;
+  try {
+    credential = await AppleAuthentication.signInAsync({
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      ],
+    });
+  } catch (e) {
+    if (e.code === 'ERR_REQUEST_CANCELED') {
+      throw new Error('Sign-in was cancelled.');
+    }
+    throw e;
+  }
+
+  if (!credential.identityToken) {
+    throw new Error('Apple did not return an identity token.');
+  }
+
+  const { error } = await supabase.auth.signInWithIdToken({
+    provider: 'apple',
+    token: credential.identityToken,
+  });
+  if (error) throw error;
+
+  // Apple hands back the user's name only on the FIRST authorization ever
+  // granted to this app - never in the identity token itself, and
+  // signInWithIdToken (unlike signUp()) has no field for extra signup
+  // metadata, so the new-user trigger that reads raw_user_meta_data->>
+  // 'full_name' (see supabase/migrations/0006_update_signup_trigger.sql)
+  // can't pick it up the way Google/Facebook's OAuth profile data does.
+  // Backfill it directly, once, and only if the profile doesn't already
+  // have a name from somewhere else.
+  const { givenName, familyName } = credential.fullName ?? {};
+  const appleName = [givenName, familyName].filter(Boolean).join(' ').trim();
+  const currentUser = await getCurrentUser();
+  if (appleName && currentUser && !currentUser.name) {
+    return updateProfile({ full_name: appleName });
+  }
+  return currentUser;
+}
 
 /**
  * Sends a password-reset email (Supabase's own recovery flow) - the only

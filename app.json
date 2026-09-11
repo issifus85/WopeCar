@@ -14,7 +14,8 @@
         "NSFaceIDUsageDescription": "WopeCar uses Face ID to unlock the app when Biometric Login is enabled in Settings.",
         "ITSAppUsesNonExemptEncryption": false
       },
-      "bundleIdentifier": "com.wopecar.WopeCar"
+      "bundleIdentifier": "com.wopecar.WopeCar",
+      "usesAppleSignIn": true
     },
     "android": {
       "adaptiveIcon": {
@@ -40,6 +41,7 @@
       "expo-font",
       "expo-secure-store",
       "expo-web-browser",
+      "expo-apple-authentication",
       [
         "expo-image-picker",
         {

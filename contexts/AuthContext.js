@@ -7,6 +7,12 @@ import { setCrashlyticsUser, logError } from '../services/analytics';
 
 const AuthContext = createContext(null);
 
+const SOCIAL_LOGIN_HANDLERS = {
+  google: authApi.loginWithGoogle,
+  apple: authApi.loginWithApple,
+  facebook: authApi.loginWithFacebook,
+};
+
 // getCurrentUser() calls supabase.auth.getUser() - a real network round-trip
 // with no built-in timeout - so a single dropped request (poor
 // connectivity, the app backgrounding mid-request) could otherwise leave
@@ -97,12 +103,12 @@ export function AuthProvider({ children }) {
 
   // Same exposed name/signature as before the migration, so app/login.js's
   // call site doesn't need to change - now dispatches to Supabase's own
-  // Google/Facebook sign-in (services/supabaseAuthApi.js) instead of the
-  // retired Laravel OAuth (services/socialAuth.js).
+  // Google/Apple/Facebook sign-in (services/supabaseAuthApi.js) instead of
+  // the retired Laravel OAuth (services/socialAuth.js).
   const loginWithSocial = useCallback(async (provider) => {
-    const loggedInUser = provider === 'google'
-      ? await authApi.loginWithGoogle()
-      : await authApi.loginWithFacebook();
+    const handler = SOCIAL_LOGIN_HANDLERS[provider];
+    if (!handler) throw new Error(`Unsupported login provider: ${provider}`);
+    const loggedInUser = await handler();
     setUser(loggedInUser);
     return loggedInUser;
   }, []);
