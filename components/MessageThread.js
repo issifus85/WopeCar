@@ -259,7 +259,14 @@ export default function MessageThread({
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      // 'height' fights the OS's own resize under Android edge-to-edge
+      // (mandatory since Android 15, and this app's edgeToEdgeEnabled) -
+      // per Expo SDK 54's keyboard-handling guidance, Android should defer
+      // to windowSoftInputMode="adjustResize" (already set in
+      // AndroidManifest.xml) instead of layering RN's manual height
+      // calculation on top of it. That double-handling is what left the
+      // composer sitting behind the keyboard instead of above it.
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       {!!pinnedSummary && <PinnedBookingSummary summary={pinnedSummary} />}
