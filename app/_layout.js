@@ -14,6 +14,7 @@ import {
 } from '@expo-google-fonts/source-sans-3';
 import { DancingScript_700Bold } from '@expo-google-fonts/dancing-script';
 import * as SplashScreen from 'expo-splash-screen';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { FONTS } from '../constants/theme';
 import { AuthProvider } from '../contexts/AuthContext';
 import { FavoritesProvider } from '../contexts/FavoritesContext';
@@ -115,7 +116,14 @@ export default function RootLayout() {
   }
 
   return (
-    <ErrorBoundary>
+    // Outermost, per react-native-keyboard-controller's own setup guide -
+    // it reads real Android keyboard height/animation off
+    // WindowInsetsAnimation, sidestepping the classic windowSoftInputMode
+    // resize path that this app's always-on edgeToEdgeEnabled breaks (see
+    // components/MessageThread.js and the other KeyboardAvoidingView call
+    // sites, which is why they're worth using now).
+    <KeyboardProvider>
+      <ErrorBoundary>
       <AuthProvider>
         <FavoritesProvider>
           <CartProvider>
@@ -141,7 +149,8 @@ export default function RootLayout() {
           </CartProvider>
         </FavoritesProvider>
       </AuthProvider>
-    </ErrorBoundary>
+      </ErrorBoundary>
+    </KeyboardProvider>
   );
 }
 
