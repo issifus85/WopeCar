@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Switch, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Switch, ActivityIndicator, Platform } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useRouter, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
@@ -660,15 +661,18 @@ function EditFieldModal({ visible, label, value, onChangeValue, numeric, isSavin
   return (
     <KeyboardAvoidingView
       style={styles.modalBackdrop}
-      // 'height' fights the OS's own resize under Android edge-to-edge
-      // (mandatory since Android 15, and this app's edgeToEdgeEnabled) -
-      // per Expo SDK 54's keyboard-handling guidance, Android should defer
-      // to windowSoftInputMode="adjustResize" (already set in
-      // AndroidManifest.xml) instead of layering RN's manual height
-      // calculation on top of it. That double-handling could leave this
-      // sheet's TextInput/Save button sitting behind the keyboard - there's
-      // no ScrollView here to fall back on to scroll them into view.
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      // RN core's KeyboardAvoidingView 'height' behavior relies on
+      // Android's classic windowSoftInputMode="adjustResize" window
+      // resize to know the keyboard height - but this app's always-on
+      // edgeToEdgeEnabled disables that classic resize path entirely
+      // (edge-to-edge and adjustResize are fundamentally incompatible on
+      // Android, not just on Android 15+), which is why this sheet's
+      // TextInput/Save button could sit behind the keyboard - there's no
+      // ScrollView here to fall back on to scroll them into view.
+      // react-native-keyboard-controller's KeyboardAvoidingView reads the
+      // real keyboard height/animation straight off WindowInsetsAnimation
+      // instead, so 'height' actually works here.
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onCancel} />
       <View style={styles.modalSheet}>
