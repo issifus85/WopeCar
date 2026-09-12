@@ -13,6 +13,33 @@
 // 1.19MB sample above came back as 10.7KB at 220x260 webp.
 const RESIZE_PROXY = 'https://wsrv.nl/';
 
+// Every call site multiplies its layout size by PixelRatio.get() before
+// this ever sees it. iOS devices only ever report 2 or 3, so that was
+// harmless there - but real Android hardware reports all sorts of
+// in-between densities (2.625, 2.75, 3.5, ...), so the exact same 110x130
+// card comes out to a different width on nearly every distinct Android
+// device. Since that width becomes the cache key on wsrv.nl (a shared,
+// public proxy cache - not per-device), each distinct width is its own
+// cold cache entry that pays the full fetch-the-multi-MB-original-and-
+// transform-it cost, instead of reusing a size some other tester's device
+// already warmed - this is almost certainly why testers still see slow
+// car photo loads on Android even after the whole prior optimization
+// pass (034f0d2 and friends), which was verified on iOS Simulator/web and
+// never against this kind of real Android density fragmentation.
+//
+// Rounds UP to the next proportional (20%) step rather than a fixed pixel
+// amount, so it scales sensibly whether this is a ~36px avatar or a
+// ~450px hero image without needing a separate constant per call site.
+// Live-modeled against 110 * {2, 2.625, 2.75, 3, 3.5} (a realistic device
+// spread): 5 distinct raw widths collapse to 3 shared cache keys, for a
+// worst-case ~18% larger fetch than the exact size - a fair trade for
+// turning most Android requests into an already-warm cache hit instead of
+// a guaranteed-cold multi-MB origin fetch.
+const SIZE_STEP_RATIO = 1.2;
+function bucketSize(value) {
+  return Math.round(Math.pow(SIZE_STEP_RATIO, Math.ceil(Math.log(value) / Math.log(SIZE_STEP_RATIO))));
+}
+
 /**
  * @param {string|null|undefined} url
  * @param {{ width: number, height?: number, quality?: number }} size
@@ -27,12 +54,12 @@ export function resizeImageUrl(url, { width, height, quality = 75 } = {}) {
 
   const params = new URLSearchParams({
     url,
-    w: String(Math.round(width)),
+    w: String(bucketSize(width)),
     fit: 'cover',
     q: String(quality),
     output: 'webp',
   });
-  if (height) params.set('h', String(Math.round(height)));
+  if (height) params.set('h', String(bucketSize(height)));
 
   return `${RESIZE_PROXY}?${params.toString()}`;
 }
