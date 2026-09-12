@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  StyleSheet, Text, View, FlatList, TextInput, TouchableOpacity, Platform, Modal, Pressable, ActivityIndicator, Linking, PixelRatio} from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+  StyleSheet, Text, View, FlatList, TextInput, TouchableOpacity,
+  KeyboardAvoidingView, Platform, Modal, Pressable, ActivityIndicator, Linking, PixelRatio,
+} from 'react-native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -258,17 +259,14 @@ export default function MessageThread({
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      // RN core's KeyboardAvoidingView 'height' behavior relies on
-      // Android's classic windowSoftInputMode="adjustResize" window
-      // resize to know the keyboard height - but this app's always-on
-      // edgeToEdgeEnabled disables that classic resize path entirely
-      // (edge-to-edge and adjustResize are fundamentally incompatible on
-      // Android, not just on Android 15+), which is why the composer could end
-      // up sitting behind the keyboard instead of above it.
-      // react-native-keyboard-controller's KeyboardAvoidingView reads the
-      // real keyboard height/animation straight off WindowInsetsAnimation
-      // instead, so 'height' actually works here.
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      // 'height' fights the OS's own resize under Android edge-to-edge
+      // (mandatory since Android 15, and this app's edgeToEdgeEnabled) -
+      // per Expo SDK 54's keyboard-handling guidance, Android should defer
+      // to windowSoftInputMode="adjustResize" (already set in
+      // AndroidManifest.xml) instead of layering RN's manual height
+      // calculation on top of it. That double-handling is what left the
+      // composer sitting behind the keyboard instead of above it.
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       {!!pinnedSummary && <PinnedBookingSummary summary={pinnedSummary} />}
