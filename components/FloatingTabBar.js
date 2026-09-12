@@ -37,8 +37,19 @@ export default function FloatingTabBar({ state, descriptors, navigation }) {
 
   return (
     <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 16) }]} pointerEvents="box-none">
-      <BlurView intensity={72} tint={isDark ? 'dark' : 'light'} style={styles.bar}>
-        {state.routes.map((route, index) => {
+      <View style={styles.barShadow}>
+        {/* BlurView doesn't reliably clip its own blur/tint layer to a
+            borderRadius on Android, even with overflow:'hidden' set
+            directly on it (a long-documented expo-blur limitation) - the
+            blur bled out past this pill's rounded corners as a faint
+            rectangle. Moving the radius+clip to this plain wrapping View
+            (which Android has no trouble clipping) instead of the
+            BlurView itself fixes that; the shadow lives one level further
+            out, on barShadow, since overflow:'hidden' here would also
+            clip it. */}
+        <View style={styles.barClip}>
+          <BlurView intensity={72} tint={isDark ? 'dark' : 'light'} style={styles.bar}>
+            {state.routes.map((route, index) => {
           const { options } = descriptors[route.key];
           const isFocused = state.index === index;
           const color = isFocused ? colors.teal : colors.textSubtle;
@@ -74,8 +85,10 @@ export default function FloatingTabBar({ state, descriptors, navigation }) {
               </Text>
             </TouchableOpacity>
           );
-        })}
-      </BlurView>
+            })}
+          </BlurView>
+        </View>
+      </View>
     </View>
   );
 }
@@ -90,19 +103,28 @@ function createStyles(colors) {
       paddingHorizontal: 28,
       alignItems: 'center',
     },
-    bar: {
-      flexDirection: 'row',
-      alignItems: 'center',
+    // Shadow/elevation only - no borderRadius/overflow here, since
+    // overflow:'hidden' would clip the shadow itself right back off.
+    barShadow: {
       width: '100%',
       maxWidth: 420,
-      paddingVertical: 10,
-      borderRadius: 28,
-      overflow: 'hidden',
       shadowColor: colors.shadow,
       shadowOffset: { width: 0, height: 6 },
       shadowOpacity: 0.15,
       shadowRadius: 14,
       elevation: 10,
+    },
+    // The actual rounded-corner clip, on a plain (non-blurred) View -
+    // Android reliably clips this one, unlike BlurView's own overflow.
+    barClip: {
+      borderRadius: 28,
+      overflow: 'hidden',
+    },
+    bar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      width: '100%',
+      paddingVertical: 10,
     },
     tab: {
       flex: 1,
@@ -118,6 +140,7 @@ function createStyles(colors) {
       paddingHorizontal: 14,
       paddingVertical: 6,
       borderRadius: 18,
+      overflow: 'hidden',
       alignItems: 'center',
       justifyContent: 'center',
     },
