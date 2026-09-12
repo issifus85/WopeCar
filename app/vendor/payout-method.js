@@ -165,8 +165,12 @@ export default function VendorPayoutMethodScreen() {
           // keyboard.
           // react-native-keyboard-controller's KeyboardAvoidingView reads the
           // real keyboard height/animation straight off WindowInsetsAnimation
-          // instead, so 'height' actually works here.
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          // instead. Switched to behavior="padding" for both platforms rather
+          // than keeping Android on 'height' - 'padding' just adds bottom
+          // padding with no extra state (no frozen reference-frame tracking
+          // the way 'height' has), so there's less for a library update or an
+          // edge case to get wrong.
+          behavior="padding"
         >
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
             <View style={styles.segmentedRow}>

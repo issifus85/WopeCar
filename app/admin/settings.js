@@ -331,7 +331,13 @@ export default function AdminSettingsScreen() {
 
   return (
     <View style={styles.container}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      {/* This screen's own inputs are all inside the ScrollView below (low
+          risk even under RN core's buggy Android 'height' behavior), but it
+          shares this file's one KeyboardAvoidingView import with
+          EditFieldModal below - see that modal's own comment for why this
+          is react-native-keyboard-controller's version, using
+          behavior="padding" on both platforms. */}
+      <KeyboardAvoidingView style={styles.flex} behavior="padding">
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {!!error && <Text style={styles.errorText}>{error}</Text>}
 
@@ -671,8 +677,12 @@ function EditFieldModal({ visible, label, value, onChangeValue, numeric, isSavin
       // ScrollView here to fall back on to scroll them into view.
       // react-native-keyboard-controller's KeyboardAvoidingView reads the
       // real keyboard height/animation straight off WindowInsetsAnimation
-      // instead, so 'height' actually works here.
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      // instead. Switched to behavior="padding" for both platforms rather
+      // than keeping Android on 'height' - 'padding' just adds bottom
+      // padding with no extra state (no frozen reference-frame tracking
+      // the way 'height' has), so there's less for a library update or an
+      // edge case to get wrong.
+      behavior="padding"
     >
       <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onCancel} />
       <View style={styles.modalSheet}>
