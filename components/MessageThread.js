@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   StyleSheet, Text, View, FlatList, TextInput, TouchableOpacity, Platform, Modal, Pressable, ActivityIndicator, Linking, PixelRatio} from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardAvoidingView, useGenericKeyboardHandler } from 'react-native-keyboard-controller';
+import Reanimated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -218,6 +219,35 @@ export default function MessageThread({
   const [viewerImageUrl, setViewerImageUrl] = useState(null);
   const listRef = useRef(null);
 
+  // Android-only escape hatch from react-native-keyboard-controller's own
+  // KeyboardAvoidingView: that component's useKeyboardAnimation() hook
+  // calls useResizeMode() internally, which forces the native
+  // windowSoftInputMode to "adjustResize" for as long as this screen is
+  // mounted - silently overriding app.json's "pan" setting (see that
+  // setting's own commit message for why adjustResize is broken under
+  // this app's edge-to-edge Android setup). That's why switching to "pan"
+  // made no visible difference: the library was reverting it back at
+  // runtime the whole time. useGenericKeyboardHandler is the one hook in
+  // this library that skips that auto mode-switching, so "pan" actually
+  // stays in effect - this manually tracks keyboard height and applies it
+  // as padding, bypassing KeyboardAvoidingView's behavior prop entirely
+  // for Android. iOS keeps using the library's own KeyboardAvoidingView
+  // below (behavior="padding") since it was never affected by this.
+  const androidKeyboardHeight = useSharedValue(0);
+  useGenericKeyboardHandler({
+    onMove: (e) => {
+      'worklet';
+      androidKeyboardHeight.value = e.height;
+    },
+    onEnd: (e) => {
+      'worklet';
+      androidKeyboardHeight.value = e.height;
+    },
+  }, []);
+  const androidKeyboardStyle = useAnimatedStyle(() => ({
+    paddingBottom: androidKeyboardHeight.value,
+  }));
+
   useEffect(() => {
     const timer = setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 50);
     return () => clearTimeout(timer);
@@ -255,26 +285,18 @@ export default function MessageThread({
     }
   };
 
+  // Android renders a plain animated View whose paddingBottom is driven
+  // manually (see androidKeyboardStyle above) instead of the library's own
+  // KeyboardAvoidingView, since that component forces adjustResize back on
+  // for Android. iOS is untouched - it was never affected by that, and
+  // keeps using the library's KeyboardAvoidingView normally.
+  const Wrapper = Platform.OS === 'android' ? Reanimated.View : KeyboardAvoidingView;
+  const wrapperProps = Platform.OS === 'android'
+    ? { style: [styles.container, androidKeyboardStyle] }
+    : { style: styles.container, behavior: 'padding', keyboardVerticalOffset: 90 };
+
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      // RN core's KeyboardAvoidingView 'height' behavior relies on
-      // Android's classic windowSoftInputMode="adjustResize" window
-      // resize to know the keyboard height - but this app's always-on
-      // edgeToEdgeEnabled disables that classic resize path entirely
-      // (edge-to-edge and adjustResize are fundamentally incompatible on
-      // Android, not just on Android 15+), which is why the composer could end
-      // up sitting behind the keyboard instead of above it.
-      // react-native-keyboard-controller's KeyboardAvoidingView reads the
-      // real keyboard height/animation straight off WindowInsetsAnimation
-      // instead. Switched to behavior="padding" for both platforms rather than
-      // keeping Android on 'height' - 'padding' just adds bottom padding with
-      // no extra state (no frozen reference-frame tracking the way 'height'
-      // has), so there's less for a library update or an edge case to get
-      // wrong.
-      behavior="padding"
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-    >
+    <Wrapper {...wrapperProps}>
       {!!pinnedSummary && <PinnedBookingSummary summary={pinnedSummary} />}
 
       {messages.length === 0 ? (
@@ -340,7 +362,7 @@ export default function MessageThread({
         colors={colors}
       />
       <ImageViewerModal url={viewerImageUrl} onClose={() => setViewerImageUrl(null)} styles={styles} />
-    </KeyboardAvoidingView>
+    </Wrapper>
   );
 }
 
