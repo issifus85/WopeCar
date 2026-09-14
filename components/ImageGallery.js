@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { StyleSheet, View, FlatList, Text, Dimensions, TouchableOpacity, PixelRatio } from 'react-native';
 import { Image } from 'expo-image';
 import { useAppTheme } from '../contexts/ThemeContext';
@@ -19,6 +19,29 @@ export default function ImageGallery({ images, height = 180, borderRadius = 16, 
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [width, setWidth] = useState(Dimensions.get('window').width);
+  // Image.prefetch doesn't dedupe - without this, swiping back and forth
+  // across the same couple of photos would keep re-issuing identical
+  // requests.
+  const prefetchedUrls = useRef(new Set());
+
+  // Warms the next (and previous, for swiping back) photo the moment
+  // they'd be swiped to, rather than waiting for that swipe to happen -
+  // each rendered <Image>'s own priority='low' below still just queues it
+  // behind every other in-flight request app-wide, so an explicit prefetch
+  // call is a stronger signal that this specific photo is about to be
+  // needed. Re-runs on every activeIndex change, so it keeps following the
+  // user through a multi-photo gallery, not just warming the first swipe.
+  useEffect(() => {
+    if (!images || !width) return;
+    [activeIndex - 1, activeIndex + 1]
+      .filter((i) => i >= 0 && i < images.length)
+      .forEach((i) => {
+        const resized = resizeImageUrl(images[i], { width: width * PixelRatio.get(), height: height * PixelRatio.get() });
+        if (!resized || prefetchedUrls.current.has(resized)) return;
+        prefetchedUrls.current.add(resized);
+        Image.prefetch(resized, 'memory-disk');
+      });
+  }, [images, activeIndex, width, height]);
 
   if (!images || images.length === 0) {
     return (

@@ -26,6 +26,14 @@ import { logScreen, logSearchCars } from '../../services/analytics';
 // fetch once it actually mounts.
 const PREFETCH_CAR_COUNT = 6;
 
+// How many cards past whatever's currently visible get warmed as the user
+// scrolls - see handleViewableItemsChanged below. PREFETCH_CAR_COUNT above
+// only ever covers the very first screenful load; without this, card #7
+// onward each starts its own cold fetch the moment it scrolls into view
+// instead of already being in flight.
+const SCROLL_LOOKAHEAD_COUNT = 4;
+const VIEWABILITY_CONFIG = { itemVisiblePercentThreshold: 20 };
+
 // app/car/[id].js's ImageGallery renders its hero at this height (full
 // screen width) - a different size than the list's own tile/list cards, so
 // it's a different resizeImageUrl cache key and gets none of the benefit
@@ -100,6 +108,39 @@ export default function HomeScreen() {
   // so this ref skips logging the first one.
   const hasLoadedOnce = useRef(false);
 
+  // expo-image's Image.prefetch doesn't dedupe its own calls - without this,
+  // scrolling back and forth across the same cards would keep re-issuing
+  // identical prefetch requests every time handleViewableItemsChanged fires.
+  const prefetchedUrls = useRef(new Set());
+  // handleViewableItemsChanged (passed to FlatList below) has to be a
+  // stable function reference or RN warns/resets its internal viewability
+  // tracker, but it needs the current filteredCars array - this ref is how
+  // it reads "current" data without itself changing identity every render.
+  const filteredCarsRef = useRef([]);
+
+  const prefetchCarPhoto = (car) => {
+    const uri = car?.gallery?.[0];
+    if (!uri) return;
+    const screenWidth = Dimensions.get('window').width;
+    const resized = resizeImageUrl(uri, { width: screenWidth * PixelRatio.get(), height: 190 * PixelRatio.get() });
+    if (!resized || prefetchedUrls.current.has(resized)) return;
+    prefetchedUrls.current.add(resized);
+    Image.prefetch(resized, 'memory-disk');
+  };
+
+  // Follows scroll position: warms whatever's SCROLL_LOOKAHEAD_COUNT cards
+  // past the last currently-visible one, so by the time the user actually
+  // scrolls to them their fetch is already in flight instead of starting
+  // cold on mount. Fires on every viewability change (not just once at
+  // load), so it keeps following the user the whole way down the list.
+  const handleViewableItemsChanged = useRef(({ viewableItems }) => {
+    if (!viewableItems.length) return;
+    const lastVisibleIndex = Math.max(...viewableItems.map((v) => v.index ?? 0));
+    filteredCarsRef.current
+      .slice(lastVisibleIndex + 1, lastVisibleIndex + 1 + SCROLL_LOOKAHEAD_COUNT)
+      .forEach(prefetchCarPhoto);
+  }).current;
+
   useEffect(() => {
     loadCars();
   }, [selectedTypes, seats, locationFilters, startDate, endDate, sortBy, drivenBy, priceRange, vehicleClass]);
@@ -145,13 +186,7 @@ export default function HomeScreen() {
         // width x 190) since 'tile' is the default viewMode - a list-view
         // prefetch would need CarListCard's own 110x130, but tile is what
         // most people see first.
-        const screenWidth = Dimensions.get('window').width;
-        const prefetchUrls = cars
-          .slice(0, PREFETCH_CAR_COUNT)
-          .map(car => car.gallery?.[0])
-          .filter(Boolean)
-          .map(uri => resizeImageUrl(uri, { width: screenWidth * PixelRatio.get(), height: 190 * PixelRatio.get() }));
-        if (prefetchUrls.length) Image.prefetch(prefetchUrls, 'memory-disk');
+        cars.slice(0, PREFETCH_CAR_COUNT).forEach(prefetchCarPhoto);
         if (hasLoadedOnce.current) {
           logSearchCars({
             location: locationFilters[0],
@@ -230,6 +265,7 @@ export default function HomeScreen() {
 
     return matchesSearch;
   });
+  filteredCarsRef.current = filteredCars;
 
   const renderCar = ({ item }) => {
     const onPress = () => {
@@ -448,6 +484,8 @@ export default function HomeScreen() {
             initialNumToRender={4}
             maxToRenderPerBatch={4}
             windowSize={5}
+            onViewableItemsChanged={handleViewableItemsChanged}
+            viewabilityConfig={VIEWABILITY_CONFIG}
           />
         </>
       )}
