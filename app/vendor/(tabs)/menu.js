@@ -5,9 +5,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../../constants/theme';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 import { useSettings } from '../../../contexts/SettingsContext';
+import { useInbox } from '../../../contexts/InboxContext';
 import VendorHeader from '../../../components/VendorHeader';
 
-function Row({ icon, label, subtitle, onPress, last, styles, colors, tintColor }) {
+function Row({ icon, label, subtitle, onPress, last, styles, colors, tintColor, badge }) {
   return (
     <TouchableOpacity style={[styles.row, last && styles.rowLast]} onPress={onPress} activeOpacity={0.6}>
       <View style={[styles.rowIcon, tintColor && { backgroundColor: `${tintColor}22` }]}>
@@ -17,6 +18,11 @@ function Row({ icon, label, subtitle, onPress, last, styles, colors, tintColor }
         <Text style={styles.rowLabel}>{label}</Text>
         {!!subtitle && <Text style={styles.rowSubtitle}>{subtitle}</Text>}
       </View>
+      {!!badge && (
+        <View style={styles.rowBadge}>
+          <Text style={styles.rowBadgeText}>{badge}</Text>
+        </View>
+      )}
       <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
     </TouchableOpacity>
   );
@@ -27,6 +33,7 @@ export default function VendorMenuScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { updateSetting } = useSettings();
+  const { totalUnreadCount } = useInbox();
 
   const switchToClientMode = () => {
     updateSetting('appMode', 'client');
@@ -39,6 +46,15 @@ export default function VendorMenuScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
+          <Row
+            icon="mail-outline"
+            label="Inbox"
+            subtitle="Notifications and messages"
+            badge={totalUnreadCount > 0 ? totalUnreadCount : null}
+            onPress={() => router.push('/inbox')}
+            styles={styles}
+            colors={colors}
+          />
           <Row
             icon="clipboard-outline"
             label="Vehicle Inspections"
@@ -144,6 +160,21 @@ function createStyles(colors) {
       fontSize: 12,
       color: colors.textSubtle,
       marginTop: 2,
+    },
+    rowBadge: {
+      minWidth: 20,
+      height: 20,
+      borderRadius: 10,
+      paddingHorizontal: 5,
+      backgroundColor: colors.teal,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 8,
+    },
+    rowBadgeText: {
+      fontFamily: FONTS.bold,
+      fontSize: 11,
+      color: colors.white,
     },
   });
 }

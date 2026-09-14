@@ -7,6 +7,7 @@ import { FONTS } from '../../constants/theme';
 import { formatRelativeTime } from '../../constants/dateUtils';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useInbox } from '../../contexts/InboxContext';
+import { useSettings } from '../../contexts/SettingsContext';
 import SwipeableRow from '../../components/SwipeableRow';
 import ConfirmModal from '../../components/ConfirmModal';
 import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
@@ -102,8 +103,16 @@ export default function InboxScreen() {
     markConversationRead, markNotificationRead, markAllNotificationsRead,
     markConversationUnread, deleteConversation, markNotificationUnread, deleteNotification,
   } = useInbox();
+  const { settings } = useSettings();
   const [activeTab, setActiveTab] = useState('Messages');
   const [pendingDelete, setPendingDelete] = useState(null);
+
+  // This screen is shared between client and vendor mode (app/vendor/(tabs)/
+  // menu.js's own Inbox row pushes here too) - back has to return to
+  // whichever mode's own hub the viewer actually came from, not always the
+  // renter Account tab, or a vendor landing here would get bounced into
+  // client mode's Account screen on the way out.
+  const isVendorMode = settings.appMode === 'vendor';
 
   // A custom headerLeft, not just the default native-stack back button -
   // this screen (like app/booking/[id].js) is a root-level Stack.Screen
@@ -111,22 +120,22 @@ export default function InboxScreen() {
   // combination that can leave the default back button's bare GO_BACK
   // action unresolved ("tap does nothing") - see booking/[id].js's own
   // handleBack comment for the full explanation and the live repro. Always
-  // replaces to the Account tab explicitly rather than trusting back()/
+  // replaces to the mode's own hub explicitly rather than trusting back()/
   // canGoBack() (canGoBack() reports true even in the broken state).
   const handleBack = useCallback(() => {
-    router.replace('/(tabs)/profile');
-  }, [router]);
+    router.replace(isVendorMode ? '/vendor/menu' : '/(tabs)/profile');
+  }, [router, isVendorMode]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
       headerLeft: () => (
         <TouchableOpacity onPress={handleBack} hitSlop={10} style={styles.headerBackButton}>
           <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
-          <Text style={styles.headerBackLabel}>Account</Text>
+          <Text style={styles.headerBackLabel}>{isVendorMode ? 'Menu' : 'Account'}</Text>
         </TouchableOpacity>
       ),
     });
-  }, [navigation, handleBack, styles, colors]);
+  }, [navigation, handleBack, styles, colors, isVendorMode]);
 
   const unreadNotificationsCount = notifications.filter(n => !n.readAt).length;
 
