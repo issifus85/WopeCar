@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  StyleSheet, Text, View, FlatList, TextInput, TouchableOpacity, Platform, Modal, Pressable, ActivityIndicator, Linking, PixelRatio} from 'react-native';
+  StyleSheet, Text, View, FlatList, TextInput, TouchableOpacity, Platform, Modal, Pressable, ActivityIndicator, Linking, PixelRatio,
+  KeyboardAvoidingView,
+} from 'react-native';
 import {
-  AndroidSoftInputModes, KeyboardAvoidingView, KeyboardController, useGenericKeyboardHandler,
+  AndroidSoftInputModes, KeyboardController, useGenericKeyboardHandler,
 } from 'react-native-keyboard-controller';
 import Reanimated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { Image } from 'expo-image';
@@ -314,9 +316,14 @@ export default function MessageThread({
 
   // See the SOFT_INPUT_ADJUST_NOTHING effect above for why Android drives
   // its own animated padding here instead of using the OS pan/resize
-  // modes or the library's KeyboardAvoidingView. iOS is untouched - it
-  // was never affected by any of this and keeps using the library's own
-  // KeyboardAvoidingView normally.
+  // modes or any KeyboardAvoidingView at all. iOS never had the edge-to-
+  // edge/adjustResize problem this whole saga was about - it was fine on
+  // plain React Native's own KeyboardAvoidingView from the start - so it
+  // uses THAT here (not react-native-keyboard-controller's version,
+  // which an earlier commit switched it to unnecessarily and which
+  // turned out to have live-reported regressions of its own on iOS).
+  // Decoupling iOS from the library entirely, rather than debugging why
+  // its version misbehaves, since iOS never needed it in the first place.
   const Wrapper = Platform.OS === 'android' ? Reanimated.View : KeyboardAvoidingView;
   const wrapperProps = Platform.OS === 'android'
     ? { style: [styles.container, androidKeyboardStyle] }
