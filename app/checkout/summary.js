@@ -99,7 +99,9 @@ export default function CheckoutSummaryScreen() {
     return sum + (addon.type === 'per_day' ? addon.price * addon.days : addon.price);
   }, 0);
   const subtotal = rentalCost + addonsCost;
-  const deliveryFee = isSelfDrive ? getSelfDriveDeliveryFee() : 0;
+  // Waived when a WopeCar driver is already coming with the car - there's
+  // no separate self-service handover left to charge a delivery fee for.
+  const deliveryFee = isSelfDrive && !draft.withDriver ? getSelfDriveDeliveryFee() : 0;
   const securityDeposit = calculateSecurityDeposit(subtotal, car?.drivenBy);
 
   // Recomputed live from this screen's own `days` (not trusted from
@@ -264,7 +266,11 @@ export default function CheckoutSummaryScreen() {
           {isSelfDrive && (
             <View style={styles.costRow}>
               <Text style={styles.costLabel}>Delivery fee</Text>
-              <Text style={styles.costValue}>{formatCurrency(deliveryFee, activeCurrency)}</Text>
+              {draft.withDriver ? (
+                <Text style={styles.costValue}>Waived (Driver Included)</Text>
+              ) : (
+                <Text style={styles.costValue}>{formatCurrency(deliveryFee, activeCurrency)}</Text>
+              )}
             </View>
           )}
 

@@ -319,7 +319,9 @@ export default function BookingDetailScreen() {
     const addonsCost = addons.reduce((sum, a) => sum + (a.type === 'per_day' ? a.price * a.days : a.price), 0);
     const subtotal = rentalCost + addonsCost;
     const isSelfDrive = car.drivenBy === 'Self-drive';
-    const deliveryFee = isSelfDrive ? getSelfDriveDeliveryFee() : 0;
+    // Waived when a WopeCar driver is already coming with the car - see
+    // checkout/summary.js's identical formula.
+    const deliveryFee = isSelfDrive && !booking?.withDriver?.selected ? getSelfDriveDeliveryFee() : 0;
     const securityDeposit = calculateSecurityDeposit(subtotal, car.drivenBy);
     // Same "recompute live from the current admin-set rate" treatment as
     // deliveryFee above, not a per-car snapshot like WopeCare's rate -

@@ -160,7 +160,9 @@ export default function CheckoutPaymentScreen() {
       sum + (addon.type === 'per_day' ? addon.price * addon.days : addon.price)
     ), 0);
     const subtotal = rentalCost + addonsCost;
-    const deliveryFee = car.drivenBy === 'Self-drive' ? getSelfDriveDeliveryFee() : 0;
+    // Waived when a WopeCar driver is already coming with the car - see
+    // checkout/summary.js's identical formula.
+    const deliveryFee = car.drivenBy === 'Self-drive' && !draft.withDriver ? getSelfDriveDeliveryFee() : 0;
     const securityDeposit = calculateSecurityDeposit(subtotal, car.drivenBy);
     // Same reactive formula as checkout/summary.js - recomputed against this
     // trip's actual subtotal rather than trusting a stored amount.
