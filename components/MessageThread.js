@@ -261,6 +261,19 @@ export default function MessageThread({
   const androidKeyboardStyle = useAnimatedStyle(() => ({
     paddingBottom: androidKeyboardHeight.value,
   }));
+  // The composer already reserves insets.bottom (the gesture-nav-bar safe
+  // area) unconditionally below - correct while the keyboard is closed,
+  // but once it's open the keyboard itself covers that same area, so
+  // adding both stacks into a visible extra gap above the keyboard
+  // (live-reported). Collapses to a small fixed gap on Android whenever
+  // the keyboard has real height, leaving iOS's original calculation
+  // completely untouched in every case.
+  const composerBottomStyle = useAnimatedStyle(() => {
+    if (Platform.OS === 'android' && androidKeyboardHeight.value > 0) {
+      return { paddingBottom: 12 };
+    }
+    return { paddingBottom: Math.max(12, insets.bottom) + extraBottomInset };
+  });
 
   useEffect(() => {
     const timer = setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 50);
@@ -336,7 +349,7 @@ export default function MessageThread({
         </View>
       )}
 
-      <View style={[styles.composer, { paddingBottom: Math.max(12, insets.bottom) + extraBottomInset }]}>
+      <Reanimated.View style={[styles.composer, composerBottomStyle]}>
         {!!onAttach && (
           <TouchableOpacity
             style={styles.attachButton}
@@ -366,7 +379,7 @@ export default function MessageThread({
         >
           <Ionicons name="send" size={18} color={colors.white} />
         </TouchableOpacity>
-      </View>
+      </Reanimated.View>
 
       <AttachmentMenu
         visible={isMenuVisible}
