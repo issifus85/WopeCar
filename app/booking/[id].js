@@ -338,6 +338,14 @@ export default function BookingDetailScreen() {
   const minDays = car ? getMinBookingDays(car.drivenBy) : 1;
   const isBelowMinimum = editStart && editEnd && days < minDays;
 
+  // Self-drive delivers/collects the VEHICLE (WopeCar drops the car off,
+  // then picks it back up) - chauffeur instead picks up and drops off the
+  // RENTER themselves, so the same two fields need different wording per
+  // car type rather than one generic label. Mirrors checkout/dates.js.
+  const isChauffeurBooking = car?.drivenBy === 'Chauffeur';
+  const deliveryLocationLabel = isChauffeurBooking ? 'Pickup Location' : 'Vehicle Delivery Location';
+  const returnLocationLabel = isChauffeurBooking ? 'Drop off Location' : 'Vehicle Pickup Location';
+
   const handlePickupLocationChange = (text) => {
     setEditPickupLocation(text);
     if (sameAsPickup) setEditReturnLocation(text);
@@ -540,7 +548,7 @@ export default function BookingDetailScreen() {
             <Text style={styles.rowValue}>{formatDate(booking.endDate)} · {booking.returnTime}</Text>
           </View>
           <View style={styles.row}>
-            <Text style={styles.rowLabel}>Vehicle Delivery Location</Text>
+            <Text style={styles.rowLabel}>{deliveryLocationLabel}</Text>
             <View style={styles.rowValueWithAction}>
               <Text style={styles.rowValue} numberOfLines={2}>{booking.pickupLocation}</Text>
               {!!booking.pickupLocation && (
@@ -555,7 +563,7 @@ export default function BookingDetailScreen() {
             </View>
           </View>
           <View style={styles.row}>
-            <Text style={styles.rowLabel}>Vehicle Pickup Location</Text>
+            <Text style={styles.rowLabel}>{returnLocationLabel}</Text>
             <View style={styles.rowValueWithAction}>
               <Text style={styles.rowValue} numberOfLines={2}>{booking.returnLocation}</Text>
               {!!booking.returnLocation && (
@@ -724,7 +732,7 @@ export default function BookingDetailScreen() {
           <TimeSlotPicker label="Return Time" value={editReturnTime} onChange={setEditReturnTime} styles={styles} />
 
           <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Vehicle Delivery Location</Text>
+            <Text style={styles.fieldLabel}>{deliveryLocationLabel}</Text>
             <TouchableOpacity style={styles.locationPill} onPress={() => setIsPickupModalVisible(true)}>
               <Ionicons name="location-outline" size={18} color={colors.teal} />
               <Text style={[styles.locationPillText, !editPickupLocation && styles.locationPillPlaceholder]} numberOfLines={1}>
@@ -742,7 +750,7 @@ export default function BookingDetailScreen() {
 
           {!sameAsPickup && (
             <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Vehicle Pickup Location</Text>
+              <Text style={styles.fieldLabel}>{returnLocationLabel}</Text>
               <TouchableOpacity style={styles.locationPill} onPress={() => setIsReturnModalVisible(true)}>
                 <Ionicons name="location-outline" size={18} color={colors.teal} />
                 <Text style={[styles.locationPillText, !editReturnLocation && styles.locationPillPlaceholder]} numberOfLines={1}>
@@ -774,11 +782,11 @@ export default function BookingDetailScreen() {
               <Text style={styles.rowValue}>{formatDate(editEnd)} · {editReturnTime}</Text>
             </View>
             <View style={styles.row}>
-              <Text style={styles.rowLabel}>Vehicle Delivery Location</Text>
+              <Text style={styles.rowLabel}>{deliveryLocationLabel}</Text>
               <Text style={styles.rowValue} numberOfLines={2}>{editPickupLocation}</Text>
             </View>
             <View style={styles.row}>
-              <Text style={styles.rowLabel}>Vehicle Pickup Location</Text>
+              <Text style={styles.rowLabel}>{returnLocationLabel}</Text>
               <Text style={styles.rowValue} numberOfLines={2}>{editReturnLocation}</Text>
             </View>
           </View>
@@ -998,13 +1006,13 @@ export default function BookingDetailScreen() {
       <LocationSearchModal
         visible={isPickupModalVisible}
         onClose={() => setIsPickupModalVisible(false)}
-        title="Vehicle Delivery Location"
+        title={deliveryLocationLabel}
         onSelect={handlePickupLocationChange}
       />
       <LocationSearchModal
         visible={isReturnModalVisible}
         onClose={() => setIsReturnModalVisible(false)}
-        title="Vehicle Pickup Location"
+        title={returnLocationLabel}
         onSelect={setEditReturnLocation}
       />
     </ScrollView>

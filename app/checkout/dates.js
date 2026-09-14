@@ -384,6 +384,15 @@ export default function CheckoutDatesScreen() {
   const pickupSlots = isChauffeur ? CHAUFFEUR_PICKUP_SLOTS : SELF_DRIVE_SLOTS;
   const returnSlots = isChauffeur ? CHAUFFEUR_RETURN_SLOTS : SELF_DRIVE_SLOTS;
 
+  // Self-drive delivers/collects the VEHICLE (WopeCar drops the car off,
+  // then picks it back up) - chauffeur instead picks up and drops off the
+  // RENTER themselves, so the same two fields need different wording per
+  // car type rather than one generic label.
+  const deliveryLocationLabel = isChauffeur ? 'Pickup Location' : 'Vehicle Delivery Location';
+  const returnLocationLabel = isChauffeur ? 'Drop off Location' : 'Vehicle Pickup Location';
+  const deliveryLocationPlaceholder = isChauffeur ? 'Search for a pickup location...' : 'Search for a vehicle delivery location...';
+  const returnLocationPlaceholder = isChauffeur ? 'Search for a drop off location...' : 'Search for a vehicle pickup location...';
+
   const showMissingDatesError = showFieldErrors && (!tempStart || !tempEnd);
 
   return (
@@ -518,14 +527,14 @@ export default function CheckoutDatesScreen() {
         </View>
 
         <View style={styles.field}>
-          <Text style={styles.label}>Vehicle Delivery Location</Text>
+          <Text style={styles.label}>{deliveryLocationLabel}</Text>
           <TouchableOpacity
             style={[styles.locationPill, showFieldErrors && !pickupLocation.trim() && styles.fieldError]}
             onPress={() => setIsPickupLocationModalVisible(true)}
           >
             <Ionicons name="location-outline" size={18} color={colors.teal} />
             <Text style={[styles.locationPillText, !pickupLocation && styles.locationPillPlaceholder]} numberOfLines={1}>
-              {pickupLocation || 'Search for a vehicle delivery location...'}
+              {pickupLocation || deliveryLocationPlaceholder}
             </Text>
           </TouchableOpacity>
         </View>
@@ -539,14 +548,14 @@ export default function CheckoutDatesScreen() {
 
         {!sameAsPickup && (
           <View style={styles.field}>
-            <Text style={styles.label}>Vehicle Pickup Location</Text>
+            <Text style={styles.label}>{returnLocationLabel}</Text>
             <TouchableOpacity
               style={[styles.locationPill, showFieldErrors && !returnLocation.trim() && styles.fieldError]}
               onPress={() => setIsReturnLocationModalVisible(true)}
             >
               <Ionicons name="location-outline" size={18} color={colors.teal} />
               <Text style={[styles.locationPillText, !returnLocation && styles.locationPillPlaceholder]} numberOfLines={1}>
-                {returnLocation || 'Search for a vehicle pickup location...'}
+                {returnLocation || returnLocationPlaceholder}
               </Text>
             </TouchableOpacity>
           </View>
@@ -613,13 +622,13 @@ export default function CheckoutDatesScreen() {
       <LocationSearchModal
         visible={isPickupLocationModalVisible}
         onClose={() => setIsPickupLocationModalVisible(false)}
-        title="Vehicle Delivery Location"
+        title={deliveryLocationLabel}
         onSelect={handlePickupLocationChange}
       />
       <LocationSearchModal
         visible={isReturnLocationModalVisible}
         onClose={() => setIsReturnLocationModalVisible(false)}
-        title="Vehicle Pickup Location"
+        title={returnLocationLabel}
         onSelect={setReturnLocation}
       />
     </View>
