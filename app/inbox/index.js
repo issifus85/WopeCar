@@ -23,6 +23,15 @@ const NOTIFICATION_ICONS = {
   booking_cancelled: 'close-circle-outline',
   payment: 'card-outline',
   reminder: 'alarm-outline',
+  vendor_calendar_reminder: 'calendar-outline',
+  vendor_admin_alert: 'megaphone-outline',
+};
+
+// Notification types with no bookingId that still deep-link somewhere -
+// openNotification's only other routing signal is bookingId, which these
+// don't have (they're not about a specific booking).
+const NOTIFICATION_ROUTES = {
+  vendor_calendar_reminder: '/vendor/calendar',
 };
 
 function ConversationRow({ conversation, styles, colors }) {
@@ -128,7 +137,11 @@ export default function InboxScreen() {
 
   const openNotification = (notification) => {
     markNotificationRead(notification.id);
-    if (notification.bookingId) router.push(`/booking/${notification.bookingId}?from=inbox`);
+    if (notification.bookingId) {
+      router.push(`/booking/${notification.bookingId}?from=inbox`);
+    } else if (NOTIFICATION_ROUTES[notification.type]) {
+      router.push(NOTIFICATION_ROUTES[notification.type]);
+    }
   };
 
   const confirmDelete = () => {

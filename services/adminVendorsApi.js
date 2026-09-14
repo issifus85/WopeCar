@@ -141,6 +141,23 @@ export async function rejectVendor(vendor, reason) {
 }
 
 /**
+ * Free-text admin -> vendor message, separate from every other notifyUser()
+ * call in this file (which all accompany a specific state change - approve,
+ * reject, document status, payout). This is the only one where admin
+ * chooses the title/body themselves, for anything not already covered by a
+ * dedicated action (a policy reminder, a heads-up about an upcoming event,
+ * etc.) - see app/admin/vendors.js's per-vendor "Notify" button.
+ */
+export async function sendVendorNotification(vendor, { title, body }) {
+  await notifyUser({
+    userId: vendor.user_id,
+    type: 'vendor_admin_alert',
+    title,
+    body,
+  });
+}
+
+/**
  * Signed preview URLs for a vendor's latest upload of each verification doc
  * type - relies on documents_admin_all (table) and the storage bucket's own
  * documents_admin_all policy, both already granting admins full access to

@@ -11,12 +11,13 @@ import ConfirmModal from '../../components/ConfirmModal';
 import ReasonModal from '../../components/admin/ReasonModal';
 import VendorDocumentsModal from '../../components/admin/VendorDocumentsModal';
 import RecordPayoutModal from '../../components/admin/RecordPayoutModal';
-import { listVendors, getVendorStats, approveVendor, rejectVendor, recordVendorPayout } from '../../services/adminVendorsApi';
+import SendVendorNotificationModal from '../../components/admin/SendVendorNotificationModal';
+import { listVendors, getVendorStats, approveVendor, rejectVendor, recordVendorPayout, sendVendorNotification } from '../../services/adminVendorsApi';
 
 const DOC_STATUS_TONE = { not_submitted: 'muted', under_review: 'warning', verified: 'success', rejected: 'error' };
 const DOC_STATUS_LABEL = { not_submitted: 'Not Submitted', under_review: 'Under Review', verified: 'Verified', rejected: 'Rejected' };
 
-function VendorCard({ vendor, stats, isPending, onApprove, onReject, onReviewDocuments, onRecordPayout, styles, colors }) {
+function VendorCard({ vendor, stats, isPending, onApprove, onReject, onReviewDocuments, onRecordPayout, onNotify, styles, colors }) {
   const owner = vendor.users;
   return (
     <View style={styles.card}>
@@ -84,12 +85,18 @@ function VendorCard({ vendor, stats, isPending, onApprove, onReject, onReviewDoc
         </View>
       )}
 
-      {!isPending && (
-        <TouchableOpacity style={styles.payoutButton} onPress={onRecordPayout}>
-          <Ionicons name="cash-outline" size={16} color={colors.teal} />
-          <Text style={styles.payoutButtonText}>Record Payout</Text>
+      <View style={styles.secondaryActions}>
+        <TouchableOpacity style={styles.notifyButton} onPress={onNotify}>
+          <Ionicons name="notifications-outline" size={16} color={colors.teal} />
+          <Text style={styles.notifyButtonText}>Notify</Text>
         </TouchableOpacity>
-      )}
+        {!isPending && (
+          <TouchableOpacity style={styles.payoutButton} onPress={onRecordPayout}>
+            <Ionicons name="cash-outline" size={16} color={colors.teal} />
+            <Text style={styles.payoutButtonText}>Record Payout</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {isPending && (
         <View style={styles.actions}>
@@ -145,6 +152,7 @@ export default function AdminVendorsScreen() {
   const [pendingReject, setPendingReject] = useState(null);
   const [documentsVendor, setDocumentsVendor] = useState(null);
   const [payoutVendor, setPayoutVendor] = useState(null);
+  const [notifyVendor, setNotifyVendor] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -210,6 +218,18 @@ export default function AdminVendorsScreen() {
     }
   };
 
+  const handleSendNotification = async ({ title, body }) => {
+    setIsSaving(true);
+    try {
+      await sendVendorNotification(notifyVendor, { title, body });
+      setNotifyVendor(null);
+    } catch (e) {
+      setError(e.message || 'Could not send notification.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <FilterTabs
@@ -235,6 +255,7 @@ export default function AdminVendorsScreen() {
               onReject={() => setPendingReject(item)}
               onReviewDocuments={() => setDocumentsVendor(item)}
               onRecordPayout={() => setPayoutVendor(item)}
+              onNotify={() => setNotifyVendor(item)}
               styles={styles}
               colors={colors}
             />
@@ -274,6 +295,13 @@ export default function AdminVendorsScreen() {
         isSaving={isSaving}
         onCancel={() => setPayoutVendor(null)}
         onSubmit={handleRecordPayout}
+      />
+      <SendVendorNotificationModal
+        visible={!!notifyVendor}
+        vendor={notifyVendor}
+        isSaving={isSaving}
+        onCancel={() => setNotifyVendor(null)}
+        onSubmit={handleSendNotification}
       />
     </View>
   );
@@ -461,12 +489,33 @@ function createStyles(colors) {
       fontSize: 13,
       color: colors.white,
     },
-    payoutButton: {
+    secondaryActions: {
+      flexDirection: 'row',
+      gap: 10,
+      marginTop: 12,
+    },
+    notifyButton: {
+      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       gap: 6,
-      marginTop: 12,
+      paddingVertical: 11,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.teal,
+    },
+    notifyButtonText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 13,
+      color: colors.teal,
+    },
+    payoutButton: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
       paddingVertical: 11,
       borderRadius: 10,
       borderWidth: 1,
