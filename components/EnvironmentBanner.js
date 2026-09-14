@@ -27,10 +27,20 @@ export default function EnvironmentBanner() {
   if (!label) return null;
 
   return (
-    <View style={[styles.container, { height: insets.top + BANNER_HEIGHT }]}>
+    <View style={[styles.container, { height: getEnvironmentBannerHeight(insets.top) }]}>
       <Text style={styles.text}>🧪  {label} — Test build. Not live.</Text>
     </View>
   );
+}
+
+// Shared with MessageThread.js: this banner sits above the root Stack (see
+// app/_layout.js), so anything computing its own on-screen position relative
+// to the full device screen - not just its local navigator - needs to know
+// how much space it takes up, the same way it needs the native header's
+// height. Returns 0 on builds where the banner itself renders nothing.
+export function getEnvironmentBannerHeight(insetsTop) {
+  const appEnv = Constants.expoConfig?.extra?.APP_ENV;
+  return ENV_LABELS[appEnv] ? insetsTop + BANNER_HEIGHT : 0;
 }
 
 const styles = StyleSheet.create({

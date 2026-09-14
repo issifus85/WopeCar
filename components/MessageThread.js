@@ -9,11 +9,13 @@ import {
 import Reanimated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useHeaderHeight } from '@react-navigation/elements';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { getChatAttachmentSignedUrl, openChatDocument } from '../services/chatAttachmentsApi';
 import PinnedBookingSummary from './PinnedBookingSummary';
+import { getEnvironmentBannerHeight } from './EnvironmentBanner';
 import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../utils/imageUrl';
 
 const ATTACHMENT_WIDTH = 200;
@@ -215,6 +217,7 @@ export default function MessageThread({
 }) {
   const { colors } = useAppTheme();
   const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [draft, setDraft] = useState('');
   const [isMenuVisible, setIsMenuVisible] = useState(false);
@@ -324,10 +327,24 @@ export default function MessageThread({
   // turned out to have live-reported regressions of its own on iOS).
   // Decoupling iOS from the library entirely, rather than debugging why
   // its version misbehaves, since iOS never needed it in the first place.
+  // keyboardVerticalOffset has to equal everything sitting ABOVE this
+  // component's own local layout parent - RN's KeyboardAvoidingView
+  // measures its own position via onLayout, which is relative to its
+  // parent, not the screen, so a native stack header (useHeaderHeight -
+  // 0 when this screen has none, e.g. the vendor support tab) and the
+  // root-level EnvironmentBanner (app/_layout.js, renders above the
+  // whole Stack on any non-production build) are both invisible to that
+  // measurement and have to be added back in by hand. A screen-local
+  // sibling like inbox/[id].js's participantHeader does NOT belong here -
+  // it's inside the same local parent, so it's already netted out.
+  // Getting this wrong doesn't error, it just silently under-pads and the
+  // keyboard covers the composer - which is exactly what a stale hardcoded
+  // 90 here did once the real total (header + banner) grew past it.
+  const iosKeyboardOffset = headerHeight + getEnvironmentBannerHeight(insets.top);
   const Wrapper = Platform.OS === 'android' ? Reanimated.View : KeyboardAvoidingView;
   const wrapperProps = Platform.OS === 'android'
     ? { style: [styles.container, androidKeyboardStyle] }
-    : { style: styles.container, behavior: 'padding', keyboardVerticalOffset: 90 };
+    : { style: styles.container, behavior: 'padding', keyboardVerticalOffset: iosKeyboardOffset };
 
   return (
     <Wrapper {...wrapperProps}>
