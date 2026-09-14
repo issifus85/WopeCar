@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   StyleSheet, Text, View, FlatList, TextInput, TouchableOpacity, Platform, Modal, Pressable, ActivityIndicator, Linking, PixelRatio} from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import {
+  AndroidSoftInputModes, KeyboardAvoidingView, KeyboardController, useGenericKeyboardHandler,
+} from 'react-native-keyboard-controller';
+import Reanimated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -218,6 +221,47 @@ export default function MessageThread({
   const [viewerImageUrl, setViewerImageUrl] = useState(null);
   const listRef = useRef(null);
 
+  // Second attempt at this - the first (plain View, trusting app.json's
+  // app-wide softwareKeyboardLayoutMode "pan") live-reported a new
+  // problem: pan mode shifts the ENTIRE window, including the screen's
+  // header above this component - fine on a long form, but this screen
+  // doesn't have enough content between the header and the keyboard to
+  // absorb that shift, so the header (with the back button) got pushed
+  // off the top of the screen instead. Classic pan-mode chat problem.
+  // adjustResize would keep the header fixed and only shrink the middle
+  // (what we actually want) but is broken under this app's edge-to-edge
+  // setup (see app.json's softwareKeyboardLayoutMode commit).
+  //
+  // Fix: override the app-wide "pan" to SOFT_INPUT_ADJUST_NOTHING for as
+  // long as this screen is open (native does zero adjustment while
+  // mounted, restores the app default on unmount), and do 100% of the
+  // compensation ourselves via useGenericKeyboardHandler - same hook as
+  // before, but this time nothing native is happening in parallel, so
+  // there's no double-compensation. Applying the resulting padding only
+  // inside THIS component (never touching the sibling header rendered by
+  // the parent screen) is what keeps the header fixed while only the
+  // message list above the composer shrinks - true resize-like behavior,
+  // achieved in JS instead of relying on the broken native mode.
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    KeyboardController.setInputMode(AndroidSoftInputModes.SOFT_INPUT_ADJUST_NOTHING);
+    return () => KeyboardController.setDefaultMode();
+  }, []);
+  const androidKeyboardHeight = useSharedValue(0);
+  useGenericKeyboardHandler({
+    onMove: (e) => {
+      'worklet';
+      androidKeyboardHeight.value = e.height;
+    },
+    onEnd: (e) => {
+      'worklet';
+      androidKeyboardHeight.value = e.height;
+    },
+  }, []);
+  const androidKeyboardStyle = useAnimatedStyle(() => ({
+    paddingBottom: androidKeyboardHeight.value,
+  }));
+
   useEffect(() => {
     const timer = setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 50);
     return () => clearTimeout(timer);
@@ -255,21 +299,14 @@ export default function MessageThread({
     }
   };
 
-  // Android needs no keyboard-avoidance code at all here anymore -
-  // app.json's softwareKeyboardLayoutMode "pan" already makes the OS pan
-  // the whole screen to keep the focused composer visible above the
-  // keyboard natively. The previous attempt layered a manual
-  // useGenericKeyboardHandler-driven paddingBottom on top of that, which
-  // double-compensated: live-reported as the composer sitting too high
-  // with a large gap the moment the keyboard opened, then "dropping down"
-  // to the correct spot as soon as typing triggered a re-layout that
-  // resolved one of the two stacked adjustments. A plain View lets pan
-  // mode do this on its own, same as any other native Android app relying
-  // on adjustPan. iOS is untouched - it was never affected by any of this
-  // and keeps using the library's own KeyboardAvoidingView normally.
-  const Wrapper = Platform.OS === 'android' ? View : KeyboardAvoidingView;
+  // See the SOFT_INPUT_ADJUST_NOTHING effect above for why Android drives
+  // its own animated padding here instead of using the OS pan/resize
+  // modes or the library's KeyboardAvoidingView. iOS is untouched - it
+  // was never affected by any of this and keeps using the library's own
+  // KeyboardAvoidingView normally.
+  const Wrapper = Platform.OS === 'android' ? Reanimated.View : KeyboardAvoidingView;
   const wrapperProps = Platform.OS === 'android'
-    ? { style: styles.container }
+    ? { style: [styles.container, androidKeyboardStyle] }
     : { style: styles.container, behavior: 'padding', keyboardVerticalOffset: 90 };
 
   return (
