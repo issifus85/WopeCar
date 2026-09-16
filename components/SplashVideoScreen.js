@@ -11,12 +11,19 @@ const SPLASH_VIDEO = require('../assets/videos/splash.mp4');
 // expo-splash-screen image config in app.json) hands off - see
 // app/_layout.js's showIntro gate. Muted so autoplay isn't blocked by the
 // browser; tapping anywhere (or letting it play out) advances to the app.
+// Playback is sped up (the source file itself is a flat 10s, live-verified
+// via mdls) to shorten cold-launch time without needing a re-edited/
+// re-exported video asset - 1.4x keeps the motion looking intentional
+// rather than comically fast while cutting ~3s off every cold launch.
+const PLAYBACK_RATE = 1.4;
+
 export default function SplashVideoScreen({ onFinish }) {
   const insets = useSafeAreaInsets();
   const finishedRef = useRef(false);
 
   const player = useVideoPlayer(SPLASH_VIDEO, (p) => {
     p.muted = true;
+    p.playbackRate = PLAYBACK_RATE;
     p.play();
   });
 
