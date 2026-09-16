@@ -56,7 +56,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/logo-mark-navy.png",
+          "image": "./assets/adaptive-icon.png",
           "imageWidth": 220,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
