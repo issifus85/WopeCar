@@ -145,7 +145,7 @@ export default function ConversationListScreen({ category, title, subtitle, back
           data={filteredConversations}
           keyExtractor={(item) => String(item.id)}
           renderItem={({ item }) => (
-            <TouchableOpacity onPress={() => router.push(`/staff-inbox/${item.id}`)}>
+            <TouchableOpacity onPress={() => router.push({ pathname: `/staff-inbox/${item.id}`, params: { from: category } })}>
               <ConversationRow conversation={item} styles={styles} colors={colors} />
             </TouchableOpacity>
           )}

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
@@ -13,7 +13,9 @@ import InviteParticipantModal from '../../components/InviteParticipantModal';
 const MESSAGE_POLL_MS = 5000;
 
 export default function StaffConversationScreen() {
-  const { id } = useLocalSearchParams();
+  const { id, from } = useLocalSearchParams();
+  const router = useRouter();
+  const navigation = useNavigation();
   const { colors } = useAppTheme();
   const { user } = useAuth();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -21,6 +23,32 @@ export default function StaffConversationScreen() {
   const [messages, setMessages] = useState([]);
   const [isInviteVisible, setIsInviteVisible] = useState(false);
   const [isUpdatingFlags, setIsUpdatingFlags] = useState(false);
+
+  // Reached from two different lists sharing this same route - the Admin
+  // Panel's Inbox tab (category='general') and Ride Support (category=
+  // 'support_ops', see ConversationListScreen's push call) - `from` (set
+  // there) picks the right one to return to. Same root-level-screen-pushed-
+  // from-a-nested-tab-navigator GO_BACK-unresolved fix as app/inbox/[id].js
+  // and every other admin detail screen (canGoBack() isn't a safe guard
+  // either, it reports true even in the broken state) - this screen never
+  // got it originally, which is what made its back button occasionally do
+  // nothing on repeated taps instead of just being slow.
+  const handleBack = useCallback(() => {
+    router.replace(from === 'general' ? '/admin/(tabs)/inbox' : '/staff-inbox');
+  }, [router, from]);
+
+  const backLabel = from === 'general' ? 'Inbox' : 'Ride Support';
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity onPress={handleBack} hitSlop={10} style={styles.headerBackButton}>
+          <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+          <Text style={styles.headerBackLabel}>{backLabel}</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, handleBack, styles, colors, backLabel]);
 
   const loadMeta = useCallback(() => {
     conversationsApi.getConversation(id).then(setConversation).catch(() => {});
@@ -170,6 +198,17 @@ export default function StaffConversationScreen() {
 
 function createStyles(colors) {
   return StyleSheet.create({
+    headerBackButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingRight: 8,
+    },
+    headerBackLabel: {
+      fontFamily: FONTS.regular,
+      fontSize: 17,
+      color: colors.textPrimary,
+      marginLeft: -4,
+    },
     container: {
       flex: 1,
       backgroundColor: colors.background,
