@@ -284,25 +284,28 @@ export default function CarDetailScreen() {
         </View>
 
         <View style={styles.sheet}>
-          <Text style={styles.name}>{car.name}</Text>
+          <View style={styles.nameRow}>
+            <Text style={styles.name} numberOfLines={1} ellipsizeMode="tail">{car.name}</Text>
+            <View style={[styles.availabilityBadge, { backgroundColor: availability.isAvailable ? colors.successBg : colors.errorBg }]}>
+              <Ionicons
+                name={availability.isAvailable ? 'checkmark-circle' : 'close-circle'}
+                size={13}
+                color={availability.isAvailable ? colors.success : colors.error}
+              />
+              <Text style={[styles.availabilityText, { color: availability.isAvailable ? colors.success : colors.error }]}>
+                {availability.longLabel}
+              </Text>
+            </View>
+          </View>
           <View style={styles.metaRow}>
             <Ionicons name="star" size={14} color="#F5A623" />
             <Text style={styles.metaText}>{rating.toFixed(1)} ({totalReviews} ratings)</Text>
             {!!car.location && (
-              <>
+              <View style={styles.locationWrap}>
                 <Ionicons name="location-outline" size={14} color={colors.textSubtle} style={{ marginLeft: 10 }} />
-                <Text style={styles.metaText}>{car.location}</Text>
-              </>
+                <Text style={styles.metaText} numberOfLines={1} ellipsizeMode="tail">{car.location}</Text>
+              </View>
             )}
-            <Ionicons
-              name={availability.isAvailable ? 'checkmark-circle' : 'close-circle'}
-              size={14}
-              color={availability.isAvailable ? colors.success : colors.error}
-              style={{ marginLeft: 10 }}
-            />
-            <Text style={[styles.metaText, { color: availability.isAvailable ? colors.success : colors.error }]}>
-              {availability.longLabel}
-            </Text>
           </View>
 
           <View style={styles.badgeRow}>
@@ -595,10 +598,30 @@ function createStyles(colors) {
   sheet: {
     padding: 20,
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
   name: {
+    flex: 1,
     fontFamily: FONTS.bold,
     fontSize: 22,
     color: colors.textPrimary,
+  },
+  availabilityBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  availabilityText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 11,
   },
   metaRow: {
     flexDirection: 'row',
@@ -610,6 +633,13 @@ function createStyles(colors) {
     fontFamily: FONTS.regular,
     fontSize: 13,
     color: colors.textSubtle,
+  },
+  locationWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minWidth: 0,
   },
   badgeRow: {
     flexDirection: 'row',
