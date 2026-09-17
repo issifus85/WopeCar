@@ -10,12 +10,15 @@ const SPLASH_VIDEO = require('../assets/videos/splash.mp4');
 // Shown once per cold app launch, after the native static splash (the
 // expo-splash-screen image config in app.json) hands off - see
 // app/_layout.js's showIntro gate. Muted so autoplay isn't blocked by the
-// browser; tapping anywhere (or letting it play out) advances to the app.
-// Playback is sped up (the source file itself is a flat 10s, live-verified
-// via mdls) to shorten cold-launch time without needing a re-edited/
-// re-exported video asset - 1.4x keeps the motion looking intentional
-// rather than comically fast while cutting ~3s off every cold launch.
-const PLAYBACK_RATE = 1.4;
+// browser; tapping anywhere (or letting it play out) advances to the app,
+// and the "Tap to skip" hint below makes that discoverable - so there's no
+// tradeoff to speeding this up further, a viewer who wants to linger can
+// always just not tap. Playback is sped up (the source file itself is a
+// flat 10s, live-verified via mdls) rather than re-editing/re-exporting the
+// video asset - 2x (was 1.4x) cuts cold-launch time to ~5s, still cross-
+// platform reliable (both AVPlayer and ExoPlayer handle up to 2x cleanly;
+// muted, so no pitch-correction artifacts to worry about either).
+const PLAYBACK_RATE = 2.0;
 
 export default function SplashVideoScreen({ onFinish }) {
   const insets = useSafeAreaInsets();
