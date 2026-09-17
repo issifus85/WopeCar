@@ -46,6 +46,7 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {},
+    "preview-store": {}
   }
 }
