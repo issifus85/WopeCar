@@ -450,7 +450,7 @@ export default function CarDetailScreen() {
 
           {!!rentalTerms && (
             <View style={styles.section}>
-              <RentalTermsSection drivenBy={car.drivenBy} sections={rentalTerms} />
+              <RentalTermsSection drivenBy={car.drivenBy} energySource={car.energySource} sections={rentalTerms} />
             </View>
           )}
 

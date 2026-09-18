@@ -12,10 +12,15 @@ const DRIVE_TYPE_TITLES = {
 // constants/rentalTerms.js content, which this now shapes its return value
 // to match exactly ({ chauffeur: {title, clauses}, self_drive: {title,
 // clauses} }) so callers barely needed to change.
+// `requiresEnergySource` is left unfiltered here (e.g. the EV battery-
+// charging clause) - RentalTermsSection filters it per car so this same
+// fetch also serves the standalone /rental-terms reference screen, which
+// has no specific car and should list every clause regardless of energy
+// source.
 export async function getRentalTermsSections() {
   const { data, error } = await supabase
     .from('rental_terms_clauses')
-    .select('drive_type, title, body')
+    .select('drive_type, title, body, requires_energy_source')
     .eq('is_published', true)
     .order('drive_type')
     .order('position');
@@ -23,7 +28,7 @@ export async function getRentalTermsSections() {
 
   const grouped = { chauffeur: [], self_drive: [] };
   (data ?? []).forEach((row) => {
-    grouped[row.drive_type]?.push({ title: row.title, body: row.body });
+    grouped[row.drive_type]?.push({ title: row.title, body: row.body, requiresEnergySource: row.requires_energy_source });
   });
 
   return {

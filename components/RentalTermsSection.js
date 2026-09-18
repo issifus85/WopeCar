@@ -37,7 +37,15 @@ function TermsBlock({ block, styles }) {
 // } from services/rentalTermsApi.js's getRentalTermsSections() - fetched by
 // the parent screen (app/car/[id].js), not this component, matching how
 // FaqSection also receives its data as a prop rather than fetching itself.
-export default function RentalTermsSection({ drivenBy, sections }) {
+// `energySource` (car.energySource) gates any clause with a
+// requiresEnergySource set (e.g. the EV battery-charging clause) so it only
+// shows on cars whose energy source actually matches - a clause with no
+// requiresEnergySource applies to every car, same as before this existed.
+function filterByEnergySource(block, energySource) {
+  return { ...block, clauses: block.clauses.filter((c) => !c.requiresEnergySource || c.requiresEnergySource === energySource) };
+}
+
+export default function RentalTermsSection({ drivenBy, energySource, sections }) {
   const { colors } = useAppTheme();
   const router = useRouter();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -45,12 +53,15 @@ export default function RentalTermsSection({ drivenBy, sections }) {
 
   if (!sections) return null;
 
+  const chauffeurBlock = filterByEnergySource(sections.chauffeur, energySource);
+  const selfDriveBlock = filterByEnergySource(sections.self_drive, energySource);
+
   return (
     <View>
       <SectionHeading>Rental Terms & Conditions</SectionHeading>
 
-      <TermsBlock block={sections.chauffeur} styles={{ ...styles, chevronColor: colors.textMuted }} />
-      {showSelfDrive && <TermsBlock block={sections.self_drive} styles={{ ...styles, chevronColor: colors.textMuted }} />}
+      <TermsBlock block={chauffeurBlock} styles={{ ...styles, chevronColor: colors.textMuted }} />
+      {showSelfDrive && <TermsBlock block={selfDriveBlock} styles={{ ...styles, chevronColor: colors.textMuted }} />}
 
       <TouchableOpacity style={styles.fullTermsButton} onPress={() => router.push('/rental-terms')}>
         <Text style={styles.fullTermsText}>View Full Terms & Conditions</Text>
