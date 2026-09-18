@@ -37,18 +37,25 @@ export default function ResetPasswordCallbackScreen() {
     if (Platform.OS === 'web') return;
 
     let isCancelled = false;
+    // Tracks whether we've reached a terminal state (error shown, or
+    // navigated to /reset-password) - guards the timeout below from firing
+    // after a legit resolution, while still firing if the deep link is
+    // missed entirely or setSession() hangs.
+    let hasSettled = false;
 
     const handleUrl = async (url) => {
-      if (!url || isCancelled) return;
+      if (!url || isCancelled || hasSettled) return;
       const { access_token, refresh_token } = parseTokensFromUrl(url);
       if (!access_token || !refresh_token) {
         if (!isCancelled) {
+          hasSettled = true;
           setError(parseAuthErrorFromUrl(url) || 'This password reset link is no longer valid.');
         }
         return;
       }
       const { error: sessionError } = await supabase.auth.setSession({ access_token, refresh_token });
       if (isCancelled) return;
+      hasSettled = true;
       if (sessionError) {
         setError(sessionError.message);
         return;
@@ -56,10 +63,24 @@ export default function ResetPasswordCallbackScreen() {
       router.replace('/reset-password');
     };
 
-    Linking.getInitialURL().then((url) => { if (url) handleUrl(url); });
+    Linking.getInitialURL().then((url) => { if (url) handleUrl(url); }).catch(() => {});
     const subscription = Linking.addEventListener('url', ({ url }) => handleUrl(url));
+
+    // Neither getInitialURL() nor the 'url' event is guaranteed to fire (the
+    // OS can hand off the deep link before this listener finishes
+    // registering), and setSession() has no built-in timeout - without this,
+    // a miss on either left the bare ActivityIndicator spinning forever with
+    // no way out but a force-quit.
+    const timeout = setTimeout(() => {
+      if (!isCancelled && !hasSettled) {
+        hasSettled = true;
+        setError('This link took too long to open. Please request a new password reset link.');
+      }
+    }, 8000);
+
     return () => {
       isCancelled = true;
+      clearTimeout(timeout);
       subscription.remove();
     };
   }, [router]);
