@@ -150,7 +150,24 @@ export default function CarDetailScreen() {
   ].filter(Boolean);
 
   const handleShare = async () => {
-    const link = Linking.createURL(`/car/${car.id}`);
+    // A wopecar:// custom-scheme link isn't a real web URL, so it shared as
+    // inert plain text - no link preview, no way to open it without the app
+    // already installed. Sharing the website's real car page instead means
+    // it actually linkifies/previews in WhatsApp/SMS/etc.
+    //
+    // TODO(wopecar.com cutover): swap this to `https://wopecar.com/book-a-car/${car.slug}`
+    // once wopecar.com's DNS points at the new site (still the legacy
+    // Laravel site as of 2026-09-18 - see memory website_supabase_prod_cutover.md).
+    // TODO(app store launch): once the app is actually live on the App
+    // Store/Play Store, upgrade this to a real universal/app link (iOS
+    // apple-app-site-association + Android assetlinks.json, both served from
+    // wopecar.com, plus app.json's associatedDomains/intentFilters) so
+    // tapping the link opens the app directly to this car if installed, or
+    // the correct store page if not - can't be set up before the app is
+    // published under its real bundle ID (needed to verify domain
+    // ownership). See memory email_universal_link_todo.md for the same gap
+    // in transactional emails - fix both together.
+    const link = car.slug ? `https://wopecar-website.vercel.app/book-a-car/${car.slug}` : Linking.createURL(`/car/${car.id}`);
     const message = `Check out this ${car.name} on WopeCar - ${formatCurrency(car.pricePerDay, activeCurrency)}/day in ${car.location}\n${link}`;
 
     try {

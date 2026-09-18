@@ -85,6 +85,7 @@ function normalizeCar(raw) {
 
   return {
     id: raw.id,
+    slug: raw.slug ?? null,
     vendorId: raw.vendor_id ?? null,
     name: raw.name || 'Untitled Car',
     type: raw.type ?? undefined,
