@@ -2,7 +2,7 @@
   "expo": {
     "name": "WopeCar",
     "slug": "WopeCar",
-    "version": "1.0.1",
+    "version": "1.0.0",
     "scheme": "wopecar",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
