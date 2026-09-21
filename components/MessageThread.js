@@ -252,29 +252,40 @@ export default function MessageThread({
     KeyboardController.setInputMode(AndroidSoftInputModes.SOFT_INPUT_ADJUST_NOTHING);
     return () => KeyboardController.setDefaultMode();
   }, []);
-  const androidKeyboardHeight = useSharedValue(0);
+  // react-native-keyboard-controller's useGenericKeyboardHandler isn't
+  // platform-gated - these onMove/onEnd callbacks fire on iOS too, so
+  // keyboardHeight.value tracks the real keyboard height cross-platform,
+  // even though androidKeyboardStyle below (built from it) is only ever
+  // applied to Android's own wrapper. composerBottomStyle further down
+  // reuses this value for iOS as a plain "is the keyboard open" signal,
+  // without touching how iOS actually shifts content (still 100%
+  // KeyboardAvoidingView, untouched - see its own comment further down).
+  const keyboardHeight = useSharedValue(0);
   useGenericKeyboardHandler({
     onMove: (e) => {
       'worklet';
-      androidKeyboardHeight.value = e.height;
+      keyboardHeight.value = e.height;
     },
     onEnd: (e) => {
       'worklet';
-      androidKeyboardHeight.value = e.height;
+      keyboardHeight.value = e.height;
     },
   }, []);
   const androidKeyboardStyle = useAnimatedStyle(() => ({
-    paddingBottom: androidKeyboardHeight.value,
+    paddingBottom: keyboardHeight.value,
   }));
-  // The composer already reserves insets.bottom (the gesture-nav-bar safe
-  // area) unconditionally below - correct while the keyboard is closed,
-  // but once it's open the keyboard itself covers that same area, so
-  // adding both stacks into a visible extra gap above the keyboard
-  // (live-reported). Collapses to a small fixed gap on Android whenever
-  // the keyboard has real height, leaving iOS's original calculation
-  // completely untouched in every case.
+  // The composer already reserves insets.bottom (the gesture-nav-bar/home-
+  // indicator safe area) unconditionally below - correct while the
+  // keyboard is closed, but once it's open the keyboard itself covers that
+  // same area, so adding both stacks into a visible extra gap above the
+  // keyboard (live-reported on Android first, then iOS - see
+  // extraBottomInset's own comment above: Vendor Support's +80 for
+  // FloatingTabBar clearance made iOS's version of this gap especially
+  // wide). Collapses to a small fixed gap on both platforms whenever the
+  // keyboard has real height; the full calculation still applies whenever
+  // it's closed on either platform, unchanged from before.
   const composerBottomStyle = useAnimatedStyle(() => {
-    if (Platform.OS === 'android' && androidKeyboardHeight.value > 0) {
+    if (keyboardHeight.value > 0) {
       return { paddingBottom: 12 };
     }
     return { paddingBottom: Math.max(12, insets.bottom) + extraBottomInset };
