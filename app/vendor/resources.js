@@ -11,7 +11,7 @@ import VendorHeader from '../../components/VendorHeader';
 // app's own vehicle-class/pricing data, the real Partner Terms, or the
 // real Vehicle Inspection checklist).
 const TOPICS = [
-  { icon: 'rocket-outline', label: 'Getting Started as a Host', route: '/vendor/getting-started' },
+  { icon: 'rocket-outline', label: 'Getting Started as a Partner', route: '/vendor/getting-started' },
   { icon: 'pricetag-outline', label: 'Pricing Your Vehicle', route: '/vendor/pricing-guide' },
   { icon: 'calendar-outline', label: 'Managing Bookings & Availability', route: '/vendor/bookings-guide' },
   { icon: 'cash-outline', label: 'Getting Paid', route: '/vendor/payouts-guide' },
@@ -25,7 +25,7 @@ export default function VendorResourcesScreen() {
 
   return (
     <View style={styles.container}>
-      <VendorHeader title="Vendor Resources" subtitle="Guides for WopeCar hosts" onBack={() => router.replace('/vendor/menu')} />
+      <VendorHeader title="Vendor Resources" subtitle="Guides for WopeCar partners" onBack={() => router.replace('/vendor/menu')} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>

@@ -71,7 +71,7 @@ You may terminate this agreement at any time by deleting the App from your devic
     heading: '11. User Conduct and Objectionable Content',
     body: `WopeCar has zero tolerance for objectionable content and abusive behaviour by any user. You may not use the App to post, send, or otherwise share content that is illegal, threatening, harassing, hateful, obscene, fraudulent, or otherwise objectionable, and you may not use the App to abuse, harass, or defraud another user.
 
-The App provides a way to report an objectionable listing (from any car's detail page) and a way to block a host, which immediately removes their listings from your search results. We review every report and block within 24 hours of receipt and will remove violating content and may suspend or terminate the account responsible for it. To report a concern directly, contact us at support@wopecar.com.`,
+The App provides a way to report an objectionable listing (from any car's detail page) and a way to block a partner, which immediately removes their listings from your search results. We review every report and block within 24 hours of receipt and will remove violating content and may suspend or terminate the account responsible for it. To report a concern directly, contact us at support@wopecar.com.`,
   },
   {
     heading: '12. Governing Law',

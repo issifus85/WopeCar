@@ -324,7 +324,7 @@ function RootNavigator({ authRedirectType }) {
           <Stack.Screen name="vendor/car/pricing/[id]" options={{ headerShown: false, title: 'Pricing & Discounts' }} />
           <Stack.Screen name="vendor/history" options={{ headerShown: false, title: 'Booking History' }} />
           <Stack.Screen name="vendor/resources" options={{ headerShown: false, title: 'Vendor Resources' }} />
-          <Stack.Screen name="vendor/getting-started" options={{ headerShown: false, title: 'Getting Started as a Host' }} />
+          <Stack.Screen name="vendor/getting-started" options={{ headerShown: false, title: 'Getting Started as a Partner' }} />
           <Stack.Screen name="vendor/pricing-guide" options={{ headerShown: false, title: 'Pricing Your Vehicle' }} />
           <Stack.Screen name="vendor/bookings-guide" options={{ headerShown: false, title: 'Managing Bookings & Availability' }} />
           <Stack.Screen name="vendor/payouts-guide" options={{ headerShown: false, title: 'Getting Paid' }} />

@@ -66,7 +66,7 @@ export default function VendorMenuScreen() {
           <Row
             icon="book-outline"
             label="Vendor Resources"
-            subtitle="Guides for WopeCar hosts"
+            subtitle="Guides for WopeCar partners"
             onPress={() => router.push('/vendor/resources')}
             styles={styles}
             colors={colors}

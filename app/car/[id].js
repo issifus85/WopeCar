@@ -255,7 +255,7 @@ export default function CarDetailScreen() {
     if (isHostBlocked) {
       unblockVendor(car.vendorId)
         .then(() => setIsHostBlocked(false))
-        .catch((e) => Alert.alert('Could not unblock host', e.message || 'Please check your connection and try again.'));
+        .catch((e) => Alert.alert('Could not unblock partner', e.message || 'Please check your connection and try again.'));
       return;
     }
     setIsBlockModalVisible(true);
@@ -266,9 +266,9 @@ export default function CarDetailScreen() {
     try {
       await blockVendor(car.vendorId, reason);
       setIsHostBlocked(true);
-      Alert.alert('Host Blocked', "You won't see this host's listings anymore. Our team will review your report within 24 hours.");
+      Alert.alert('Partner Blocked', "You won't see this partner's listings anymore. Our team will review your report within 24 hours.");
     } catch (e) {
-      Alert.alert('Could not block host', e.message || 'Please check your connection and try again.');
+      Alert.alert('Could not block partner', e.message || 'Please check your connection and try again.');
     }
   };
 
@@ -515,7 +515,7 @@ export default function CarDetailScreen() {
               <>
                 <Text style={styles.reportLinkDivider}>·</Text>
                 <TouchableOpacity onPress={handleBlockLinkPress}>
-                  <Text style={styles.reportLinkText}>{isHostBlocked ? 'Unblock this host' : 'Block this host'}</Text>
+                  <Text style={styles.reportLinkText}>{isHostBlocked ? 'Unblock this partner' : 'Block this partner'}</Text>
                 </TouchableOpacity>
               </>
             )}

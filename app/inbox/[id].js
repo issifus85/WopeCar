@@ -10,7 +10,7 @@ import MessageThread from '../../components/MessageThread';
 import { pickAndUploadChatImage, pickAndUploadChatDocument, getCurrentLocationForChat } from '../../services/chatAttachmentsApi';
 import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
 
-const ROLE_ICONS = { Host: 'home-outline', Driver: 'car-outline', Support: 'headset-outline' };
+const ROLE_ICONS = { Partner: 'home-outline', Driver: 'car-outline', Support: 'headset-outline' };
 const AVATAR_SIZE = 36;
 
 export default function ConversationScreen() {

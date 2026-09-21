@@ -172,7 +172,7 @@ export default function InspectionReportScreen() {
           <Text style={styles.cardTitle}>Signatures</Text>
           <View style={styles.signatureRow}>
             <SignatureThumb label="Renter" hasSignature={inspection.hasRenterSignature} styles={styles} colors={colors} />
-            <SignatureThumb label="Host / Agent" hasSignature={inspection.hasAgentSignature} styles={styles} colors={colors} />
+            <SignatureThumb label="Partner / Agent" hasSignature={inspection.hasAgentSignature} styles={styles} colors={colors} />
           </View>
         </View>
       </ScrollView>

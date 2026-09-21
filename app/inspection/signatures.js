@@ -189,7 +189,7 @@ export default function InspectionSignaturesScreen() {
         />
 
         <SignatureSlot
-          label="Host / Agent Signature"
+          label="Partner / Agent Signature"
           value={draft.signatures.agent}
           mode={agentMode}
           onModeChange={setAgentMode}

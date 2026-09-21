@@ -40,7 +40,7 @@ export default function DiagnosticsScreen() {
     Platform: `${Platform.OS} ${Platform.Version ?? ''}`.trim(),
     'Screen Size': `${Math.round(width)}×${Math.round(height)}`,
     'API Endpoint': API_BASE_URL,
-    'App Mode': settings.appMode === 'vendor' ? 'Host' : 'Renter',
+    'App Mode': settings.appMode === 'vendor' ? 'Partner' : 'Renter',
     Currency: activeCurrency?.code ?? 'N/A',
     'Dark Mode': settings.darkMode,
   }), [width, height, settings.appMode, settings.darkMode, activeCurrency?.code]);

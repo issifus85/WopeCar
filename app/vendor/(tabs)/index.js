@@ -109,7 +109,7 @@ export default function VendorDashboardScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.eyebrow}>Host Mode</Text>
+          <Text style={styles.eyebrow}>Partner Mode</Text>
           <Text style={styles.headerTitle}>Vendor Dashboard</Text>
         </View>
         <TouchableOpacity
@@ -161,7 +161,7 @@ export default function VendorDashboardScreen() {
             <View style={styles.welcomeIcon}>
               <Ionicons name="car-sport-outline" size={26} color={colors.white} />
             </View>
-            <Text style={styles.welcomeTitle}>Welcome to WopeCar Hosting</Text>
+            <Text style={styles.welcomeTitle}>Welcome, WopeCar Partner</Text>
             <Text style={styles.welcomeText}>
               List your first car to start earning. It only takes a few minutes, and WopeCar reviews every submission
               before it goes live.
@@ -170,7 +170,7 @@ export default function VendorDashboardScreen() {
               <Text style={styles.welcomeButtonText}>Add Your First Car</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.welcomeSecondaryButton} onPress={() => router.push('/vendor/getting-started')}>
-              <Text style={styles.welcomeSecondaryButtonText}>See How Hosting Works</Text>
+              <Text style={styles.welcomeSecondaryButtonText}>See How Partnering Works</Text>
             </TouchableOpacity>
           </View>
         ) : (

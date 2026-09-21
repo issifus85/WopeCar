@@ -12,7 +12,7 @@ const SECTIONS = [
     body: `We collect various types of information from and about you to provide and improve our Services. This may include:
 
 • Personal Identification Information — name, email address, phone number, physical address, driver's licence details, passport/ID number, and other identification necessary for verification and compliance.
-• Vehicle Information (for Car Owners/Hosts) — vehicle make, model, year, registration details, insurance information, maintenance records, and photos.
+• Vehicle Information (for Car Owners/Partners) — vehicle make, model, year, registration details, insurance information, maintenance records, and photos.
 • Transaction Information — details about rentals you book or provide, payment amounts, and dates.
 • Usage Data — how you access and use our Services, such as IP address, browser type, operating system, pages viewed, time spent on pages, and referring URLs.
 • Location Information — if you enable location services, we may collect precise location data to facilitate car finding and delivery.

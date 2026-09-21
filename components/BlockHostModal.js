@@ -23,11 +23,11 @@ export default function BlockHostModal({ visible, onCancel, onConfirm }) {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <Pressable style={styles.backdrop} onPress={onCancel}>
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-          <Text style={styles.title}>Block This Host</Text>
+          <Text style={styles.title}>Block This Partner</Text>
           <Text style={styles.message}>
-            You won&apos;t see this host&apos;s listings anymore, and our team will review your report within 24 hours.
+            You won&apos;t see this partner&apos;s listings anymore, and our team will review your report within 24 hours.
           </Text>
-          <Text style={styles.message}>Why are you blocking this host?</Text>
+          <Text style={styles.message}>Why are you blocking this partner?</Text>
 
           {BLOCK_REASONS.map((option) => {
             const isSelected = option === reason;
@@ -48,7 +48,7 @@ export default function BlockHostModal({ visible, onCancel, onConfirm }) {
               onPress={() => reason && onConfirm(reason)}
               disabled={!reason}
             >
-              <Text style={styles.confirmButtonText}>Block Host</Text>
+              <Text style={styles.confirmButtonText}>Block Partner</Text>
             </TouchableOpacity>
           </View>
         </Pressable>

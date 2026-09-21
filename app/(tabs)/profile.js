@@ -115,7 +115,7 @@ export default function ProfileScreen() {
           <Ionicons name="car-sport-outline" size={20} color={colors.teal} />
         </View>
         <View style={styles.accountInfo}>
-          <Text style={styles.hostTitle}>Switch to Host Mode</Text>
+          <Text style={styles.hostTitle}>Switch to Partner Mode</Text>
           <Text style={styles.accountSubtitle}>Manage your fleet and bookings as a vendor</Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={colors.textSubtle} />

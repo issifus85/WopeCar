@@ -15,7 +15,7 @@ import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
 const TABS = ['Messages', 'Notifications'];
 const AVATAR_SIZE = 44;
 
-const ROLE_ICONS = { Host: 'home-outline', Driver: 'car-outline', Support: 'headset-outline' };
+const ROLE_ICONS = { Partner: 'home-outline', Driver: 'car-outline', Support: 'headset-outline' };
 
 const NOTIFICATION_ICONS = {
   booking_created: 'calendar-outline',
