@@ -37,29 +37,47 @@ export default function ResetPasswordCallbackScreen() {
     if (Platform.OS === 'web') return;
 
     let isCancelled = false;
-    // Tracks whether we've reached a terminal state (error shown, or
-    // navigated to /reset-password) - guards the timeout below from firing
-    // after a legit resolution, while still firing if the deep link is
-    // missed entirely or setSession() hangs.
-    let hasSettled = false;
+    // Tracks the URL currently being (or already) processed, not just a
+    // did-we-settle boolean - a plain boolean stayed permanently true after
+    // the first attempt, which silently dropped every later 'url' event for
+    // the rest of this screen's mounted lifetime. That's a real gap: iOS
+    // keeps a backgrounded app alive, so a user whose first tap times out
+    // (slow network, one-off race) lands right back on this same mounted
+    // screen when they tap the email link again - and with the old
+    // boolean, that second, perfectly valid link was ignored outright,
+    // leaving the stale first error on screen forever. Confirmed live via
+    // Simulator: a second deep link with different tokens never updated the
+    // screen until this was keyed by URL instead. Comparing against the
+    // last-processed URL string lets a genuinely new link always restart
+    // processing, while still no-oping a duplicate fire of the same URL
+    // (getInitialURL() and the 'url' event both firing for one launch).
+    let processedUrl = null;
+    let timeout;
+
+    const settle = (nextError) => {
+      if (isCancelled) return;
+      clearTimeout(timeout);
+      setError(nextError);
+    };
 
     const handleUrl = async (url) => {
-      if (!url || isCancelled || hasSettled) return;
+      if (!url || isCancelled || url === processedUrl) return;
+      processedUrl = url;
+      clearTimeout(timeout);
+      setError(null); // back to the loading spinner while this new attempt resolves
+
       const { access_token, refresh_token } = parseTokensFromUrl(url);
       if (!access_token || !refresh_token) {
-        if (!isCancelled) {
-          hasSettled = true;
-          setError(parseAuthErrorFromUrl(url) || 'This password reset link is no longer valid.');
-        }
+        settle(parseAuthErrorFromUrl(url) || 'This password reset link is no longer valid.');
         return;
       }
       const { error: sessionError } = await supabase.auth.setSession({ access_token, refresh_token });
       if (isCancelled) return;
-      hasSettled = true;
       if (sessionError) {
-        setError(sessionError.message);
+        settle(sessionError.message);
         return;
       }
+      clearTimeout(timeout);
       router.replace('/reset-password');
     };
 
@@ -71,10 +89,9 @@ export default function ResetPasswordCallbackScreen() {
     // registering), and setSession() has no built-in timeout - without this,
     // a miss on either left the bare ActivityIndicator spinning forever with
     // no way out but a force-quit.
-    const timeout = setTimeout(() => {
-      if (!isCancelled && !hasSettled) {
-        hasSettled = true;
-        setError('This link took too long to open. Please request a new password reset link.');
+    timeout = setTimeout(() => {
+      if (!isCancelled && !processedUrl) {
+        settle('This link took too long to open. Please request a new password reset link.');
       }
     }, 8000);
 
