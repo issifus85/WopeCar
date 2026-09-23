@@ -6,6 +6,7 @@ import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import supabase from '../services/supabase';
 import { parseTokensFromUrl, parseAuthErrorFromUrl } from '../services/supabaseAuthApi';
+import { initialUrlPromise } from '../services/initialUrl';
 
 // Reached via a Supabase password-recovery link. Being a REAL file-based
 // route is the fix itself, not an implementation detail: without one,
@@ -17,12 +18,27 @@ import { parseTokensFromUrl, parseAuthErrorFromUrl } from '../services/supabaseA
 // signup-confirmation gap (that route already existed as a file, which is
 // exactly why it never hit this bug).
 //
-// Native: owns its own token parsing (Linking.getInitialURL() for a cold
-// launch, addEventListener('url') for a warm one) rather than splitting
-// this across a global app/_layout.js listener and this screen - fragment
-// data (#access_token=...) isn't reliably preserved through expo-router's
-// own path/query parsing, so the raw URL is re-read directly, same
-// approach performOAuthFlow already uses for the OAuth deep link.
+// Native: owns its own token parsing (initialUrlPromise for a cold launch,
+// addEventListener('url') for a warm one) rather than splitting this across
+// a global app/_layout.js listener and this screen - fragment data
+// (#access_token=...) isn't reliably preserved through expo-router's own
+// path/query parsing, so the raw URL is re-read directly, same approach
+// performOAuthFlow already uses for the OAuth deep link.
+//
+// initialUrlPromise (services/initialUrl.js), not a fresh
+// Linking.getInitialURL() call here: this screen is gated behind
+// app/_layout.js's splash-video intro like everything else in the route
+// tree, so it doesn't mount - and this effect doesn't run - until the video
+// finishes or is skipped. A real cold launch via a password-reset email
+// link was confirmed live to reach this screen with Linking.getInitialURL()
+// then coming back empty every time, even for a freshly requested, genuinely
+// valid link - "Link No Longer Valid" on every attempt. initialUrlPromise
+// resolves once at that module's very first import (before the splash gate
+// exists), so it's reliable regardless of how long the video otherwise
+// blocked this screen from mounting. app/_layout.js also uses it to skip the
+// video outright for this exact case, but keeping this screen's own read on
+// the same cached promise (rather than trusting that skip alone) means this
+// still works even if that skip logic ever regresses.
 // Web: Supabase JS's detectSessionInUrl already parses the URL fragment
 // and fires 'PASSWORD_RECOVERY', which app/_layout.js's existing listener
 // redirects on - this screen only needs to render a loading state while
@@ -81,7 +97,7 @@ export default function ResetPasswordCallbackScreen() {
       router.replace('/reset-password');
     };
 
-    Linking.getInitialURL().then((url) => { if (url) handleUrl(url); }).catch(() => {});
+    initialUrlPromise.then((url) => { if (url) handleUrl(url); }).catch(() => {});
     const subscription = Linking.addEventListener('url', ({ url }) => handleUrl(url));
 
     // Neither getInitialURL() nor the 'url' event is guaranteed to fire (the

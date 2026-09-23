@@ -35,6 +35,7 @@ import ErrorBoundary from '../components/ErrorBoundary';
 import SplashVideoScreen from '../components/SplashVideoScreen';
 import supabase from '../services/supabase';
 import { parseTokensFromUrl, parseAuthErrorFromUrl } from '../services/supabaseAuthApi';
+import { initialUrlPromise } from '../services/initialUrl';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -53,8 +54,7 @@ export default function RootLayout() {
   // (email confirmation / password reset link) - otherwise the session
   // token sits in the URL behind an unskippable-looking video for however
   // long it takes the user to notice "Tap to skip", which reads as a
-  // broken/blank page. Web only: native deep links never carry the session
-  // in a URL fragment the way web's detectSessionInUrl does.
+  // broken/blank page.
   const [showIntro, setShowIntro] = useState(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return true;
     // 'error=' covers a link Supabase considers already used/expired (see
@@ -63,6 +63,31 @@ export default function RootLayout() {
     const hash = window.location.hash;
     return !hash.includes('access_token') && !hash.includes('error=');
   });
+
+  // Native equivalent of the web check above - window.location.hash isn't
+  // available to read synchronously, so this can't be the useState
+  // initializer itself; it flips showIntro off a moment after mount
+  // instead. Real, confirmed-live bug this fixes: reset-password-callback
+  // (and email-confirmed) are real screens in the Stack below, which - like
+  // everything else in this component's render tree - don't mount at all
+  // while showIntro is true (see the `if (showIntro) return <SplashVideoScreen
+  // .../>` below). A password-reset link that cold-launches the app landed
+  // the user on the splash video first, and by the time it finished (or
+  // they tapped Skip) and reset-password-callback.js's own effect finally
+  // ran its own Linking.getInitialURL() call, the launch URL came back
+  // empty every time - "Link No Longer Valid" on a freshly requested,
+  // genuinely valid link. initialUrlPromise is resolved once at this
+  // module's very first import, before any of that gating exists yet, so
+  // checking it here is reliable regardless of how long the video would
+  // otherwise have blocked the real screen from mounting.
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    initialUrlPromise.then((url) => {
+      if (url && (url.includes('reset-password-callback') || url.includes('email-confirmed'))) {
+        setShowIntro(false);
+      }
+    });
+  }, []);
 
   // Captured once, synchronously, from the raw URL hash - before Supabase
   // JS's async detectSessionInUrl has a chance to strip it via
@@ -246,7 +271,7 @@ function RootNavigator({ authRedirectType }) {
       if (!error) router.replace('/email-confirmed');
     };
 
-    Linking.getInitialURL().then((url) => { if (url) handleUrl(url); });
+    initialUrlPromise.then((url) => { if (url) handleUrl(url); });
     const subscription = Linking.addEventListener('url', ({ url }) => handleUrl(url));
     return () => subscription.remove();
     // Same "run once on mount" reasoning as the web effect above.
