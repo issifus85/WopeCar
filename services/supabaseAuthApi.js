@@ -341,8 +341,11 @@ export async function requestPasswordReset(email) {
 }
 
 /**
- * Redeems the 6-digit code from the same recovery email requestPasswordReset()
- * triggers - the primary path now, not a fallback. The link-based path above
+ * Redeems the verification code from the same recovery email
+ * requestPasswordReset() triggers - the primary path now, not a fallback
+ * (Supabase's own docs describe it as a "6-digit" OTP, but a real one seen
+ * live was 8 digits, so the app doesn't assume a fixed length anywhere).
+ * The link-based path above
  * (app/reset-password-callback.js) depends on a one-time-use token surviving
  * an email client's own tap untouched, which real automated link-safety
  * scanners (Gmail's and corporate gateways' phishing/safety checks alike)

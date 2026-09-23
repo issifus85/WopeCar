@@ -78,20 +78,27 @@ export default function ForgotPasswordScreen() {
         </View>
         <Text style={styles.sentTitle}>Check your email</Text>
         <Text style={styles.sentText}>
-          If an account exists for {email.trim()}, we've sent a 6-digit code to reset your password. It may
-          take a few minutes to arrive - check your spam folder too.
+          If an account exists for {email.trim()}, we've sent a verification code to reset your password. It
+          may take a few minutes to arrive - check your spam folder too.
         </Text>
 
         <View style={styles.field}>
-          <Text style={styles.label}>6-Digit Code</Text>
+          <Text style={styles.label}>Verification Code</Text>
           <TextInput
             style={[styles.input, styles.codeInput]}
-            placeholder="123456"
+            placeholder="12345678"
             placeholderTextColor={colors.textSubtle}
             value={code}
             onChangeText={setCode}
             keyboardType="number-pad"
-            maxLength={6}
+            // Not hardcoded to 6 - Supabase's own docs describe this as a
+            // "6-digit" OTP, but a real one that arrived live was 8 digits,
+            // and that length isn't otherwise documented as fixed. A cap
+            // here isn't actually load-bearing (verifyPasswordResetCode
+            // just forwards whatever was typed), so leaving generous room
+            // avoids silently truncating a real code again if the length
+            // changes once more.
+            maxLength={12}
           />
         </View>
 
@@ -244,13 +251,15 @@ function createStyles(colors) {
       lineHeight: 21,
       marginBottom: 28,
     },
-    // Wider letter-spacing and a bigger, centered numeral face - a 6-digit
-    // code reads as a code (not just another text field) at a glance,
-    // matching the visual convention most OTP inputs use.
+    // Letter-spacing and a centered numeral face - reads as a code (not
+    // just another text field) at a glance, matching the visual convention
+    // most OTP inputs use. Kept modest (not the wide, huge-digit look a
+    // fixed-length 6-digit input usually gets) since the real code length
+    // isn't fixed - see the maxLength comment above.
     codeInput: {
       fontFamily: FONTS.semiBold,
-      fontSize: 24,
-      letterSpacing: 8,
+      fontSize: 20,
+      letterSpacing: 4,
       textAlign: 'center',
     },
     linkButton: {
