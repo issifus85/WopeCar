@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import supabase, { edgeFunctionErrorMessage } from '../services/supabase';
 import * as bookingsStorage from '../services/bookingsStorage';
@@ -106,6 +106,22 @@ export function BookingsProvider({ children }) {
   useEffect(() => {
     refreshBookings();
   }, [refreshBookings]);
+
+  // refreshBookings() itself no-ops on logout (`if (!user) return`), which
+  // was deliberate for the "still loading" case but also meant a real
+  // logout left whatever Supabase-sourced bookings were already fetched
+  // sitting in state indefinitely - confirmed live, another account's trip
+  // history stayed visible and openable after signing out. Same
+  // transition-only guard as CartContext - only fires on an actual logout,
+  // never on a guest's own (already-empty, since bookings require an
+  // account) mount.
+  const prevUserRef = useRef(user);
+  useEffect(() => {
+    if (prevUserRef.current && !user) {
+      setBookings([]);
+    }
+    prevUserRef.current = user;
+  }, [user]);
 
   // Deduped by id (not a blind prepend) - a booking already present (e.g.
   // this device's own refreshBookings() already picked it up, or handlePay

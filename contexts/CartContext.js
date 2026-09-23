@@ -1,8 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import * as cartStorage from '../services/cartStorage';
 import { sendLocalPushNotification } from '../services/pushNotifications';
 import { voidQuickbooksPendingInvoice } from '../services/supabaseApi';
+import { useAuth } from './AuthContext';
 
 const CartContext = createContext(null);
 
@@ -53,6 +54,7 @@ function pruneAndRemind(bookings) {
 }
 
 export function CartProvider({ children }) {
+  const { user } = useAuth();
   const [cartIds, setCartIds] = useState([]);
   const [savedBookings, setSavedBookings] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -65,6 +67,26 @@ export function CartProvider({ children }) {
       })
       .finally(() => setIsLoading(false));
   }, []);
+
+  // Clears this account's cart the moment they actually log out - not on
+  // every render where `user` happens to be null, which would also fire
+  // for a genuine guest who's never signed in and would wipe a cart they
+  // built up intentionally before deciding to check out. prevUserRef only
+  // flips this on the real transition (was signed in, now isn't). Storage
+  // itself is already wiped by AuthContext's logout()/deleteAccount() (see
+  // services/clearLocalUserData.js) - this is the other half of that fix:
+  // without it, the next person to pick up the device (or the same person
+  // browsing on afterward as a guest) still saw the previous account's cart
+  // and saved-for-later bookings rendered from in-memory state that a
+  // storage wipe alone can't touch, confirmed live.
+  const prevUserRef = useRef(user);
+  useEffect(() => {
+    if (prevUserRef.current && !user) {
+      setCartIds([]);
+      setSavedBookings([]);
+    }
+    prevUserRef.current = user;
+  }, [user]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {

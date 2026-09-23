@@ -120,6 +120,17 @@ export function VendorProvider({ children }) {
   // dependency array, fired exactly once at VendorProvider mount).
   useEffect(() => {
     if (!user) {
+      // Not just "stop loading" - a real logout used to leave whatever
+      // vendor cars/bookings/profile were already fetched sitting in state
+      // indefinitely (this effect only re-runs on user?.id changing, and
+      // going from a real id to none is exactly that change, so this is
+      // still the real-transition case, not a guest's own mount - a guest
+      // never has vendor data to begin with). Confirmed live: another
+      // vendor's fleet and booking requests stayed visible and interactive
+      // after signing out.
+      setData(EMPTY_VENDOR_DATA);
+      setVendorProfile(null);
+      setHasLoadError(false);
       setIsLoading(false);
       return;
     }

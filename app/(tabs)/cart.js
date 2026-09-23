@@ -147,6 +147,10 @@ export default function CartScreen() {
   // breakdown fresh from these restored dates/addons rather than trusting
   // booking.totalCost for anything but the top-line "Amount due" display.
   const handleCompletePayment = (booking) => {
+    if (!user) {
+      router.push({ pathname: '/login', params: { redirect: '/(tabs)/cart' } });
+      return;
+    }
     startCheckout(booking.carId);
     updateDraft({
       startDate: booking.startDate,

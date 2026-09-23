@@ -1,9 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import * as favoritesStorage from '../services/favoritesStorage';
+import { useAuth } from './AuthContext';
 
 const FavoritesContext = createContext(null);
 
 export function FavoritesProvider({ children }) {
+  const { user } = useAuth();
   const [favoriteIds, setFavoriteIds] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -12,6 +14,17 @@ export function FavoritesProvider({ children }) {
       .then(setFavoriteIds)
       .finally(() => setIsLoading(false));
   }, []);
+
+  // Same real-logout-transition reset as CartContext - see its own comment
+  // for why this can't just be "clear whenever user is falsy" (that would
+  // also wipe a genuine guest's own saved cars).
+  const prevUserRef = useRef(user);
+  useEffect(() => {
+    if (prevUserRef.current && !user) {
+      setFavoriteIds([]);
+    }
+    prevUserRef.current = user;
+  }, [user]);
 
   const isFavorite = useCallback((carId) => favoriteIds.includes(String(carId)), [favoriteIds]);
 

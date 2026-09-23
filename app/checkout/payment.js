@@ -109,6 +109,22 @@ export default function CheckoutPaymentScreen() {
     logScreen('Checkout_Payment');
   }, []);
 
+  // Explicit, deliberate gate - not just relying on `user.id` throwing
+  // further down in handlePay if this screen is ever reached logged out.
+  // That accidental crash-shaped "protection" only existed because
+  // createBooking({ renter_id: user.id, ... }) happens to evaluate before
+  // any network call fires; it stopped a real charge from going through,
+  // but it never stopped this screen from rendering, showing real pricing,
+  // and letting Pay be tapped in the first place - confirmed live
+  // reachable via Cart's stale "Complete Payment" card surviving a logout
+  // (see CartContext's own fix for that). A real account check belongs
+  // here regardless of what any other screen does.
+  useEffect(() => {
+    if (!user) {
+      router.replace({ pathname: '/login', params: { redirect: '/(tabs)/cart' } });
+    }
+  }, [user, router]);
+
   // Synchronous days count for the "Aug 30 - Sep 2 - 3 days" summary line -
   // buildPricingBreakdown() below also computes billableDays, but only
   // inside an async function, not usable directly in render.
@@ -571,7 +587,7 @@ export default function CheckoutPaymentScreen() {
     router.replace('/(tabs)');
   };
 
-  if (isLoading || !car) {
+  if (isLoading || !car || !user) {
     return (
       <View style={styles.centerState}>
         <ActivityIndicator size="large" color={colors.teal} />

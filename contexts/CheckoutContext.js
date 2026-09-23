@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useAuth } from './AuthContext';
 
 const EMPTY_DRAFT = {
   carId: null,
@@ -54,6 +55,7 @@ const EMPTY_DRAFT = {
 const CheckoutContext = createContext(null);
 
 export function CheckoutProvider({ children }) {
+  const { user } = useAuth();
   const [draft, setDraft] = useState(EMPTY_DRAFT);
 
   const startCheckout = useCallback((carId) => {
@@ -71,6 +73,20 @@ export function CheckoutProvider({ children }) {
   const resetCheckout = useCallback(() => {
     setDraft(EMPTY_DRAFT);
   }, []);
+
+  // In-memory only (never persisted to storage, unlike Cart/Favorites/
+  // Bookings/Inbox), but the same real-logout-transition problem applies:
+  // a draft can carry a name, email, phone, address, and license-photo URIs
+  // typed in mid-checkout, and none of that cleared just because the
+  // account signed out. Same guard as the other contexts - only fires on
+  // the actual logged-in -> logged-out change.
+  const prevUserRef = useRef(user);
+  useEffect(() => {
+    if (prevUserRef.current && !user) {
+      setDraft(EMPTY_DRAFT);
+    }
+    prevUserRef.current = user;
+  }, [user]);
 
   const value = useMemo(
     () => ({ draft, startCheckout, updateDraft, updateForm, resetCheckout }),

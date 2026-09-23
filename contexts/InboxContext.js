@@ -209,6 +209,28 @@ export function InboxProvider({ children }) {
     return () => subscription.remove();
   }, [syncServerConversations, syncServerNotifications]);
 
+  // Real logout stopped further polling (syncServerConversations/
+  // syncServerNotifications above already no-op once `user` is null) but
+  // never cleared what had already been fetched - the previous account's
+  // conversations, messages, and notifications stayed rendered and openable
+  // indefinitely, confirmed live. Same transition-only guard as the other
+  // contexts (fires on the real logged-in -> logged-out change, not on a
+  // guest's own mount) - local `data` resets to EMPTY_INBOX rather than
+  // re-seeding the welcome Support conversation immediately; that reseed
+  // still happens naturally the next time storage (already wiped by
+  // AuthContext's clearLocalUserData()) is read fresh on a real app
+  // relaunch, same as any other first-ever load.
+  const prevUserRef = useRef(user);
+  useEffect(() => {
+    if (prevUserRef.current && !user) {
+      setData(EMPTY_INBOX);
+      setServerConversations([]);
+      setServerMessagesByConversationId({});
+      setServerNotifications([]);
+    }
+    prevUserRef.current = user;
+  }, [user]);
+
   // Called by a thread screen (on mount + its own polling interval) for a
   // server conversation. Always re-fetches the latest window (no since_id)
   // and upserts by id, rather than only fetching what's new - a delta fetch
