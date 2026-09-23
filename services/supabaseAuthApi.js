@@ -184,15 +184,25 @@ function waitForWebPopupRedirect(popup, redirectPrefix) {
   });
 }
 
-// Supabase's OAuth callback carries the session in the URL FRAGMENT
-// (#access_token=...), not query params.
+// Supabase's redirect normally carries the session in the URL FRAGMENT
+// (#access_token=...), not query params - but falls back to checking the
+// query string too, same as parseAuthErrorFromUrl below already does and
+// for the same reason: this link doesn't go straight from Supabase to the
+// app, it goes through an HTTP redirect (the /verify endpoint) that the
+// user's email app/browser then has to hand off to the wopecar:// scheme.
+// A fragment surviving that hand-off intact isn't guaranteed on every
+// Android browser/WebView - some have been known to fold it into the query
+// instead, or drop the leading '#' during Intent construction. Checking
+// both costs nothing on the normal path (the fragment is still tried
+// first) and directly hedges against that failure mode.
 export function parseTokensFromUrl(url) {
   const hashIndex = url.indexOf('#');
-  if (hashIndex === -1) return {};
-  const params = new URLSearchParams(url.slice(hashIndex + 1));
+  const queryIndex = url.indexOf('?');
+  const hashParams = hashIndex !== -1 ? new URLSearchParams(url.slice(hashIndex + 1)) : null;
+  const queryParams = queryIndex !== -1 ? new URLSearchParams(url.slice(queryIndex + 1, hashIndex === -1 ? undefined : hashIndex)) : null;
   return {
-    access_token: params.get('access_token'),
-    refresh_token: params.get('refresh_token'),
+    access_token: hashParams?.get('access_token') || queryParams?.get('access_token') || null,
+    refresh_token: hashParams?.get('refresh_token') || queryParams?.get('refresh_token') || null,
   };
 }
 

@@ -2,11 +2,38 @@ import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
+import Constants from 'expo-constants';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import supabase from '../services/supabase';
 import { parseTokensFromUrl, parseAuthErrorFromUrl } from '../services/supabaseAuthApi';
 import { initialUrlPromise } from '../services/initialUrl';
+
+// TEMPORARY (remove once the "Link No Longer Valid" report from a real,
+// freshly requested email is root-caused): the splash-gating bug this file
+// otherwise documents is confirmed fixed, but a real Android retest still
+// failed the same way. That means the URL genuinely arriving at this screen
+// doesn't have a token in it - which can only happen upstream of the app
+// (Supabase's own /verify redirect, or something in the email
+// client/Android's hand-off of that redirect to the wopecar:// scheme
+// dropping the fragment) - and there's no way to inspect a real device's
+// real deep link remotely. Shown only on non-production builds (gated the
+// same way EnvironmentBanner.js is), and never includes token VALUES, only
+// which parts of the URL exist and what keys they carry.
+const IS_NON_PRODUCTION = Constants.expoConfig?.extra?.APP_ENV !== 'production';
+function describeUrlShape(url) {
+  try {
+    const hashIndex = url.indexOf('#');
+    const queryIndex = url.indexOf('?');
+    const hash = hashIndex !== -1 ? url.slice(hashIndex + 1) : null;
+    const query = queryIndex !== -1 ? url.slice(queryIndex + 1, hashIndex === -1 ? undefined : hashIndex) : null;
+    const hashKeys = hash ? [...new URLSearchParams(hash).keys()] : [];
+    const queryKeys = query ? [...new URLSearchParams(query).keys()] : [];
+    return `path: ${url.split('#')[0].split('?')[0]}\nquery keys: [${queryKeys.join(', ') || 'none'}]\nhash keys: [${hashKeys.join(', ') || 'none'}]\nfull length: ${url.length} chars`;
+  } catch {
+    return 'unparseable URL';
+  }
+}
 
 // Reached via a Supabase password-recovery link. Being a REAL file-based
 // route is the fix itself, not an implementation detail: without one,
@@ -48,6 +75,7 @@ export default function ResetPasswordCallbackScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [error, setError] = useState(null);
+  const [debugInfo, setDebugInfo] = useState(null); // TEMPORARY - see describeUrlShape above
 
   useEffect(() => {
     if (Platform.OS === 'web') return;
@@ -81,6 +109,7 @@ export default function ResetPasswordCallbackScreen() {
       processedUrl = url;
       clearTimeout(timeout);
       setError(null); // back to the loading spinner while this new attempt resolves
+      if (IS_NON_PRODUCTION) setDebugInfo(describeUrlShape(url));
 
       const { access_token, refresh_token } = parseTokensFromUrl(url);
       if (!access_token || !refresh_token) {
@@ -124,6 +153,12 @@ export default function ResetPasswordCallbackScreen() {
         <View style={styles.wrap}>
           <Text style={styles.title}>Link No Longer Valid</Text>
           <Text style={styles.text}>{error}</Text>
+          {IS_NON_PRODUCTION && !!debugInfo && (
+            <View style={styles.debugBox}>
+              <Text style={styles.debugLabel}>DEBUG (test build only)</Text>
+              <Text style={styles.debugText}>{debugInfo}</Text>
+            </View>
+          )}
           <TouchableOpacity style={styles.button} onPress={() => router.replace('/forgot-password')}>
             <Text style={styles.buttonText}>Request a New Link</Text>
           </TouchableOpacity>
@@ -165,6 +200,28 @@ function createStyles(colors) {
       textAlign: 'center',
       lineHeight: 21,
       marginBottom: 24,
+    },
+    debugBox: {
+      alignSelf: 'stretch',
+      backgroundColor: colors.background,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 14,
+      marginBottom: 24,
+    },
+    debugLabel: {
+      fontFamily: FONTS.bold,
+      fontSize: 11,
+      color: colors.warning,
+      marginBottom: 6,
+      letterSpacing: 0.5,
+    },
+    debugText: {
+      fontFamily: FONTS.regular,
+      fontSize: 12,
+      color: colors.textMuted,
+      lineHeight: 18,
     },
     button: {
       alignSelf: 'stretch',
