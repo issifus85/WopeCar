@@ -7,7 +7,7 @@ import { CATEGORIES } from '../data/cars';
 export const VEHICLE_MAKES = [
   { make: 'Toyota', models: ['Camry', 'Corolla', 'Corolla Cross', 'RAV4', 'Highlander', 'Land Cruiser', 'Land Cruiser V8', 'Land Cruiser Prado', 'Hilux', 'Hiace', 'Yaris', 'Avalon', 'Sienna', '4-Runner', 'Fortuner', 'Rush'] },
   { make: 'Hyundai', models: ['Elantra', 'Tucson', 'Santa Fe', 'Sonata', 'Accent', 'i10', 'i20', 'Creta', 'Palisade', 'Venue', 'H1', 'ix35'] },
-  { make: 'Kia', models: ['Sportage', 'Picanto', 'Rio', 'Sorento', 'Sonet', 'Seltos', 'Cerato', 'Soul', 'Forte'] },
+  { make: 'Kia', models: ['Sportage', 'Picanto', 'Rio', 'Sorento', 'Sonet', 'Seltos', 'Cerato', 'Soul', 'Forte', 'Granbird'] },
   { make: 'Nissan', models: ['Altima', 'Sentra', 'X-Trail', 'Rogue', 'Pathfinder', 'Navara', 'NP300 Hardbody', 'Patrol', 'Micra', 'Qashqai'] },
   { make: 'Honda', models: ['Civic', 'Accord', 'CR-V', 'HR-V', 'Pilot', 'City', 'Fit'] },
   { make: 'Ford', models: ['Focus', 'Fusion', 'Explorer', 'Escape', 'Ranger', 'EcoSport', 'Everest', 'Transit'] },
