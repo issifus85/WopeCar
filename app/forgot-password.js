@@ -10,12 +10,22 @@ export default function ForgotPasswordScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { requestPasswordReset } = useAuth();
+  const { requestPasswordReset, verifyPasswordResetCode } = useAuth();
 
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [isSent, setIsSent] = useState(false);
+
+  // Code step - the primary path now, not a fallback (see
+  // verifyPasswordResetCode's own comment for why the tappable link alone
+  // isn't reliable: an email link-safety scanner can silently consume its
+  // one-time token before the user ever taps it themselves, which is
+  // exactly what a real user hit live, consistently, on a freshly requested
+  // link they'd genuinely never clicked yet).
+  const [code, setCode] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [codeError, setCodeError] = useState(null);
 
   const handleSubmit = async () => {
     setError(null);
@@ -39,26 +49,71 @@ export default function ForgotPasswordScreen() {
     }
   };
 
+  const handleVerifyCode = async () => {
+    setCodeError(null);
+    if (!code.trim()) {
+      setCodeError('Please enter the code from your email.');
+      return;
+    }
+
+    setIsVerifying(true);
+    try {
+      await verifyPasswordResetCode(email.trim(), code.trim());
+      router.replace('/reset-password');
+    } catch (e) {
+      setCodeError(e.message || 'That code is incorrect or has expired. Please request a new one.');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
   if (isSent) {
     return (
-      <View style={styles.container}>
-        <View style={styles.sentWrap}>
+      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <ScrollView style={styles.flex} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.sentIconRow}>
           <View style={styles.sentIcon}>
             <Ionicons name="mail-outline" size={32} color={colors.teal} />
           </View>
-          <Text style={styles.sentTitle}>Check your email</Text>
-          <Text style={styles.sentText}>
-            If an account exists for {email.trim()}, we've sent a link to reset your password. It may take a
-            few minutes to arrive - check your spam folder too.
-          </Text>
-          <TouchableOpacity
-            style={[styles.submitButton, styles.sentButton]}
-            onPress={() => router.back()}
-          >
-            <Text style={styles.submitButtonText}>Back to Sign In</Text>
-          </TouchableOpacity>
         </View>
-      </View>
+        <Text style={styles.sentTitle}>Check your email</Text>
+        <Text style={styles.sentText}>
+          If an account exists for {email.trim()}, we've sent a 6-digit code to reset your password. It may
+          take a few minutes to arrive - check your spam folder too.
+        </Text>
+
+        <View style={styles.field}>
+          <Text style={styles.label}>6-Digit Code</Text>
+          <TextInput
+            style={[styles.input, styles.codeInput]}
+            placeholder="123456"
+            placeholderTextColor={colors.textSubtle}
+            value={code}
+            onChangeText={setCode}
+            keyboardType="number-pad"
+            maxLength={6}
+          />
+        </View>
+
+        {!!codeError && <Text style={styles.errorText}>{codeError}</Text>}
+
+        <TouchableOpacity
+          style={[styles.submitButton, isVerifying && styles.submitButtonDisabled]}
+          onPress={handleVerifyCode}
+          disabled={isVerifying}
+        >
+          {isVerifying ? (
+            <ActivityIndicator color={colors.white} />
+          ) : (
+            <Text style={styles.submitButtonText}>Confirm Code</Text>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.linkButton} onPress={() => setIsSent(false)}>
+          <Text style={styles.linkButtonText}>Didn&apos;t get it? Try a different email</Text>
+        </TouchableOpacity>
+      </ScrollView>
+      </KeyboardAvoidingView>
     );
   }
 
@@ -66,7 +121,7 @@ export default function ForgotPasswordScreen() {
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
     <ScrollView style={styles.flex} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <Text style={styles.intro}>
-        Enter the email on your account and we'll send you a link to set a new password.
+        Enter the email on your account and we'll send you a code to set a new password.
       </Text>
 
       <View style={styles.field}>
@@ -92,7 +147,7 @@ export default function ForgotPasswordScreen() {
         {isSubmitting ? (
           <ActivityIndicator color={colors.white} />
         ) : (
-          <Text style={styles.submitButtonText}>Send Reset Link</Text>
+          <Text style={styles.submitButtonText}>Send Code</Text>
         )}
       </TouchableOpacity>
     </ScrollView>
@@ -162,11 +217,9 @@ function createStyles(colors) {
       color: colors.white,
       fontSize: 16,
     },
-    sentWrap: {
-      flex: 1,
+    sentIconRow: {
       alignItems: 'center',
-      justifyContent: 'center',
-      paddingHorizontal: 32,
+      marginBottom: 20,
     },
     sentIcon: {
       width: 64,
@@ -175,13 +228,13 @@ function createStyles(colors) {
       backgroundColor: colors.highlight,
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: 20,
     },
     sentTitle: {
       fontFamily: FONTS.bold,
       fontSize: 20,
       color: colors.textPrimary,
       marginBottom: 10,
+      textAlign: 'center',
     },
     sentText: {
       fontFamily: FONTS.regular,
@@ -191,12 +244,23 @@ function createStyles(colors) {
       lineHeight: 21,
       marginBottom: 28,
     },
-    // sentWrap centers its children (icon/title/text), which also shrinks a
-    // plain TouchableOpacity down to hug its label - fine for the icon and
-    // text above, wrong for a primary CTA. This stretches just the button
-    // back to full width, matching every other primary button in the app.
-    sentButton: {
-      alignSelf: 'stretch',
+    // Wider letter-spacing and a bigger, centered numeral face - a 6-digit
+    // code reads as a code (not just another text field) at a glance,
+    // matching the visual convention most OTP inputs use.
+    codeInput: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 24,
+      letterSpacing: 8,
+      textAlign: 'center',
+    },
+    linkButton: {
+      marginTop: 16,
+      alignItems: 'center',
+    },
+    linkButtonText: {
+      fontFamily: FONTS.medium,
+      fontSize: 13,
+      color: colors.teal,
     },
   });
 }

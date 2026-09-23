@@ -341,6 +341,29 @@ export async function requestPasswordReset(email) {
 }
 
 /**
+ * Redeems the 6-digit code from the same recovery email requestPasswordReset()
+ * triggers - the primary path now, not a fallback. The link-based path above
+ * (app/reset-password-callback.js) depends on a one-time-use token surviving
+ * an email client's own tap untouched, which real automated link-safety
+ * scanners (Gmail's and corporate gateways' phishing/safety checks alike)
+ * defeat by visiting - and so consuming - the link before the user ever
+ * taps it themselves. Confirmed live: a real user's freshly requested,
+ * never-clicked-by-them link consistently came back
+ * "Email link is invalid or has expired" straight from Supabase's own /verify
+ * endpoint (not an app-side bug - the fragment carrying that exact error
+ * arrived intact). A manually-typed code can't be pre-consumed by anything
+ * that isn't the user themselves reading their inbox, which is what makes
+ * this the actually reliable path rather than just an alternate one.
+ * Establishes the same kind of session setSession() does after a successful
+ * link, so app/reset-password.js's setPasswordAfterRecovery() works
+ * identically regardless of which path got the user there.
+ */
+export async function verifyPasswordResetCode(email, token) {
+  const { error } = await supabase.auth.verifyOtp({ email, token, type: 'recovery' });
+  if (error) throw error;
+}
+
+/**
  * Sets a new password using the temporary session a recovery link grants -
  * unlike changePassword() above, this deliberately does NOT verify a
  * "current" password first, since a migrated account has none to verify

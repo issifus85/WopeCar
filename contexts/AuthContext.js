@@ -135,6 +135,8 @@ export function AuthProvider({ children }) {
 
   const requestPasswordReset = useCallback((email) => authApi.requestPasswordReset(email), []);
 
+  const verifyPasswordResetCode = useCallback((email, token) => authApi.verifyPasswordResetCode(email, token), []);
+
   const setPasswordAfterRecovery = useCallback(async (newPassword, newPasswordConfirmation) => {
     await authApi.setPasswordAfterRecovery(newPassword, newPasswordConfirmation);
     await refresh();
@@ -151,7 +153,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, isLoading, login, register, loginWithSocial, logout, refresh, updateProfile, uploadAvatar, changePassword, requestPasswordReset, setPasswordAfterRecovery, deleteAccount }}
+      value={{ user, isLoading, login, register, loginWithSocial, logout, refresh, updateProfile, uploadAvatar, changePassword, requestPasswordReset, verifyPasswordResetCode, setPasswordAfterRecovery, deleteAccount }}
     >
       {children}
     </AuthContext.Provider>
