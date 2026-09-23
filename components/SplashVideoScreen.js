@@ -56,7 +56,7 @@ export default function SplashVideoScreen({ onFinish }) {
           style={styles.video}
           contentFit="contain"
           nativeControls={false}
-          allowsFullscreen={false}
+          fullscreenOptions={{ enable: false }}
         />
         <View style={[styles.skipWrap, { top: insets.top + 16, right: 16 }]}>
           <Text style={styles.skipText}>Tap to skip</Text>

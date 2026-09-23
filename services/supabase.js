@@ -36,11 +36,18 @@ export const SUPABASE_ANON_KEY = isProductionBuild ? PRODUCTION_ANON_KEY : PREPR
 // services/tokenStorage.js for the Laravel auth token - kept consistent
 // rather than pulling in a separate AsyncStorage dependency.
 //
-// Known constraint to revisit once real Supabase Auth sessions are used:
-// SecureStore enforces a ~2KB per-item limit on iOS Keychain, and a
+// Known constraint, now actually live (Supabase Auth is the real sign-in
+// path - this comment used to say "not an issue yet", it is now): a
 // persisted Supabase session (access token + refresh token + user object)
-// can exceed that. Not an issue yet since nothing calls supabase.auth
-// to sign a user in - flagging here so it isn't a surprise later.
+// routinely exceeds SecureStore's documented 2048-byte-per-item limit,
+// confirmed firing expo-secure-store's own console.warn on a real cold
+// launch. It still writes successfully today - expo-secure-store 15's
+// isValidValue() only warns, doesn't block the native Keychain/Keystore
+// write - but its own doc comment says a future SDK version may turn this
+// into a thrown error instead, which would silently break session
+// persistence app-wide. Revisit before then (e.g. chunk the value across
+// multiple SecureStore keys, or move the session store to
+// AsyncStorage/MMKV, which have no such per-item cap).
 const supabaseStorage = {
   getItem: (key) => {
     if (Platform.OS === 'web') {
