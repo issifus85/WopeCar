@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { getMinBookingDays } from '../../constants/pricing';
+import { getMinBookingDays, calculateRentalPricing } from '../../constants/pricing';
 import { fetchCarById, fetchCarAvailability } from '../../services/carsApi';
 import { isSundayBlockedForCar } from '../../services/vendorCalendar';
 import { useCheckout } from '../../contexts/CheckoutContext';
@@ -392,13 +392,30 @@ export default function CheckoutDatesScreen() {
 
   const cells = buildMonthGrid(viewMonth);
   const minDays = getMinBookingDays(car.drivenBy);
-  // Inclusive day count so picking the same day for pickup and return reads
-  // as a 1-day booking (matching calculateRentalPricing's billing cycles)
-  // rather than 0 - which used to silently fail the minimum-days check and
-  // force a same-day chauffeur rental into an unwanted 2nd billable day.
-  const selectedDays = tempStart && tempEnd
+  // Inclusive calendar-date count so picking the same day for pickup and
+  // return reads as a 1-day booking rather than 0 - used only as a
+  // provisional estimate before both times are picked (calculateRentalPricing
+  // below needs pickupTime/returnTime to know the exact elapsed hours).
+  const calendarDays = tempStart && tempEnd
     ? Math.round((tempEnd - tempStart) / (1000 * 60 * 60 * 24)) + 1
     : 0;
+  // Real billable days, not just the calendar-date span, once both times
+  // are known - a self-drive 24h cycle (see constants/pricing.js) means
+  // picking the SAME time of day for pickup and return (e.g. 8:00 AM on
+  // the 23rd to 8:00 AM on the 25th) bills exactly 2 days, not the 3
+  // calendar dates spanned (23rd/24th/25th). Confirmed live as a real gap:
+  // that exact selection showed "3 day rental selected" and never
+  // triggered the self-drive minimum-days notice/forced driver, even
+  // though only 2 billable days were actually being booked and paid for.
+  const selectedDays = tempStart && tempEnd && pickupTime && returnTime
+    ? calculateRentalPricing({
+        startDate: tempStart,
+        endDate: tempEnd,
+        pickupTime,
+        returnTime,
+        drivenBy: car.drivenBy,
+      }).billableDays
+    : calendarDays;
   const isBelowMinimum = tempStart && tempEnd && selectedDays < minDays;
   // Return date = end date + 1 day - a 24hr rental returns the morning
   // AFTER the last rental day, not on the last day itself.
