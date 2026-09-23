@@ -177,6 +177,13 @@ export default function CheckoutDatesScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showSundayNotice, setShowSundayNotice] = useState(false);
+  // Self-drive under the 3-day minimum no longer blocks Continue outright -
+  // this notice explains the alternative (force a driver on the next
+  // screen, which has no such minimum) and lets the user proceed straight
+  // from it. Chauffeur (or anything else under its own minimum) still
+  // blocks via the generic missing-fields path below - a chauffeur booking
+  // already comes with a driver, so there's no equivalent workaround.
+  const [showSelfDriveMinNotice, setShowSelfDriveMinNotice] = useState(false);
   // Set on the first Continue tap that finds something missing - from then
   // on, every still-empty required field gets a red border live as the
   // user fixes them (each field's own error style is just `showFieldErrors
@@ -301,10 +308,40 @@ export default function CheckoutDatesScreen() {
     setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + offset, 1));
   };
 
+  // Shared by the normal Continue path and the self-drive-minimum notice's
+  // own Continue button. forceWithDriver locks in the driver add-on on the
+  // next screen (see contexts/CheckoutContext.js's withDriverLocked) -
+  // false explicitly clears any lock left over from a previous, shorter
+  // date selection on this same draft.
+  const proceedToAddons = (forceWithDriver) => {
+    updateDraft({
+      startDate: tempStart.toISOString(),
+      endDate: tempEnd.toISOString(),
+      pickupTime,
+      returnTime,
+      pickupLocation,
+      returnLocation,
+      ...(forceWithDriver ? { withDriver: true, withDriverLocked: true } : { withDriverLocked: false }),
+    });
+    // Rough default-rate estimate, not the final priced total - add-ons,
+    // WopeCare, and discounts aren't chosen yet at this first checkout step.
+    logStartCheckout({
+      carId,
+      carName: car.name,
+      totalDays: selectedDays,
+      estimatedCost: car.pricePerDay * selectedDays,
+    });
+    router.push({ pathname: '/checkout/addons', params: { carId } });
+  };
+
   const handleContinue = () => {
     const missing = [];
     if (!tempStart || !tempEnd) missing.push('Select your pickup and return dates.');
-    if (tempStart && tempEnd && isBelowMinimum) {
+    // Self-drive under the minimum is handled by its own notice below
+    // instead of blocking here - only a non-self-drive car (chauffeur)
+    // under its own minimum still counts as a blocking missing-field.
+    const isChauffeurBooking = car.drivenBy === 'Chauffeur';
+    if (tempStart && tempEnd && isBelowMinimum && isChauffeurBooking) {
       missing.push(`${car.drivenBy} bookings need at least ${minDays} ${minDays === 1 ? 'day' : 'days'} - you've selected ${selectedDays}.`);
     }
     if (!pickupTime) missing.push('Select a pickup time.');
@@ -328,23 +365,13 @@ export default function CheckoutDatesScreen() {
       setShowSundayNotice(true);
       return;
     }
-    updateDraft({
-      startDate: tempStart.toISOString(),
-      endDate: tempEnd.toISOString(),
-      pickupTime,
-      returnTime,
-      pickupLocation,
-      returnLocation,
-    });
-    // Rough default-rate estimate, not the final priced total - add-ons,
-    // WopeCare, and discounts aren't chosen yet at this first checkout step.
-    logStartCheckout({
-      carId,
-      carName: car.name,
-      totalDays: selectedDays,
-      estimatedCost: car.pricePerDay * selectedDays,
-    });
-    router.push({ pathname: '/checkout/addons', params: { carId } });
+
+    if (tempStart && tempEnd && isBelowMinimum && !isChauffeurBooking) {
+      setShowSelfDriveMinNotice(true);
+      return;
+    }
+
+    proceedToAddons(false);
   };
 
   if (isLoading) {
@@ -492,7 +519,9 @@ export default function CheckoutDatesScreen() {
             />
             <Text style={[styles.summaryText, isBelowMinimum && styles.summaryTextWarning]}>
               {isBelowMinimum
-                ? `${car.drivenBy} bookings need at least ${minDays} ${minDays === 1 ? 'day' : 'days'} - you've selected ${selectedDays}.`
+                ? (isChauffeur
+                    ? `${car.drivenBy} bookings need at least ${minDays} ${minDays === 1 ? 'day' : 'days'} - you've selected ${selectedDays}.`
+                    : '3-day minimum for self-drive. Tap continue and add a driver on the next screen.')
                 : `${selectedDays} day rental selected`}
             </Text>
           </View>
@@ -601,6 +630,19 @@ export default function CheckoutDatesScreen() {
         cancelLabel={null}
         onConfirm={() => setMissingFieldsMessage('')}
         onCancel={() => setMissingFieldsMessage('')}
+      />
+
+      <ConfirmModal
+        visible={showSelfDriveMinNotice}
+        title="3-Day Minimum"
+        message={'3-day minimum for self-drive.\nTap continue and add a driver on the next screen.'}
+        confirmLabel="Continue"
+        cancelLabel="Change Dates"
+        onConfirm={() => {
+          setShowSelfDriveMinNotice(false);
+          proceedToAddons(true);
+        }}
+        onCancel={() => setShowSelfDriveMinNotice(false)}
       />
 
       <OptionPickerModal

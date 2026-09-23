@@ -34,6 +34,10 @@ export default function CheckoutAddonsScreen() {
     return map;
   });
   const [withDriver, setWithDriver] = useState(!!draft.withDriver);
+  // Set by checkout/dates.js when the selected self-drive range is under
+  // the 3-day minimum - the driver add-on is the only way that range is
+  // allowed to proceed, so it's forced on and can't be unchecked here.
+  const isWithDriverLocked = !!draft.withDriverLocked;
 
   useEffect(() => {
     fetchCarById(carId)
@@ -108,16 +112,24 @@ export default function CheckoutAddonsScreen() {
           <>
             <Text style={styles.sectionTitle}>Driver Option</Text>
             <Text style={styles.sectionSubtitle}>
-              Prefer not to drive yourself? Add a WopeCar driver for your entire trip.
+              {isWithDriverLocked
+                ? 'Your selected dates are under the 3-day self-drive minimum, so a WopeCar driver is included for your whole trip.'
+                : 'Prefer not to drive yourself? Add a WopeCar driver for your entire trip.'}
             </Text>
             <View style={[styles.addonRow, withDriver && styles.addonRowSelected]}>
-              <TouchableOpacity style={styles.addonToggleRow} onPress={() => setWithDriver((prev) => !prev)}>
-                <View style={[styles.checkbox, withDriver && styles.checkboxChecked]}>
+              <TouchableOpacity
+                style={styles.addonToggleRow}
+                onPress={() => setWithDriver((prev) => !prev)}
+                disabled={isWithDriverLocked}
+              >
+                <View style={[styles.checkbox, withDriver && styles.checkboxChecked, isWithDriverLocked && styles.checkboxLocked]}>
                   {withDriver && <Ionicons name="checkmark" size={14} color={colors.white} />}
                 </View>
                 <View style={styles.addonInfo}>
                   <Text style={styles.addonName}>Add a Driver</Text>
-                  <Text style={styles.addonType}>WopeCar provides a driver for the whole trip</Text>
+                  <Text style={styles.addonType}>
+                    {isWithDriverLocked ? 'Required for bookings under 3 days' : 'WopeCar provides a driver for the whole trip'}
+                  </Text>
                 </View>
                 <Text style={styles.addonPrice}>+{formatCurrency(withDriverFeePerDay, activeCurrency)}/day</Text>
               </TouchableOpacity>
@@ -292,6 +304,9 @@ function createStyles(colors) {
     checkboxChecked: {
       backgroundColor: colors.teal,
       borderColor: colors.teal,
+    },
+    checkboxLocked: {
+      opacity: 0.7,
     },
     addonInfo: {
       flex: 1,

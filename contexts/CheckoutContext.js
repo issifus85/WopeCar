@@ -16,6 +16,12 @@ const EMPTY_DRAFT = {
   // priced per day via constants/pricing.js's getWithDriverFeePerDay(). Never
   // offered/settable for a Chauffeur car (see checkout/addons.js).
   withDriver: false,
+  // True when checkout/dates.js force-set withDriver above because the
+  // selected self-drive range is under the minimum - addons.js reads this
+  // to render the toggle checked and non-interactive instead of a normal
+  // editable checkbox, since the driver add-on is the only way that range
+  // is allowed to proceed at all.
+  withDriverLocked: false,
   totalCost: 0,
   // 'none' | 'basic' | 'plus' | 'premium' - see constants/pricing.js's
   // WOPECARE_PLANS. wopeCareDetails caches the selected plan object itself
