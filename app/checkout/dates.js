@@ -75,7 +75,7 @@ function buildMonthGrid(viewMonth) {
  * Animated.timing covers "animate in when dates are selected" without
  * needing to track selection state changes itself.
  */
-function RentalHoursNote({ days, startDate, returnDate, styles, colors }) {
+function RentalHoursNote({ days, startDate, pickupTime, styles, colors }) {
   const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -88,14 +88,27 @@ function RentalHoursNote({ days, startDate, returnDate, styles, colors }) {
 
   const dayWord = days === 1 ? 'day' : 'days';
 
+  // The cycle boundary is anchored to the actual selected pickup time, not
+  // a hardcoded example - "return by the SAME time of day, N days later"
+  // is the real rule (see calculateRentalPricing's 24h cycle), and only
+  // matches tempEnd when the user's chosen return time equals pickup time.
+  // Before a pickup time is picked yet, fall back to generic wording
+  // instead of showing a made-up clock time.
+  let body;
+  if (pickupTime) {
+    const boundaryDate = new Date(startDate);
+    boundaryDate.setDate(boundaryDate.getDate() + days);
+    body = `You've selected ${days} ${dayWord}. With a 24-hour rental, if you pick up at ${pickupTime} on ${formatShortDate(startDate)}, your car must be returned by ${pickupTime} on ${formatShortDate(boundaryDate)} to use your full ${days} ${dayWord}.`;
+  } else {
+    body = `You've selected ${days} ${dayWord}. With a 24-hour rental, return your car at the same time of day as pickup, ${days} ${dayWord} later, to use your full ${days} ${dayWord}.`;
+  }
+
   return (
     <Animated.View style={[styles.hoursNoteCard, { opacity }]}>
       <Ionicons name="information-circle-outline" size={20} color={colors.teal} style={styles.hoursNoteIcon} />
       <View style={styles.hoursNoteTextWrap}>
         <Text style={styles.hoursNoteTitle}>How your rental days work</Text>
-        <Text style={styles.hoursNoteBody}>
-          {`You've selected ${days} ${dayWord}. With a 24-hour rental, if you pick up at 8:00 AM on ${formatShortDate(startDate)}, your car must be returned by 8:00 AM on ${formatShortDate(returnDate)} to use your full ${days} ${dayWord}.`}
-        </Text>
+        <Text style={styles.hoursNoteBody}>{body}</Text>
         <Text style={styles.hoursNoteFootnote}>Returning late may incur additional charges.</Text>
       </View>
     </Animated.View>
@@ -417,10 +430,6 @@ export default function CheckoutDatesScreen() {
       }).billableDays
     : calendarDays;
   const isBelowMinimum = tempStart && tempEnd && selectedDays < minDays;
-  // Return date = end date + 1 day - a 24hr rental returns the morning
-  // AFTER the last rental day, not on the last day itself.
-  const returnDate = tempEnd ? new Date(tempEnd) : null;
-  if (returnDate) returnDate.setDate(returnDate.getDate() + 1);
   const showHoursNote = tempStart && tempEnd && car.drivenBy !== 'Chauffeur';
   const showSundayChauffeurNote = car.drivenBy === 'Chauffeur' && tempStart?.getDay() === 0;
 
@@ -608,7 +617,7 @@ export default function CheckoutDatesScreen() {
         )}
 
         {showHoursNote && (
-          <RentalHoursNote days={selectedDays} startDate={tempStart} returnDate={returnDate} styles={styles} colors={colors} />
+          <RentalHoursNote days={selectedDays} startDate={tempStart} pickupTime={pickupTime} styles={styles} colors={colors} />
         )}
 
         {showSundayChauffeurNote && (
