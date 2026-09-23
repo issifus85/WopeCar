@@ -7,6 +7,7 @@ import { fetchCarById } from '../../services/carsApi';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
+import ConfirmModal from '../../components/ConfirmModal';
 import WopeCareSelector from '../../components/WopeCareSelector';
 import { logScreen, logWopecareSelected } from '../../services/analytics';
 
@@ -24,6 +25,10 @@ export default function CheckoutWopeCareScreen() {
 
   const [car, setCar] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  // Only fires when draft.wopeCare is still 'none' at the moment Continue
+  // is pressed - a real plan (basic/plus/premium) skips this and goes
+  // straight through, same as before.
+  const [showNoWopeCareConfirm, setShowNoWopeCareConfirm] = useState(false);
 
   useEffect(() => {
     fetchCarById(carId)
@@ -47,8 +52,16 @@ export default function CheckoutWopeCareScreen() {
     }).billableDays;
   }, [draft.startDate, draft.endDate, draft.pickupTime, draft.returnTime, car]);
 
-  const handleContinue = () => {
+  const proceedToSummary = () => {
     router.push({ pathname: '/checkout/summary', params: { carId } });
+  };
+
+  const handleContinue = () => {
+    if (draft.wopeCare === 'none') {
+      setShowNoWopeCareConfirm(true);
+      return;
+    }
+    proceedToSummary();
   };
 
   if (isLoading) {
@@ -71,7 +84,12 @@ export default function CheckoutWopeCareScreen() {
           onSelect={(planId) => {
             updateDraft({ wopeCare: planId, wopeCareDetails: planId === 'none' ? null : WOPECARE_PLANS[planId] });
             if (planId === 'none') {
-              handleContinue();
+              // Used to auto-advance straight to /checkout/summary here -
+              // now shows the same confirmation handleContinue's own
+              // draft.wopeCare check shows, instead of calling
+              // handleContinue() directly (its check would read the stale
+              // pre-update draft from this render's closure).
+              setShowNoWopeCareConfirm(true);
               return;
             }
             if (car) {
@@ -87,6 +105,19 @@ export default function CheckoutWopeCareScreen() {
       </ScrollView>
 
       <CheckoutFooterButton label="Continue" onPress={handleContinue} />
+
+      <ConfirmModal
+        visible={showNoWopeCareConfirm}
+        title="Continue Without WopeCare?"
+        message="You're proceeding without WopeCare protection. You'll remain responsible for the full cost of any damage to the vehicle during your trip, in accordance with your Rental Agreement."
+        confirmLabel="Continue Without WopeCare"
+        cancelLabel="Add WopeCare"
+        onConfirm={() => {
+          setShowNoWopeCareConfirm(false);
+          proceedToSummary();
+        }}
+        onCancel={() => setShowNoWopeCareConfirm(false)}
+      />
     </View>
   );
 }
