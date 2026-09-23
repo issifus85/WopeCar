@@ -20,6 +20,13 @@ export default function ConfirmModal({
   const styles = useMemo(() => createStyles(colors), [colors]);
   // Pass cancelLabel={null} for a single-button info dialog (e.g. "Coming soon").
   const singleAction = cancelLabel === null;
+  // Side-by-side flex:1 buttons only look clean when both labels fit on one
+  // line - a longer pair (e.g. "Continue Without WopeCare") wraps unevenly
+  // on the wider label while the shorter one sits mostly empty, which reads
+  // as a layout bug. Stack full-width instead once either label is long -
+  // every other call site in the app uses short labels (Cancel/Confirm,
+  // Continue/Change Dates, etc.) so this only changes this specific pairing.
+  const stackButtons = !singleAction && (confirmLabel.length > 20 || cancelLabel.length > 20);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
@@ -27,14 +34,17 @@ export default function ConfirmModal({
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
           <Text style={styles.title}>{title}</Text>
           {!!message && <Text style={styles.message}>{message}</Text>}
-          <View style={styles.actions}>
+          <View style={[styles.actions, stackButtons && styles.actionsStacked]}>
             {!singleAction && (
-              <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
+              <TouchableOpacity
+                style={[styles.cancelButton, stackButtons && styles.actionStackedButton]}
+                onPress={onCancel}
+              >
                 <Text style={styles.cancelButtonText}>{cancelLabel}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
-              style={[styles.confirmButton, destructive && styles.confirmButtonDestructive]}
+              style={[styles.confirmButton, destructive && styles.confirmButtonDestructive, stackButtons && styles.actionStackedButton]}
               onPress={onConfirm}
             >
               <Text style={styles.confirmButtonText}>{confirmLabel}</Text>
@@ -78,6 +88,13 @@ function createStyles(colors) {
     actions: {
       flexDirection: 'row',
       gap: 10,
+    },
+    actionsStacked: {
+      flexDirection: 'column',
+    },
+    actionStackedButton: {
+      flex: undefined,
+      width: '100%',
     },
     cancelButton: {
       flex: 1,
