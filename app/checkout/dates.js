@@ -521,7 +521,7 @@ export default function CheckoutDatesScreen() {
               {isBelowMinimum
                 ? (isChauffeur
                     ? `${car.drivenBy} bookings need at least ${minDays} ${minDays === 1 ? 'day' : 'days'} - you've selected ${selectedDays}.`
-                    : '3-day minimum for self-drive. Tap continue and add a driver on the next screen.')
+                    : "Self-drive under 3 days requires a driver. We've added one for you.")
                 : `${selectedDays} day rental selected`}
             </Text>
           </View>
@@ -635,7 +635,7 @@ export default function CheckoutDatesScreen() {
       <ConfirmModal
         visible={showSelfDriveMinNotice}
         title="3-Day Minimum"
-        message={'3-day minimum for self-drive.\nTap continue and add a driver on the next screen.'}
+        message={"Self-drive under 3 days requires a driver. We've added one for you."}
         confirmLabel="Continue"
         cancelLabel="Change Dates"
         onConfirm={() => {
