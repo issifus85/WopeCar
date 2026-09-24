@@ -25,6 +25,7 @@ export const VEHICLE_MAKES = [
   { make: 'Renault', models: ['Duster', 'Logan', 'Sandero', 'Koleos'] },
   { make: 'Infiniti', models: ['QX80', 'QX60', 'QX50', 'Q50', 'Q60'] },
   { make: 'Kantanka', models: ['Onantefo'] },
+  { make: 'Yutong', models: ['50-Seater Bus'] },
 ];
 
 export function getModelsForMake(make) {
