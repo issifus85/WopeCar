@@ -102,7 +102,7 @@ export default function CheckoutSummaryScreen() {
   // Waived when a WopeCar driver is already coming with the car - there's
   // no separate self-service handover left to charge a delivery fee for.
   const deliveryFee = isSelfDrive && !draft.withDriver ? getSelfDriveDeliveryFee() : 0;
-  const securityDeposit = calculateSecurityDeposit(subtotal, car?.drivenBy);
+  const securityDeposit = calculateSecurityDeposit(subtotal, car?.drivenBy, draft.withDriver);
 
   // Recomputed live from this screen's own `days` (not trusted from
   // draft.wopeCareDetails, a snapshot taken back on the addons screen) so

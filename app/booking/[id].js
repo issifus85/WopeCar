@@ -322,7 +322,7 @@ export default function BookingDetailScreen() {
     // Waived when a WopeCar driver is already coming with the car - see
     // checkout/summary.js's identical formula.
     const deliveryFee = isSelfDrive && !booking?.withDriver?.selected ? getSelfDriveDeliveryFee() : 0;
-    const securityDeposit = calculateSecurityDeposit(subtotal, car.drivenBy);
+    const securityDeposit = calculateSecurityDeposit(subtotal, car.drivenBy, booking?.withDriver?.selected);
     // Same "recompute live from the current admin-set rate" treatment as
     // deliveryFee above, not a per-car snapshot like WopeCare's rate -
     // with_driver_fee_per_day is a single global setting, so an extension

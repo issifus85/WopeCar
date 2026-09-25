@@ -212,7 +212,7 @@ export function recomputeBookingCost(booking, { startDate, endDate, pickupTime, 
 
   const subtotal = rentalCost + addonsCost;
   const deliveryFee = booking.drive_type === 'Self-drive' ? getSelfDriveDeliveryFee() : 0;
-  const securityDeposit = calculateSecurityDeposit(subtotal, booking.drive_type);
+  const securityDeposit = calculateSecurityDeposit(subtotal, booking.drive_type, booking.with_driver);
   const totalCost = subtotal + deliveryFee + securityDeposit;
 
   return { days: pricing.billableDays, rentalCost, addonsCost, deliveryFee, securityDeposit, totalCost };

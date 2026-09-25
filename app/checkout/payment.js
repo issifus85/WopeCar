@@ -179,7 +179,7 @@ export default function CheckoutPaymentScreen() {
     // Waived when a WopeCar driver is already coming with the car - see
     // checkout/summary.js's identical formula.
     const deliveryFee = car.drivenBy === 'Self-drive' && !draft.withDriver ? getSelfDriveDeliveryFee() : 0;
-    const securityDeposit = calculateSecurityDeposit(subtotal, car.drivenBy);
+    const securityDeposit = calculateSecurityDeposit(subtotal, car.drivenBy, draft.withDriver);
     // Same reactive formula as checkout/summary.js - recomputed against this
     // trip's actual subtotal rather than trusting a stored amount.
     const promoDiscountAmount = draft.promoCode

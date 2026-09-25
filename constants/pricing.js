@@ -275,8 +275,13 @@ export const getSecurityDepositFlat = makeSettingGetter('security_deposit_flat',
 export const getSecurityDepositThreshold = makeSettingGetter('security_deposit_threshold', SECURITY_DEPOSIT_THRESHOLD);
 export const getSecurityDepositPercentage = makeSettingGetter('security_deposit_percentage', SECURITY_DEPOSIT_PERCENT);
 
-export function calculateSecurityDeposit(subtotal, drivenBy) {
-  if (drivenBy === 'Chauffeur') return getChauffeurSecurityDeposit();
+// A self-drive booking with the "With Driver" add-on still hands the car to
+// a WopeCar-assigned driver, not the renter, so it carries the same damage
+// risk profile as a chauffeured booking - it gets the chauffeur flat amount
+// too, regardless of trip cost, instead of the 25%-of-subtotal self-drive
+// formula below.
+export function calculateSecurityDeposit(subtotal, drivenBy, withDriver) {
+  if (drivenBy === 'Chauffeur' || withDriver) return getChauffeurSecurityDeposit();
   return subtotal < getSecurityDepositThreshold() ? getSecurityDepositFlat() : subtotal * getSecurityDepositPercentage();
 }
 
