@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Modal, Pressable, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Modal, Pressable, TextInput, ActivityIndicator, KeyboardAvoidingView, Keyboard, Platform, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
@@ -38,22 +38,39 @@ export default function LocationSearchModal({ visible, onClose, title = 'Search 
     return () => clearTimeout(timer);
   }, [query, visible]);
 
+  // On Android, closing a Modal while its TextInput still has the keyboard
+  // open races the keyboard's own dismiss animation against the Modal's
+  // native window teardown - confirmed live (screen-recorded): the result
+  // is several seconds of the whole screen flickering/smearing, and the
+  // selected value not visibly landing in the field behind it, on every
+  // single selection or explicit close. Dismissing the keyboard first,
+  // synchronously, before ever touching `visible`, avoids the race - the
+  // keyboard closes on its own before the modal starts tearing down
+  // instead of both happening on the same tick. iOS doesn't need this
+  // (its Modal/keyboard interaction doesn't share the bug) but calling it
+  // there too is harmless.
+  const handleClose = () => {
+    Keyboard.dismiss();
+    onClose();
+  };
+
   const handleSelect = (place) => {
+    Keyboard.dismiss();
     onSelect(place.description);
     onClose();
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
       <KeyboardAvoidingView
         style={styles.keyboardAvoider}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-      <Pressable style={styles.backdrop} onPress={onClose}>
+      <Pressable style={styles.backdrop} onPress={handleClose}>
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
           <View style={styles.header}>
             <Text style={styles.headerTitle}>{title}</Text>
-            <TouchableOpacity onPress={onClose} hitSlop={10}>
+            <TouchableOpacity onPress={handleClose} hitSlop={10}>
               <Ionicons name="close" size={24} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>

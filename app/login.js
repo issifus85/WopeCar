@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ImageBackground,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   ScrollView,
   Image,
@@ -46,7 +47,15 @@ export default function LoginScreen() {
     setError(null);
   };
 
+  // Same Android bug as components/LocationSearchModal.js's Modal-close
+  // race, one level up: router.replace()/router.back() unmount this screen
+  // while the email/password field's keyboard is often still open (tapping
+  // the submit button doesn't blur the input first), and on Android the
+  // keyboard's own dismiss animation racing the screen transition is what
+  // produces the reported flicker on every login. Dismissing first,
+  // synchronously, before any navigation call, avoids the race.
   const navigateAfterAuth = () => {
+    Keyboard.dismiss();
     if (redirect) {
       router.replace({ pathname: redirect, params: redirectParams });
     } else if (router.canGoBack()) {
