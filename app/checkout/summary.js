@@ -9,7 +9,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import {
   formatCurrency,
   getSelfDriveDeliveryFee,
-  getWithDriverFeePerDay,
+  useWithDriverFeePerDay,
   calculateSecurityDeposit,
   calculateRentalPricing,
   WOPECARE_PLANS,
@@ -114,8 +114,9 @@ export default function CheckoutSummaryScreen() {
 
   // Self-drive-only add-on, recomputed live from the current admin-set rate
   // (same "never trust a stale draft snapshot" reasoning as the fields
-  // above) - see constants/pricing.js's getWithDriverFeePerDay().
-  const withDriverDailyRate = draft.withDriver ? getWithDriverFeePerDay() : 0;
+  // above) - see constants/pricing.js's useWithDriverFeePerDay().
+  const liveWithDriverFeePerDay = useWithDriverFeePerDay();
+  const withDriverDailyRate = draft.withDriver ? liveWithDriverFeePerDay : 0;
   const withDriverCost = draft.withDriver ? withDriverDailyRate * days : 0;
 
   // Recomputed from the promo's own discount shape (not a stored amount) so

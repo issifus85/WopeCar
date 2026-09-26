@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { formatCurrency, getWithDriverFeePerDay } from '../../constants/pricing';
+import { formatCurrency, useWithDriverFeePerDay } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
@@ -38,6 +38,7 @@ export default function CheckoutAddonsScreen() {
   // the 3-day minimum - the driver add-on is the only way that range is
   // allowed to proceed, so it's forced on and can't be unchecked here.
   const isWithDriverLocked = !!draft.withDriverLocked;
+  const withDriverFeePerDay = useWithDriverFeePerDay();
 
   useEffect(() => {
     fetchCarById(carId)
@@ -101,7 +102,6 @@ export default function CheckoutAddonsScreen() {
 
   const addons = car?.regionalAddons ?? [];
   const isSelfDrive = car?.drivenBy === 'Self-drive';
-  const withDriverFeePerDay = getWithDriverFeePerDay();
 
   return (
     <View style={styles.container}>

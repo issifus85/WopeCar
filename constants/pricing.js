@@ -109,13 +109,41 @@ export const WITH_DRIVER_FEE_PER_DAY = 200;
 let cachedWithDriverFeePerDay = WITH_DRIVER_FEE_PER_DAY;
 let withDriverFeePerDayFetchedAt = 0;
 
+// Same "read once in a render body, no re-render on fetch resolve" gap
+// useAppWideDiscount() exists to close (see its own comment above) -
+// checkout/addons.js calls getWithDriverFeePerDay() directly in its render
+// body, so on a fresh app process (this getter's very first call anywhere)
+// it always paints the hardcoded fallback (200) and never repaints once the
+// background fetch resolves to the real admin-configured value, since
+// nothing here forced a re-render. Confirmed live 2026-09-26: admin fee was
+// already 300 in both Supabase projects, but the checkout screen kept
+// showing 200 regardless. Listeners let useWithDriverFeePerDay() (below)
+// force that re-render itself.
+const withDriverFeePerDayListeners = new Set();
+
+export function subscribeWithDriverFeePerDay(listener) {
+  withDriverFeePerDayListeners.add(listener);
+  return () => withDriverFeePerDayListeners.delete(listener);
+}
+
+// Reactive counterpart to getWithDriverFeePerDay() - use this in any
+// component that displays the fee, instead of calling the getter directly.
+export function useWithDriverFeePerDay() {
+  const [fee, setFee] = useState(getWithDriverFeePerDay());
+  useEffect(() => subscribeWithDriverFeePerDay(setFee), []);
+  return fee;
+}
+
 export function getWithDriverFeePerDay() {
   if (Date.now() - withDriverFeePerDayFetchedAt > SETTINGS_CACHE_TTL_MS) {
     withDriverFeePerDayFetchedAt = Date.now();
     import('../services/supabase')
       .then(({ getAppSetting }) => getAppSetting('with_driver_fee_per_day'))
       .then((value) => {
-        if (typeof value === 'number' && value >= 0) cachedWithDriverFeePerDay = value;
+        if (typeof value === 'number' && value >= 0 && value !== cachedWithDriverFeePerDay) {
+          cachedWithDriverFeePerDay = value;
+          withDriverFeePerDayListeners.forEach((listener) => listener(value));
+        }
       })
       .catch(() => {
         // Keep the last-known-good value - never let a settings-fetch
