@@ -10,6 +10,28 @@
 // Overwriting instead of spreading here would silently drop
 // extra.eas.projectId, which `eas update`/`eas build` need to even
 // identify this project.
+// `eas.json` only sets APP_ENV inside build.*.env - `eas update` (and a bare
+// `eas-cli`/`@expo/fingerprint` fingerprint check) never reads a build
+// profile's env block, so a plain `eas update --channel production` run
+// from a normal shell silently falls back to 'development' here. That
+// value is baked into the expoConfig content this file returns, which
+// @expo/fingerprint hashes into runtimeVersion - so a "silent default"
+// isn't a warning-level nuisance, it deterministically computes a
+// runtimeVersion no real production/preview build will ever match, and the
+// published update just sits there unreachable with no error anywhere.
+// Confirmed live twice (2026-09-25, 2026-09-26) - use `npm run ota:development`
+// / `ota:preview` / `ota:production` (package.json) instead of a bare
+// `eas update`, which export the matching value first.
+if (!process.env.APP_ENV) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    '\n⚠️  APP_ENV is not set - defaulting to "development".\n' +
+    '   If this is a bare `eas update` or a fingerprint check for preview/production,\n' +
+    '   the computed runtimeVersion will NOT match any real preview/production build.\n' +
+    '   Use `npm run ota:development` / `ota:preview` / `ota:production` instead.\n'
+  );
+}
+
 module.exports = ({ config }) => ({
   ...config,
   android: {
