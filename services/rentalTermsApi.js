@@ -36,3 +36,27 @@ export async function getRentalTermsSections() {
     self_drive: { title: DRIVE_TYPE_TITLES.self_drive, clauses: grouped.self_drive },
   };
 }
+
+// Condensed, at-a-glance bullets shown directly on the car detail screen
+// (components/RentalTermsSection.js) - distinct from the full clauses
+// above, which only appear on the standalone /rental-terms reference
+// screen. Admin-editable (Admin > Settings > Rental Terms Summary),
+// backed by rental_terms_summary_items - a single `body` line per item, no
+// title or energy-source gating (none of the condensed bullets are
+// EV-specific).
+export async function getRentalTermsSummaryItems() {
+  const { data, error } = await supabase
+    .from('rental_terms_summary_items')
+    .select('drive_type, body')
+    .eq('is_published', true)
+    .order('drive_type')
+    .order('position');
+  if (error) throw error;
+
+  const grouped = { chauffeur: [], self_drive: [] };
+  (data ?? []).forEach((row) => {
+    grouped[row.drive_type]?.push(row.body);
+  });
+
+  return grouped;
+}

@@ -7,6 +7,7 @@ import { fetchCarById, fetchCarAvailabilityByStatus, reportListing } from '../..
 import { WEEKDAYS, MONTH_NAMES, stripTime, toISODate, buildMonthGrid, isSundayBlockedForCar } from '../../services/vendorCalendar';
 import { getCarReviews, getCarReviewScore } from '../../services/reviewsApi';
 import { getCarDetailFaqs } from '../../services/faqsApi';
+import { getRentalTermsSummaryItems } from '../../services/rentalTermsApi';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -53,6 +54,7 @@ export default function CarDetailScreen() {
   const [reviewScore, setReviewScore] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [faqs, setFaqs] = useState([]);
+  const [rentalTermsSummary, setRentalTermsSummary] = useState(null);
   const [unavailableDates, setUnavailableDates] = useState(new Set());
   const today = stripTime(new Date());
   const [availabilityViewMonth, setAvailabilityViewMonth] = useState(today);
@@ -82,6 +84,7 @@ export default function CarDetailScreen() {
     getCarReviewScore(id).then(setReviewScore).catch(() => setReviewScore(null));
     getCarReviews(id).then(setReviews).catch(() => setReviews([]));
     getCarDetailFaqs().then(setFaqs).catch(() => setFaqs([]));
+    getRentalTermsSummaryItems().then(setRentalTermsSummary).catch(() => setRentalTermsSummary(null));
 
     // Same "nice to have, don't block the page" treatment as
     // app/checkout/dates.js's own availability fetch - a renter can still
@@ -463,7 +466,7 @@ export default function CarDetailScreen() {
           )}
 
           <View style={styles.section}>
-            <RentalTermsSection drivenBy={car.drivenBy} />
+            <RentalTermsSection drivenBy={car.drivenBy} items={rentalTermsSummary} />
           </View>
 
           {!!car.cancellationPolicy && (

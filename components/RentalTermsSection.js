@@ -8,33 +8,6 @@ import SectionHeading from './SectionHeading';
 
 const COLLAPSED_COUNT = 3;
 
-// Condensed, at-a-glance summaries for the car detail screen - the full,
-// admin-editable clause-by-clause terms (services/rentalTermsApi.js,
-// backed by rental_terms_clauses) still live on the dedicated /rental-terms
-// screen this component links to via "View Full Terms & Conditions".
-const CHAUFFEUR_ITEMS = [
-  '12 hours per day — driver closes by 8:30 PM',
-  'Overtime applies after 8:30 PM',
-  "Driver's allowance included in rate",
-  'Fuel not included — client responsible',
-  'Refundable security deposit: GHS 500',
-  'Full payment required before delivery',
-  'No cash payments accepted',
-  'Cancellation fee applies',
-];
-
-const SELF_DRIVE_ITEMS = [
-  'Minimum rental: 3 days',
-  'Fuel not included — return at same level',
-  'Refundable security deposit required',
-  'Delivery fee: GHS 250',
-  'Approved drivers only',
-  'Use within booked locations — modify anytime on app/website',
-  'Full payment required before delivery',
-  'No cash payments accepted',
-  'Cancellation fee applies',
-];
-
 function TermsAccordionBlock({ title, bullet, bulletColor, items, styles }) {
   const [showAll, setShowAll] = useState(false);
   const hasMore = items.length > COLLAPSED_COUNT;
@@ -64,19 +37,25 @@ function TermsAccordionBlock({ title, bullet, bulletColor, items, styles }) {
 // A car with no drivenBy value at all (shouldn't happen for real listings,
 // but the field is nullable) is treated like Self-drive - showing both
 // blocks is the safer default over silently hiding the self-drive terms.
-export default function RentalTermsSection({ drivenBy }) {
+// `items` is { chauffeur: string[], self_drive: string[] } from
+// services/rentalTermsApi.js's getRentalTermsSummaryItems() - fetched by
+// the parent screen (app/car/[id].js), matching how FaqSection/the old
+// RentalTermsSection also received their data as a prop.
+export default function RentalTermsSection({ drivenBy, items }) {
   const { colors } = useAppTheme();
   const router = useRouter();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const showSelfDrive = drivenBy !== 'Chauffeur';
 
+  if (!items) return null;
+
   return (
     <View>
       <SectionHeading>Rental Terms & Conditions</SectionHeading>
 
-      <TermsAccordionBlock title="Chauffeur rental terms" bullet="–" bulletColor={colors.textMuted} items={CHAUFFEUR_ITEMS} styles={styles} />
+      <TermsAccordionBlock title="Chauffeur rental terms" bullet="–" bulletColor={colors.textMuted} items={items.chauffeur} styles={styles} />
       {showSelfDrive && (
-        <TermsAccordionBlock title="Self-drive rental terms" bullet="✓" bulletColor={colors.teal} items={SELF_DRIVE_ITEMS} styles={styles} />
+        <TermsAccordionBlock title="Self-drive rental terms" bullet="✓" bulletColor={colors.teal} items={items.self_drive} styles={styles} />
       )}
 
       <TouchableOpacity style={styles.fullTermsButton} onPress={() => router.push('/rental-terms')}>
