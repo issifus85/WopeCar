@@ -6,25 +6,56 @@ import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import SectionHeading from './SectionHeading';
 
-function TermsBlock({ block, styles }) {
-  const [isExpanded, setIsExpanded] = useState(false);
+const COLLAPSED_COUNT = 3;
+
+// Condensed, at-a-glance summaries for the car detail screen - the full,
+// admin-editable clause-by-clause terms (services/rentalTermsApi.js,
+// backed by rental_terms_clauses) still live on the dedicated /rental-terms
+// screen this component links to via "View Full Terms & Conditions".
+const CHAUFFEUR_ITEMS = [
+  '12 hours per day — driver closes by 8:30 PM',
+  'Overtime applies after 8:30 PM',
+  "Driver's allowance included in rate",
+  'Fuel not included — client responsible',
+  'Refundable security deposit: GHS 500',
+  'Full payment required before delivery',
+  'No cash payments accepted',
+  'Cancellation fee applies',
+];
+
+const SELF_DRIVE_ITEMS = [
+  'Minimum rental: 3 days',
+  'Fuel not included — return at same level',
+  'Refundable security deposit required',
+  'Delivery fee: GHS 250',
+  'Approved drivers only',
+  'Use within booked locations — modify anytime on app/website',
+  'Full payment required before delivery',
+  'No cash payments accepted',
+  'Cancellation fee applies',
+];
+
+function TermsAccordionBlock({ title, bullet, bulletColor, items, styles }) {
+  const [showAll, setShowAll] = useState(false);
+  const hasMore = items.length > COLLAPSED_COUNT;
+  const visibleItems = showAll ? items : items.slice(0, COLLAPSED_COUNT);
 
   return (
     <View style={styles.block}>
-      <TouchableOpacity style={styles.blockHeader} onPress={() => setIsExpanded((v) => !v)} activeOpacity={0.7}>
-        <Text style={styles.blockTitle}>{block.title}</Text>
-        <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={styles.chevronColor} />
-      </TouchableOpacity>
-
-      {isExpanded && (
-        <View style={styles.clauseList}>
-          {block.clauses.map((clause, index) => (
-            <View key={clause.title} style={styles.clause}>
-              <Text style={styles.clauseTitle}>{index + 1}. {clause.title}</Text>
-              <Text style={styles.clauseBody}>{clause.body}</Text>
-            </View>
-          ))}
-        </View>
+      <Text style={styles.blockTitle}>{title}</Text>
+      <View style={styles.itemList}>
+        {visibleItems.map((item) => (
+          <View key={item} style={styles.itemRow}>
+            <Text style={[styles.itemBullet, { color: bulletColor }]}>{bullet}</Text>
+            <Text style={styles.itemText}>{item}</Text>
+          </View>
+        ))}
+      </View>
+      {hasMore && (
+        <TouchableOpacity style={styles.viewMoreRow} onPress={() => setShowAll((v) => !v)} activeOpacity={0.7}>
+          <Text style={styles.viewMoreText}>{showAll ? 'View less' : 'View more'}</Text>
+          <Ionicons name={showAll ? 'chevron-up' : 'chevron-down'} size={14} color={styles.viewMoreText.color} />
+        </TouchableOpacity>
       )}
     </View>
   );
@@ -33,35 +64,20 @@ function TermsBlock({ block, styles }) {
 // A car with no drivenBy value at all (shouldn't happen for real listings,
 // but the field is nullable) is treated like Self-drive - showing both
 // blocks is the safer default over silently hiding the self-drive terms.
-// `sections` is { chauffeur: {title, clauses}, self_drive: {title, clauses}
-// } from services/rentalTermsApi.js's getRentalTermsSections() - fetched by
-// the parent screen (app/car/[id].js), not this component, matching how
-// FaqSection also receives its data as a prop rather than fetching itself.
-// `energySource` (car.energySource) gates any clause with a
-// requiresEnergySource set (e.g. the EV battery-charging clause) so it only
-// shows on cars whose energy source actually matches - a clause with no
-// requiresEnergySource applies to every car, same as before this existed.
-function filterByEnergySource(block, energySource) {
-  return { ...block, clauses: block.clauses.filter((c) => !c.requiresEnergySource || c.requiresEnergySource === energySource) };
-}
-
-export default function RentalTermsSection({ drivenBy, energySource, sections }) {
+export default function RentalTermsSection({ drivenBy }) {
   const { colors } = useAppTheme();
   const router = useRouter();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const showSelfDrive = drivenBy !== 'Chauffeur';
 
-  if (!sections) return null;
-
-  const chauffeurBlock = filterByEnergySource(sections.chauffeur, energySource);
-  const selfDriveBlock = filterByEnergySource(sections.self_drive, energySource);
-
   return (
     <View>
       <SectionHeading>Rental Terms & Conditions</SectionHeading>
 
-      <TermsBlock block={chauffeurBlock} styles={{ ...styles, chevronColor: colors.textMuted }} />
-      {showSelfDrive && <TermsBlock block={selfDriveBlock} styles={{ ...styles, chevronColor: colors.textMuted }} />}
+      <TermsAccordionBlock title="Chauffeur rental terms" bullet="–" bulletColor={colors.textMuted} items={CHAUFFEUR_ITEMS} styles={styles} />
+      {showSelfDrive && (
+        <TermsAccordionBlock title="Self-drive rental terms" bullet="✓" bulletColor={colors.teal} items={SELF_DRIVE_ITEMS} styles={styles} />
+      )}
 
       <TouchableOpacity style={styles.fullTermsButton} onPress={() => router.push('/rental-terms')}>
         <Text style={styles.fullTermsText}>View Full Terms & Conditions</Text>
@@ -77,43 +93,46 @@ function createStyles(colors) {
       borderWidth: 1,
       borderColor: colors.divider,
       borderRadius: 12,
+      padding: 14,
       marginBottom: 10,
-      overflow: 'hidden',
-    },
-    blockHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 14,
-      paddingVertical: 13,
-      backgroundColor: colors.background,
     },
     blockTitle: {
-      flex: 1,
       fontFamily: FONTS.bold,
       fontSize: 14,
       color: colors.textPrimary,
-      marginRight: 8,
+      marginBottom: 10,
     },
-    clauseList: {
-      paddingHorizontal: 14,
-      paddingBottom: 14,
-      paddingTop: 4,
-      gap: 12,
+    itemList: {
+      gap: 8,
     },
-    clause: {
-      gap: 3,
+    itemRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 8,
     },
-    clauseTitle: {
+    itemBullet: {
       fontFamily: FONTS.bold,
       fontSize: 13,
-      color: colors.textPrimary,
+      lineHeight: 19,
     },
-    clauseBody: {
+    itemText: {
+      flex: 1,
       fontFamily: FONTS.regular,
       fontSize: 13,
       color: colors.textBody,
       lineHeight: 19,
+    },
+    viewMoreRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      marginTop: 10,
+      alignSelf: 'flex-start',
+    },
+    viewMoreText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 12.5,
+      color: colors.teal,
     },
     fullTermsButton: {
       flexDirection: 'row',
