@@ -53,7 +53,7 @@ export default function RentalTermsSection({ drivenBy, items }) {
     <View>
       <SectionHeading>Rental Terms & Conditions</SectionHeading>
 
-      <TermsAccordionBlock title="Chauffeur rental terms" bullet="–" bulletColor={colors.textMuted} items={items.chauffeur} styles={styles} />
+      <TermsAccordionBlock title="Chauffeur rental terms" bullet="✓" bulletColor={colors.teal} items={items.chauffeur} styles={styles} />
       {showSelfDrive && (
         <TermsAccordionBlock title="Self-drive rental terms" bullet="✓" bulletColor={colors.teal} items={items.self_drive} styles={styles} />
       )}
