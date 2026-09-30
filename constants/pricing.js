@@ -568,6 +568,7 @@ export const WOPECARE_PLANS = {
       'Scratches & scuffs',
       'Minor dents',
       'Minor bumper & body damage',
+      '24/7 roadside assistance',
     ],
   },
   plus: {
@@ -582,6 +583,7 @@ export const WOPECARE_PLANS = {
       'Minor dents',
       'Minor bumper & body damage',
       'More protection for unexpected damage',
+      '24/7 roadside assistance',
     ],
   },
   premium: {
@@ -596,6 +598,7 @@ export const WOPECARE_PLANS = {
       'Minor dents',
       'Minor bumper & body damage',
       'Our highest incidental damage protection',
+      '24/7 roadside assistance',
     ],
   },
 };
