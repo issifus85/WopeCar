@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import * as cartStorage from '../services/cartStorage';
+import { syncCartItemAdded, syncCartItemRemoved } from '../services/cartSync';
 import { sendLocalPushNotification } from '../services/pushNotifications';
 import { voidQuickbooksPendingInvoice } from '../services/supabaseApi';
 import { useAuth } from './AuthContext';
@@ -84,8 +85,16 @@ export function CartProvider({ children }) {
     if (prevUserRef.current && !user) {
       setCartIds([]);
       setSavedBookings([]);
+    } else if (!prevUserRef.current && user) {
+      // Just signed in - push whatever was already sitting in the local
+      // cart (built up while browsing signed-out, or before this sync
+      // existed at all) up to cart_items too, so the reminder cron can see
+      // it going forward. upsert+ignoreDuplicates means this never resets
+      // an item's created_at if it was already synced.
+      cartIds.forEach((id) => syncCartItemAdded(user.id, id));
     }
     prevUserRef.current = user;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   useEffect(() => {
@@ -107,7 +116,8 @@ export function CartProvider({ children }) {
       cartStorage.setCartIds(next);
       return next;
     });
-  }, []);
+    if (user?.id) syncCartItemAdded(user.id, id);
+  }, [user]);
 
   const removeFromCart = useCallback((carId) => {
     const id = String(carId);
@@ -116,7 +126,8 @@ export function CartProvider({ children }) {
       cartStorage.setCartIds(next);
       return next;
     });
-  }, []);
+    if (user?.id) syncCartItemRemoved(user.id, id);
+  }, [user]);
 
   // A renter can only ever have one saved-for-later booking per car at a
   // time - saving again (e.g. re-entering checkout for the same car)
