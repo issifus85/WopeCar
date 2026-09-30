@@ -109,7 +109,7 @@ export default function CheckoutWopeCareScreen() {
       <ConfirmModal
         visible={showNoWopeCareConfirm}
         title="Continue Without WopeCare?"
-        message="You're proceeding without WopeCare protection. You'll remain responsible for the full cost of any damage to the vehicle during your trip, in accordance with your Rental Agreement."
+        message="You'll remain financially responsible for all vehicle damage during your rental in accordance with the Rental Agreement. With WopeCare, eligible incidental damage is covered up to your selected plan limit."
         confirmLabel="Continue Without WopeCare"
         cancelLabel="Add WopeCare"
         onConfirm={() => {
