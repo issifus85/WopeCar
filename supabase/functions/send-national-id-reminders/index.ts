@@ -21,6 +21,18 @@
 // verification flow (vendors.id_document_status/ghana_card_id), not this
 // one.
 //
+// Further scoped to renters with at least one real booking (any row in
+// bookings, any status) - narrowed from "every renter, ever" after the
+// first live check found ~4,680 of ~4,700 renters (almost all pre-
+// existing/dormant migrated accounts) had never uploaded an ID, which
+// would have fired one giant one-time blast rather than a meaningful
+// nudge. Checked by fetching bookings.renter_id into a Set rather than a
+// `bookings!inner(id)` embedded join, which would return one duplicate
+// user row per booking for a repeat renter. This is a plain per-run
+// query, not a stored flag, so a brand-new renter automatically becomes
+// eligible the moment their first booking exists - no separate handling
+// needed for "future users".
+//
 // Deploy with: supabase functions deploy send-national-id-reminders --no-verify-jwt
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -56,6 +68,10 @@ Deno.serve(async (req) => {
     if (docsError) throw docsError;
     const submittedIds = new Set((submittedDocs ?? []).map((d) => d.user_id));
 
+    const { data: renterBookings, error: bookingsError } = await adminClient.from('bookings').select('renter_id');
+    if (bookingsError) throw bookingsError;
+    const bookedRenterIds = new Set((renterBookings ?? []).map((b) => b.renter_id));
+
     const { data: candidates, error: usersError } = await adminClient
       .from('users')
       .select('id')
@@ -69,6 +85,7 @@ Deno.serve(async (req) => {
     let notified = 0;
     for (const candidate of candidates ?? []) {
       if (submittedIds.has(candidate.id)) continue;
+      if (!bookedRenterIds.has(candidate.id)) continue;
 
       try {
         await adminClient.from('notifications').insert({
