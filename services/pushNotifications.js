@@ -1,8 +1,22 @@
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import { router } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import supabase from './supabase';
+
+// data.url is normally an internal route (e.g. '/booking/123'), handled via
+// router.push below - but the new app-update notification needs to send
+// someone straight to the App Store/Play Store, a real https URL. Every
+// internal route in this app starts with '/', so this is an unambiguous way
+// to pick the right navigation for both cases from the same data.url field
+// without adding a second payload key everywhere a notification is built.
+function openNotificationUrl(url) {
+  if (/^https?:\/\//i.test(url)) {
+    Linking.openURL(url).catch(() => {});
+  } else {
+    router.push(url);
+  }
+}
 
 // Local, on-device notifications only - no push token, no EAS project, no
 // backend. Native uses expo-notifications; web (the only platform this
@@ -53,7 +67,7 @@ export async function sendLocalPushNotification({ title, body, data = {} }) {
     if (data.url) {
       notification.onclick = () => {
         window.focus();
-        router.push(data.url);
+        openNotificationUrl(data.url);
       };
     }
     return;
@@ -109,7 +123,7 @@ export function registerNotificationResponseHandler() {
 
   const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
     const url = response.notification.request.content.data?.url;
-    if (url) router.push(url);
+    if (url) openNotificationUrl(url);
   });
 
   return () => subscription.remove();
