@@ -7,8 +7,6 @@ import { FONTS } from '../../../../constants/theme';
 import { useAppTheme } from '../../../../contexts/ThemeContext';
 import { useVendor } from '../../../../contexts/VendorContext';
 import {
-  VEHICLE_MAKES,
-  getModelsForMake,
   MANUFACTURING_YEARS,
   CAR_FEATURES,
   GHANA_REGIONS,
@@ -17,6 +15,7 @@ import {
   joinLocation,
   splitLocation,
 } from '../../../../constants/vehicleCatalog';
+import { listVehicleMakes, listVehicleModelsForMake } from '../../../../services/vehicleCatalogApi';
 import VendorHeader from '../../../../components/VendorHeader';
 import CheckoutFooterButton from '../../../../components/CheckoutFooterButton';
 import SearchableOptionModal from '../../../../components/SearchableOptionModal';
@@ -126,7 +125,26 @@ export default function VendorEditListingScreen() {
     setIsInitialized(true);
   }, [car, isInitialized]);
 
-  const modelOptions = useMemo(() => getModelsForMake(make), [make]);
+  // Admin-managed via wopecar-admin's Fleet > Makes & Models - not
+  // hardcoded constants, so a newly-added make/model (e.g. Toyota Coaster)
+  // shows up here without an app update.
+  const [makes, setMakes] = useState([]);
+  const [modelOptions, setModelOptions] = useState([]);
+
+  useEffect(() => {
+    listVehicleMakes().then(setMakes).catch(() => setMakes([]));
+  }, []);
+
+  useEffect(() => {
+    const selected = makes.find((m) => m.name === make);
+    if (!selected) {
+      setModelOptions([]);
+      return;
+    }
+    listVehicleModelsForMake(selected.id)
+      .then((rows) => setModelOptions(rows.map((r) => r.name)))
+      .catch(() => setModelOptions([]));
+  }, [make, makes]);
 
   if (isLoading || (car && !isInitialized)) {
     return (
@@ -595,7 +613,7 @@ export default function VendorEditListingScreen() {
       <SearchableOptionModal
         visible={pickerOpen === 'make'}
         title="Select Make"
-        options={VEHICLE_MAKES.map((m) => m.make)}
+        options={makes.map((m) => m.name)}
         value={make}
         onSelect={handleSelectMake}
         onClose={() => setPickerOpen(null)}

@@ -1,36 +1,10 @@
 import { CATEGORIES } from '../data/cars';
 
-// Reference data for the vendor "Add a Car" wizard - real manufacturer/model
-// names (not fabricated specs), covering makes commonly seen on the Ghana
-// market. Used to power the searchable Make/Model pickers in
-// app/vendor/add-car/index.js.
-export const VEHICLE_MAKES = [
-  { make: 'Toyota', models: ['Camry', 'Corolla', 'Corolla Cross', 'RAV4', 'Highlander', 'Land Cruiser', 'Land Cruiser V8', 'Land Cruiser Prado', 'Hilux', 'Hiace', 'Yaris', 'Avalon', 'Sienna', '4-Runner', 'Fortuner', 'Rush'] },
-  { make: 'Hyundai', models: ['Elantra', 'Tucson', 'Santa Fe', 'Sonata', 'Accent', 'i10', 'i20', 'Creta', 'Palisade', 'Venue', 'H1', 'ix35'] },
-  { make: 'Kia', models: ['Sportage', 'Picanto', 'Rio', 'Sorento', 'Sonet', 'Seltos', 'Cerato', 'Soul', 'Forte', 'Granbird'] },
-  { make: 'Nissan', models: ['Altima', 'Sentra', 'X-Trail', 'Rogue', 'Pathfinder', 'Navara', 'NP300 Hardbody', 'Patrol', 'Micra', 'Qashqai'] },
-  { make: 'Honda', models: ['Civic', 'Accord', 'CR-V', 'HR-V', 'Pilot', 'City', 'Fit'] },
-  { make: 'Ford', models: ['Focus', 'Fusion', 'Explorer', 'Escape', 'Ranger', 'EcoSport', 'Everest', 'Transit'] },
-  { make: 'Chevrolet', models: ['Cruze', 'Malibu', 'Captiva', 'Trailblazer', 'Spark'] },
-  { make: 'Mercedes-Benz', models: ['A-Class', 'B-Class', 'C-Class', 'E-Class', 'S-Class', 'CLA', 'CLS', 'GLA', 'GLB', 'GLC', 'GLK', 'GLE', 'GLS', 'ML-Class', 'GL-Class', 'G-Class', 'Sprinter', 'Vito', 'Viano', 'V-Class', 'Maybach'] },
-  { make: 'BMW', models: ['3 Series', '5 Series', 'X1', 'X3', 'X5'] },
-  { make: 'Volkswagen', models: ['Golf', 'Passat', 'Jetta', 'Polo', 'Tiguan', 'Touareg'] },
-  { make: 'Suzuki', models: ['Swift', 'Vitara', 'Jimny', 'Baleno', 'Ertiga'] },
-  { make: 'Mitsubishi', models: ['Outlander', 'Pajero', 'L200', 'ASX', 'Mirage'] },
-  { make: 'Mazda', models: ['Mazda3', 'Mazda6', 'CX-5', 'CX-9', 'BT-50'] },
-  { make: 'Jeep', models: ['Wrangler', 'Grand Cherokee', 'Cherokee', 'Compass'] },
-  { make: 'Land Rover', models: ['Range Rover', 'Range Rover Sport', 'Range Rover Evoque', 'Discovery', 'Defender'] },
-  { make: 'Lexus', models: ['RX', 'ES', 'NX', 'GX', 'LX'] },
-  { make: 'Peugeot', models: ['301', '3008', '5008', 'Partner'] },
-  { make: 'Renault', models: ['Duster', 'Logan', 'Sandero', 'Koleos'] },
-  { make: 'Infiniti', models: ['QX80', 'QX60', 'QX50', 'Q50', 'Q60'] },
-  { make: 'Kantanka', models: ['Onantefo'] },
-  { make: 'Yutong', models: ['50-Seater Bus'] },
-];
-
-export function getModelsForMake(make) {
-  return VEHICLE_MAKES.find((m) => m.make === make)?.models ?? [];
-}
+// Make/Model moved off this hardcoded list to the DB-backed
+// vehicle_makes/vehicle_models tables (migration
+// 0126_add_vehicle_makes_and_models.sql), same as the web admin - see
+// services/vehicleCatalogApi.js. Manage them from wopecar-admin's
+// Fleet > Makes & Models instead of editing this file.
 
 const CURRENT_YEAR = new Date().getFullYear();
 export const MANUFACTURING_YEARS = Array.from(

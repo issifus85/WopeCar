@@ -7,13 +7,12 @@ import { FONTS } from '../../../constants/theme';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 import { useAddCar } from '../../../contexts/AddCarContext';
 import {
-  VEHICLE_MAKES,
-  getModelsForMake,
   MANUFACTURING_YEARS,
   CAR_FEATURES,
   VEHICLE_TYPES,
   VEHICLE_CLASSES,
 } from '../../../constants/vehicleCatalog';
+import { listVehicleMakes, listVehicleModelsForMake } from '../../../services/vehicleCatalogApi';
 import VendorWizardHeader from '../../../components/VendorWizardHeader';
 import CheckoutFooterButton from '../../../components/CheckoutFooterButton';
 import SearchableOptionModal from '../../../components/SearchableOptionModal';
@@ -60,7 +59,27 @@ export default function AddCarDetailsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const modelOptions = useMemo(() => getModelsForMake(draft.make), [draft.make]);
+  // Admin-managed via wopecar-admin's Fleet > Makes & Models - not
+  // hardcoded constants, so a newly-added make/model (e.g. Toyota Coaster)
+  // shows up here without an app update.
+  const [makes, setMakes] = useState([]);
+  const [modelOptions, setModelOptions] = useState([]);
+
+  useEffect(() => {
+    listVehicleMakes().then(setMakes).catch(() => setMakes([]));
+  }, []);
+
+  useEffect(() => {
+    const selected = makes.find((m) => m.name === draft.make);
+    if (!selected) {
+      setModelOptions([]);
+      return;
+    }
+    listVehicleModelsForMake(selected.id)
+      .then((rows) => setModelOptions(rows.map((r) => r.name)))
+      .catch(() => setModelOptions([]));
+  }, [draft.make, makes]);
+
   const isValid = !!draft.make && !!draft.model && !!draft.year && !!draft.type && !!draft.vehicleClass && !!draft.drivenBy && !!draft.energySource;
 
   const handleSelectMake = (make) => {
@@ -286,7 +305,7 @@ export default function AddCarDetailsScreen() {
       <SearchableOptionModal
         visible={pickerOpen === 'make'}
         title="Select Make"
-        options={VEHICLE_MAKES.map((m) => m.make)}
+        options={makes.map((m) => m.name)}
         value={draft.make}
         onSelect={handleSelectMake}
         onClose={() => setPickerOpen(null)}
