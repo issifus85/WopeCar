@@ -198,6 +198,10 @@ export default function CarDetailScreen() {
   // booking-anchored conversation already is.
   const handleInquiry = async () => {
     setIsBookingModalVisible(false);
+    if (!user) {
+      router.push('/login');
+      return;
+    }
     try {
       const conversationId = await startInquiry(
         car.id,
@@ -205,6 +209,13 @@ export default function CarDetailScreen() {
       );
       router.push({ pathname: `/inbox/${conversationId}`, params: { from: 'car', carId: car.id } });
     } catch (e) {
+      // A stale/expired session can still pass the `user` check above but
+      // resolve to a null auth.uid() server-side, surfacing a raw Postgres
+      // constraint error here - treat that the same as signed-out.
+      if (e.message?.includes('customer_id')) {
+        router.push('/login');
+        return;
+      }
       Alert.alert('Could not start inquiry', e.message || 'Please check your connection and try again.');
     }
   };
