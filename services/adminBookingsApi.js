@@ -213,9 +213,23 @@ export function recomputeBookingCost(booking, { startDate, endDate, pickupTime, 
   const subtotal = rentalCost + addonsCost;
   const deliveryFee = booking.drive_type === 'Self-drive' ? getSelfDriveDeliveryFee() : 0;
   const securityDeposit = calculateSecurityDeposit(subtotal, booking.drive_type, booking.with_driver);
-  const totalCost = subtotal + deliveryFee + securityDeposit;
+  // WopeCare and the with-driver add-on are charged per billable day, so a
+  // date change has to rescale them too - leaving them out of totalCost (as
+  // this used to) silently dropped them from what the renter owes. A legacy
+  // row with no stored daily rate keeps its existing total instead of being
+  // zeroed.
+  const wopecareTotalCost = Number(booking.wopecare_daily_rate) > 0
+    ? Number(booking.wopecare_daily_rate) * pricing.billableDays
+    : Number(booking.wopecare_total_cost) || 0;
+  const withDriverTotalCost = Number(booking.with_driver_daily_rate) > 0
+    ? Number(booking.with_driver_daily_rate) * pricing.billableDays
+    : Number(booking.with_driver_total_cost) || 0;
+  const totalCost = subtotal + deliveryFee + securityDeposit + wopecareTotalCost + withDriverTotalCost;
 
-  return { days: pricing.billableDays, rentalCost, addonsCost, deliveryFee, securityDeposit, totalCost };
+  return {
+    days: pricing.billableDays, rentalCost, addonsCost, deliveryFee, securityDeposit,
+    wopecareTotalCost, withDriverTotalCost, totalCost,
+  };
 }
 
 /**
@@ -237,6 +251,8 @@ export async function modifyBooking(booking, fields) {
     addons_cost: costs.addonsCost,
     delivery_fee: costs.deliveryFee,
     security_deposit: costs.securityDeposit,
+    wopecare_total_cost: costs.wopecareTotalCost,
+    with_driver_total_cost: costs.withDriverTotalCost,
     total_cost: costs.totalCost,
     status: 'pending',
   };
