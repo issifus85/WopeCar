@@ -8,7 +8,7 @@ import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import {
   formatCurrency,
-  getSelfDriveDeliveryFee,
+  useSelfDriveDeliveryFee,
   useWithDriverFeePerDay,
   calculateSecurityDeposit,
   calculateRentalPricing,
@@ -101,7 +101,8 @@ export default function CheckoutSummaryScreen() {
   const subtotal = rentalCost + addonsCost;
   // Waived when a WopeCar driver is already coming with the car - there's
   // no separate self-service handover left to charge a delivery fee for.
-  const deliveryFee = isSelfDrive && !draft.withDriver ? getSelfDriveDeliveryFee() : 0;
+  const liveSelfDriveDeliveryFee = useSelfDriveDeliveryFee();
+  const deliveryFee = isSelfDrive && !draft.withDriver ? liveSelfDriveDeliveryFee : 0;
   const securityDeposit = calculateSecurityDeposit(subtotal, car?.drivenBy, draft.withDriver);
 
   // Recomputed live from this screen's own `days` (not trusted from

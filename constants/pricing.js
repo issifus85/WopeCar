@@ -79,6 +79,30 @@ const SETTINGS_CACHE_TTL_MS = 60 * 1000;
 let cachedSelfDriveDeliveryFee = SELF_DRIVE_DELIVERY_FEE;
 let selfDriveDeliveryFeeFetchedAt = 0;
 
+// checkout/summary.js computes the total it hands to Paystack straight from
+// this getter in its render body, so on a fresh app process it painted -
+// and charged - the hardcoded 200 fallback while payment.js, running later
+// after the fetch had resolved, stored the real admin value (250) on the
+// booking row: a paid booking whose total was exactly the fee difference
+// short of its own components (WC-2026-5436, 2026-10-02). Same gap
+// useWithDriverFeePerDay() closes for its fee - listeners let
+// useSelfDriveDeliveryFee() (below) force the re-render itself.
+const selfDriveDeliveryFeeListeners = new Set();
+
+export function subscribeSelfDriveDeliveryFee(listener) {
+  selfDriveDeliveryFeeListeners.add(listener);
+  return () => selfDriveDeliveryFeeListeners.delete(listener);
+}
+
+// Reactive counterpart to getSelfDriveDeliveryFee() - use this in any
+// component that displays or sums the fee, instead of calling the getter
+// directly in a render body.
+export function useSelfDriveDeliveryFee() {
+  const [fee, setFee] = useState(getSelfDriveDeliveryFee());
+  useEffect(() => subscribeSelfDriveDeliveryFee(setFee), []);
+  return fee;
+}
+
 export function getSelfDriveDeliveryFee() {
   if (Date.now() - selfDriveDeliveryFeeFetchedAt > SETTINGS_CACHE_TTL_MS) {
     selfDriveDeliveryFeeFetchedAt = Date.now();
@@ -87,7 +111,10 @@ export function getSelfDriveDeliveryFee() {
     import('../services/supabase')
       .then(({ getAppSetting }) => getAppSetting('self_drive_delivery_fee'))
       .then((value) => {
-        if (typeof value === 'number' && value >= 0) cachedSelfDriveDeliveryFee = value;
+        if (typeof value === 'number' && value >= 0 && value !== cachedSelfDriveDeliveryFee) {
+          cachedSelfDriveDeliveryFee = value;
+          selfDriveDeliveryFeeListeners.forEach((listener) => listener(value));
+        }
       })
       .catch(() => {
         // Keep the last-known-good value - never let a settings-fetch

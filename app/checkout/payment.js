@@ -68,7 +68,7 @@ export default function CheckoutPaymentScreen() {
   const { colors } = useAppTheme();
   const { activeCurrency } = useCurrency();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { draft, resetCheckout } = useCheckout();
+  const { draft, updateDraft, resetCheckout } = useCheckout();
   const { addBooking } = useBookings();
   const { removeFromCart, saveBookingDraft, savedBookings, removeSavedBooking } = useCart();
   const { notifyBookingEvent } = useInbox();
@@ -247,6 +247,22 @@ export default function CheckoutPaymentScreen() {
           wopeCarePlanId, wopeCareDailyRate, wopeCareCost, wopeCareCoverage,
           withDriverDailyRate, withDriverCost, billableDays,
         } = await buildPricingBreakdown();
+
+        // The amount charged (draft.totalCost, set on the Cost Breakdown
+        // screen) and the components saved on the booking row are derived
+        // separately - if an admin-configured value (e.g. the delivery fee)
+        // resolved between the two, they silently disagree and the renter is
+        // charged a different amount than the row's own parts add up to.
+        // Stop here, before the promo is redeemed or any row/charge exists,
+        // and show the renter the corrected amount instead.
+        const breakdownTotal = rentalCost + addonsCost - promoDiscountAmount + deliveryFee
+          + securityDeposit + wopeCareCost + withDriverCost;
+        if (Math.abs(breakdownTotal - draft.totalCost) > 0.5) {
+          updateDraft({ totalCost: breakdownTotal });
+          throw new Error(
+            `The price was just updated to ${formatCurrency(breakdownTotal, activeCurrency)}. Please check the amount and tap Pay again.`
+          );
+        }
 
         // Redeemed (uses_count incremented) here, immediately before the
         // booking that actually spends it gets created - not back on the
