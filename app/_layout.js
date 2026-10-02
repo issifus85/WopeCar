@@ -32,6 +32,7 @@ import { ThemeProvider, useAppTheme, toNavigationTheme } from '../contexts/Theme
 import BiometricGate from '../components/BiometricGate';
 import EnvironmentBanner from '../components/EnvironmentBanner';
 import PaystackWebViewModal from '../components/PaystackWebViewModal';
+import AppUpdatePrompt from '../components/AppUpdatePrompt';
 import ErrorBoundary from '../components/ErrorBoundary';
 import SplashVideoScreen from '../components/SplashVideoScreen';
 import supabase from '../services/supabase';
@@ -290,6 +291,7 @@ function RootNavigator({ authRedirectType }) {
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <EnvironmentBanner />
       <PaystackWebViewModal />
+      <AppUpdatePrompt />
       <NavigationThemeProvider value={navTheme}>
         <BiometricGate>
         <Stack screenOptions={{ headerShown: false }}>
