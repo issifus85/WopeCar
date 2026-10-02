@@ -103,6 +103,27 @@ export function useSelfDriveDeliveryFee() {
   return fee;
 }
 
+// Awaitable counterpart for non-render callers (e.g. an admin recomputing a
+// booking's cost) that can't tolerate getSelfDriveDeliveryFee()'s
+// stale-while-revalidate first read: waits for the real admin value, and
+// falls back to whatever is cached if the fetch fails.
+export async function loadSelfDriveDeliveryFee() {
+  try {
+    const { getAppSetting } = await import('../services/supabase');
+    const value = await getAppSetting('self_drive_delivery_fee');
+    if (typeof value === 'number' && value >= 0) {
+      selfDriveDeliveryFeeFetchedAt = Date.now();
+      if (value !== cachedSelfDriveDeliveryFee) {
+        cachedSelfDriveDeliveryFee = value;
+        selfDriveDeliveryFeeListeners.forEach((listener) => listener(value));
+      }
+    }
+  } catch {
+    // Keep the last-known-good value.
+  }
+  return cachedSelfDriveDeliveryFee;
+}
+
 export function getSelfDriveDeliveryFee() {
   if (Date.now() - selfDriveDeliveryFeeFetchedAt > SETTINGS_CACHE_TTL_MS) {
     selfDriveDeliveryFeeFetchedAt = Date.now();

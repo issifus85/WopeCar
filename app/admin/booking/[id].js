@@ -12,7 +12,7 @@ import ReasonModal from '../../../components/admin/ReasonModal';
 import DateRangeModal from '../../../components/DateRangeModal';
 import {
   getBooking, confirmBooking, cancelBooking, markBookingPaid, markBookingCompleted,
-  modifyBooking, recomputeBookingCost,
+  modifyBooking, recomputeBookingCost, getModifyPricingContext,
 } from '../../../services/adminBookingsApi';
 import { getUserVerificationDocuments, getBookingInspections, getInspectionReportSignedUrl } from '../../../services/adminDocumentsApi';
 
@@ -253,15 +253,33 @@ export default function AdminBookingDetailScreen() {
     setIsEditing(true);
   };
 
+  // Per-date prices, promo definition and the real delivery fee for the
+  // edited trip - fetched so the preview uses the same inputs modifyBooking()
+  // will save with (no preview until they land, rather than a wrong one).
+  const [modifyCtx, setModifyCtx] = useState(null);
+  useEffect(() => {
+    if (!isEditing || !booking || !editStart || !editEnd) {
+      setModifyCtx(null);
+      return undefined;
+    }
+    let cancelled = false;
+    setModifyCtx(null);
+    getModifyPricingContext(booking, {
+      startDate: editStart.toISOString().slice(0, 10),
+      endDate: editEnd.toISOString().slice(0, 10),
+    }).then((ctx) => { if (!cancelled) setModifyCtx(ctx); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [isEditing, booking, editStart, editEnd]);
+
   const previewCosts = useMemo(() => {
-    if (!isEditing || !booking || !editStart || !editEnd) return null;
+    if (!isEditing || !booking || !editStart || !editEnd || !modifyCtx) return null;
     return recomputeBookingCost(booking, {
       startDate: editStart.toISOString().slice(0, 10),
       endDate: editEnd.toISOString().slice(0, 10),
       pickupTime: editPickupTime,
       returnTime: editReturnTime,
-    });
-  }, [isEditing, booking, editStart, editEnd, editPickupTime, editReturnTime]);
+    }, modifyCtx);
+  }, [isEditing, booking, editStart, editEnd, editPickupTime, editReturnTime, modifyCtx]);
 
   const isModifyValid = editStart && editEnd && editPickupTime && editReturnTime
     && editPickupLocation.trim() && editReturnLocation.trim();
