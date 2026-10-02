@@ -146,6 +146,7 @@ export async function getMyReviewForBooking(bookingId) {
  */
 export async function submitReview({ bookingId, carId, vendorId, ratings, content }) {
   const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not signed in.');
   const { data, error } = await supabase
     .from('reviews')
     .insert({

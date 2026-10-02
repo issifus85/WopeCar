@@ -11,7 +11,7 @@ export default function DeleteAccountScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { deleteAccount } = useAuth();
+  const { user, deleteAccount } = useAuth();
 
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -21,6 +21,10 @@ export default function DeleteAccountScreen() {
   const handleDelete = async () => {
     setShowConfirm(false);
     setError(null);
+    if (!user) {
+      router.push('/login');
+      return;
+    }
     setIsSubmitting(true);
     try {
       await deleteAccount(password);

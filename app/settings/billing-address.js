@@ -21,6 +21,10 @@ export default function BillingAddressScreen() {
   const [error, setError] = useState(null);
 
   const handleSubmit = async () => {
+    if (!user) {
+      router.push('/login');
+      return;
+    }
     setError(null);
     setIsSubmitting(true);
     try {

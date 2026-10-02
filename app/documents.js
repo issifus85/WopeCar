@@ -147,6 +147,10 @@ export default function DocumentsScreen() {
     const type = pickerType;
     setPickerType(null);
     if (!type || uploadingType) return;
+    if (!user) {
+      router.push('/login');
+      return;
+    }
     // Set before the picker even launches, not just around the upload -
     // otherwise a double-tap while the permission check/picker is still
     // opening can launch two overlapping native pickers, which can leave

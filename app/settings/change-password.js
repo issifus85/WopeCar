@@ -9,7 +9,7 @@ export default function ChangePasswordScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { changePassword } = useAuth();
+  const { user, changePassword } = useAuth();
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -20,6 +20,10 @@ export default function ChangePasswordScreen() {
   const handleSubmit = async () => {
     setError(null);
 
+    if (!user) {
+      router.push('/login');
+      return;
+    }
     if (!currentPassword || !newPassword) {
       setError('Please fill in both password fields.');
       return;
