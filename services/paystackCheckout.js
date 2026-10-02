@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { initializePayment, verifyPayment, buildPaystackCallbackUrl } from './paystackApi';
+import { openPaystackWebView } from './paystackWebViewController';
 
 // On web, window.open() is only trusted as "user-initiated" when called
 // synchronously inside the click handler - calling it after the
@@ -48,9 +48,10 @@ export async function payWithPaystack(amount) {
 
   try {
     const appRedirectUrl = Linking.createURL('payment-callback');
+    const callbackUrl = buildPaystackCallbackUrl(appRedirectUrl);
     const { authorization_url: authUrl, reference } = await initializePayment({
       amount,
-      callbackUrl: buildPaystackCallbackUrl(appRedirectUrl),
+      callbackUrl,
     });
 
     let result;
@@ -58,7 +59,13 @@ export async function payWithPaystack(amount) {
       popup.location.href = authUrl;
       result = await waitForWebPopupRedirect(popup, appRedirectUrl);
     } else {
-      result = await WebBrowser.openAuthSessionAsync(authUrl, appRedirectUrl);
+      // Rendered in our own WebView (components/PaystackWebViewModal.js)
+      // rather than the system browser - Paystack's in-page cancel button
+      // never hits callbackUrl (only a completed charge does), so we detect
+      // it directly by watching the WebView's own navigation for callbackUrl
+      // instead of relying on the OS resolving the wopecar:// deep link the
+      // bridge page would otherwise redirect to.
+      result = await openPaystackWebView(authUrl, callbackUrl);
     }
 
     if (result.type !== 'success') {
