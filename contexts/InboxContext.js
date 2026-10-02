@@ -174,12 +174,48 @@ export function InboxProvider({ children }) {
   // exactly what belongs in *their* one and only Inbox.
   const isSupportViewer = !!(user?.isSupport || user?.role === 'admin');
 
+  // Ids (raw, not 'booking-'-prefixed) of conversations opened directly -
+  // just created by startInquiry/startVendorSupport, or deep-linked from a
+  // push notification - that the periodic list fetch below may not contain
+  // yet (it only runs every LIST_POLL_MS) or may never contain (a support
+  // viewer's list is category-filtered). A plain replace of
+  // serverConversations would drop them again on the next poll.
+  const pinnedServerIdsRef = useRef(new Set());
+
+  // Returns the fetch's promise so callers that are about to navigate (see
+  // startInquiry) can wait for the list to actually include a conversation
+  // they just created, instead of racing the screen they open.
   const syncServerConversations = useCallback(() => {
-    if (!user) return;
-    conversationsApi.getConversations(isSupportViewer ? { category: 'general' } : {})
-      .then(setServerConversations)
+    if (!user) return Promise.resolve();
+    return conversationsApi.getConversations(isSupportViewer ? { category: 'general' } : {})
+      .then((fetched) => {
+        setServerConversations((prev) => {
+          const kept = prev.filter(
+            (c) => pinnedServerIdsRef.current.has(c.id) && !fetched.some((f) => f.id === c.id)
+          );
+          return [...fetched, ...kept];
+        });
+      })
       .catch(() => {});
   }, [user, isSupportViewer]);
+
+  // Loads one conversation by id (get_conversation) and adds it to the list
+  // if it isn't there. Without this, opening /inbox/<id> for a conversation
+  // the list hasn't caught up with showed "Conversation not found." until
+  // the next 30s poll - reported on iOS right after tapping Inquiry on a car
+  // (the RPC had just created it; Android's faster refresh hid it).
+  const ensureServerConversation = useCallback(async (conversationId) => {
+    if (!user || !isServerConversationId(conversationId)) return false;
+    const rawId = rawServerConversationId(conversationId);
+    pinnedServerIdsRef.current.add(rawId);
+    try {
+      const detail = await conversationsApi.getConversation(rawId);
+      setServerConversations((prev) => (prev.some((c) => c.id === rawId) ? prev : [detail, ...prev]));
+      return true;
+    } catch {
+      return false;
+    }
+  }, [user]);
 
   const syncServerNotifications = useCallback(() => {
     if (!user) return;
@@ -338,9 +374,12 @@ export function InboxProvider({ children }) {
     if (welcomeMessage) {
       await conversationsApi.sendMessage(rawId, welcomeMessage).catch(() => {});
     }
+    // Wait for the conversation to be in state before the caller navigates
+    // to it - see ensureServerConversation's comment.
+    await ensureServerConversation(`${SERVER_CONVERSATION_PREFIX}${rawId}`);
     syncServerConversations();
     return `${SERVER_CONVERSATION_PREFIX}${rawId}`;
-  }, [syncServerConversations]);
+  }, [syncServerConversations, ensureServerConversation]);
 
   // Vendor Mode's Support tab counterpart to startInquiry - used to be a
   // fixed local-only 'conv-support' id (never touched Supabase, no staff
@@ -349,9 +388,10 @@ export function InboxProvider({ children }) {
   // conversation rather than creating a new one every time the tab mounts.
   const startVendorSupport = useCallback(async () => {
     const rawId = await conversationsApi.createVendorSupportConversation();
+    await ensureServerConversation(`${SERVER_CONVERSATION_PREFIX}${rawId}`);
     syncServerConversations();
     return `${SERVER_CONVERSATION_PREFIX}${rawId}`;
-  }, [syncServerConversations]);
+  }, [syncServerConversations, ensureServerConversation]);
 
   // `attachment` is `{ type, url, meta } | null` - the shape
   // chatAttachmentsApi.js's pick/upload helpers return, passed straight
@@ -633,11 +673,12 @@ export function InboxProvider({ children }) {
     notifyBookingEvent,
     syncMessages,
     syncServerConversations,
+    ensureServerConversation,
   }), [
     conversations, notifications, isLoading, totalUnreadCount, getMessages, sendMessage,
     startInquiry, startVendorSupport, markConversationRead, markNotificationRead, markAllNotificationsRead,
     markConversationUnread, deleteConversation, markNotificationUnread, deleteNotification, notifyBookingEvent,
-    syncMessages, syncServerConversations,
+    syncMessages, syncServerConversations, ensureServerConversation,
   ]);
 
   return <InboxContext.Provider value={value}>{children}</InboxContext.Provider>;

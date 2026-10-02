@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, PixelRatio } from 'react-native';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, PixelRatio, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,7 +19,7 @@ export default function ConversationScreen() {
   const navigation = useNavigation();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { conversations, getMessages, sendMessage, markConversationRead, syncMessages } = useInbox();
+  const { conversations, getMessages, sendMessage, markConversationRead, syncMessages, ensureServerConversation } = useInbox();
 
   // Reached from three different places (Inbox hub, Car Details, Booking
   // Details - see app/inbox/index.js, app/car/[id].js's handleInquiry,
@@ -56,6 +56,18 @@ export default function ConversationScreen() {
   const conversation = conversations.find((c) => c.id === id);
   const messages = getMessages(id);
   const isServerConversation = id?.startsWith('booking-');
+
+  // The conversation list only refreshes every 30s, so a conversation that
+  // was just created (Inquiry on a car) or deep-linked from a notification
+  // can legitimately be missing from it for a moment. Look it up directly
+  // instead of declaring it "not found" - only give up if that fails too.
+  const [lookupDone, setLookupDone] = useState(false);
+  useEffect(() => {
+    if (conversation || !isServerConversation) return;
+    let cancelled = false;
+    ensureServerConversation(id).finally(() => { if (!cancelled) setLookupDone(true); });
+    return () => { cancelled = true; };
+  }, [id, conversation, isServerConversation, ensureServerConversation]);
 
   useEffect(() => {
     markConversationRead(id);
@@ -98,7 +110,9 @@ export default function ConversationScreen() {
   if (!conversation) {
     return (
       <View style={styles.centerState}>
-        <Text style={styles.notFoundText}>Conversation not found.</Text>
+        {isServerConversation && !lookupDone
+          ? <ActivityIndicator size="large" color={colors.teal} />
+          : <Text style={styles.notFoundText}>Conversation not found.</Text>}
       </View>
     );
   }
