@@ -102,12 +102,33 @@ Deno.serve(async (req) => {
       tokensByUser.set(row.user_id, list);
     });
 
+    // The number shown on the app icon. Every caller writes the in-app
+    // `notifications` row before it calls this, so the unread count already
+    // includes the one being sent (min 1 as a floor). The app corrects it to
+    // its own full unread count (messages + notifications) when it opens.
+    const unreadByUser = new Map<string, number>();
+    await Promise.all([...tokensByUser.keys()].map(async (id) => {
+      const { count } = await adminClient
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', id)
+        .eq('is_read', false);
+      unreadByUser.set(id, Math.max(1, count ?? 0));
+    }));
+
     const messages = notifications.flatMap((n) =>
       (tokensByUser.get(n.userId) ?? []).map((token) => ({
         to: token,
         title: n.title,
         body: n.body ?? '',
         data: n.data ?? {},
+        // sound: without it iOS delivers silently. priority + channelId:
+        // Android only shows a heads-up banner for a HIGH-importance channel
+        // (created by the app as 'alerts' - see services/pushNotifications.js).
+        sound: 'default',
+        badge: unreadByUser.get(n.userId) ?? 1,
+        priority: 'high',
+        channelId: 'alerts',
       }))
     );
 
@@ -118,17 +139,39 @@ Deno.serve(async (req) => {
       return jsonResponse({ success: true, sent: 0 });
     }
 
+    // Expo answers HTTP 200 even when individual messages are rejected (bad
+    // credentials, a token for an uninstalled app, ...), so the per-message
+    // tickets have to be read - this used to count every 200 as "sent".
     let sent = 0;
+    const failures: { token: string; error: string; message?: string }[] = [];
     for (const batch of chunk(messages, 100)) {
       const res = await fetch('https://exp.host/--/api/v2/push/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(batch),
       });
-      if (res.ok) sent += batch.length;
+      if (!res.ok) {
+        batch.forEach((m) => failures.push({ token: m.to, error: `Expo HTTP ${res.status}` }));
+        continue;
+      }
+      const json = await res.json().catch(() => null);
+      const tickets: { status: string; message?: string; details?: { error?: string } }[] = json?.data ?? [];
+      tickets.forEach((ticket, i) => {
+        if (ticket.status === 'ok') {
+          sent += 1;
+        } else {
+          failures.push({ token: batch[i]?.to, error: ticket.details?.error ?? 'error', message: ticket.message });
+        }
+      });
     }
 
-    return jsonResponse({ success: true, sent });
+    // A token Expo says no longer maps to an installed app will never work
+    // again - drop it so the next send doesn't keep paying for it.
+    const dead = failures.filter((f) => f.error === 'DeviceNotRegistered').map((f) => f.token);
+    if (dead.length > 0) await adminClient.from('push_tokens').delete().in('token', dead);
+    if (failures.length > 0) console.error('send-push-notification failures', JSON.stringify(failures.slice(0, 20)));
+
+    return jsonResponse({ success: true, sent, failed: failures.length, failures: failures.slice(0, 5) });
   } catch (e) {
     return jsonResponse({ error: e instanceof Error ? e.message : 'Unexpected error.' }, 500);
   }

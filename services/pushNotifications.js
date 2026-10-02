@@ -29,10 +29,16 @@ if (Platform.OS !== 'web') {
       shouldShowBanner: true,
       shouldShowList: true,
       shouldPlaySound: true,
-      shouldSetBadge: false,
+      shouldSetBadge: true,
     }),
   });
 }
+
+// Android only shows a heads-up banner for a channel at HIGH importance, and
+// a channel's importance can't be raised once created - so the old 'default'
+// channel (importance DEFAULT, shade-only) stays as is and pushes use this
+// new one. send-push-notification passes channelId: ALERT_CHANNEL_ID.
+export const ALERT_CHANNEL_ID = 'alerts';
 
 export async function requestPushPermission() {
   if (Platform.OS === 'web') {
@@ -47,12 +53,30 @@ export async function requestPushPermission() {
       name: 'default',
       importance: Notifications.AndroidImportance.DEFAULT,
     });
+    await Notifications.setNotificationChannelAsync(ALERT_CHANNEL_ID, {
+      name: 'WopeCar alerts',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#3EB6BA',
+    });
   }
 
   const existing = await Notifications.getPermissionsAsync();
   if (existing.status === 'granted') return true;
   const requested = await Notifications.requestPermissionsAsync();
   return requested.status === 'granted';
+}
+
+// Sets the number on the app icon. iOS needs the badge permission (granted
+// together with alerts above); a no-op on web, and on Android launchers that
+// don't support numeric badges.
+export async function setAppBadgeCount(count) {
+  if (Platform.OS === 'web') return;
+  try {
+    await Notifications.setBadgeCountAsync(Math.max(0, Number(count) || 0));
+  } catch {
+    // Badge is cosmetic - never let it surface an error.
+  }
 }
 
 // data.url (if provided) is where tapping the notification should deep-link
@@ -91,30 +115,63 @@ export async function sendLocalPushNotification({ title, body, data = {} }) {
 // whoever's logged in now rather than accumulating stale rows. Best-effort
 // throughout - a simulator (no real APNs/FCM credentials), a denied
 // permission, or a token-fetch failure should never block sign-in.
+// Every step writes one row to push_registration_log (migration 0129) -
+// production's push_tokens table is empty even though dozens of people signed
+// in, and this used to swallow every failure with no trace of which step.
+async function logPushStep(userId, step, ok, message) {
+  try {
+    await supabase.from('push_registration_log').insert({
+      user_id: userId,
+      platform: Platform.OS,
+      step,
+      ok,
+      message: message ? String(message).slice(0, 500) : null,
+      app_version: Constants.expoConfig?.version ?? null,
+    });
+  } catch {
+    // Logging must never be the thing that breaks registration.
+  }
+}
+
 export async function registerPushToken() {
   if (Platform.OS === 'web') return;
 
+  let userId = null;
   try {
-    const granted = await requestPushPermission();
-    if (!granted) return;
-
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-    if (!projectId) return;
-
     const { data: authData } = await supabase.auth.getUser();
-    const userId = authData?.user?.id;
+    userId = authData?.user?.id ?? null;
     if (!userId) return;
 
-    const { data: tokenData } = await Notifications.getExpoPushTokenAsync({ projectId });
-    if (!tokenData?.data) return;
+    const granted = await requestPushPermission();
+    if (!granted) {
+      await logPushStep(userId, 'permission', false, 'Notification permission not granted');
+      return;
+    }
 
-    await supabase
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    if (!projectId) {
+      await logPushStep(userId, 'project_id', false, 'No EAS projectId in the app config');
+      return;
+    }
+
+    const { data: tokenData } = await Notifications.getExpoPushTokenAsync({ projectId });
+    if (!tokenData?.data) {
+      await logPushStep(userId, 'token', false, 'getExpoPushTokenAsync returned no token');
+      return;
+    }
+
+    const { error } = await supabase
       .from('push_tokens')
       .upsert({ user_id: userId, token: tokenData.data, platform: Platform.OS, updated_at: new Date().toISOString() }, { onConflict: 'token' });
+    if (error) {
+      await logPushStep(userId, 'save', false, error.message);
+      return;
+    }
+    await logPushStep(userId, 'registered', true, null);
   } catch (e) {
-    // Simulators/emulators without real push credentials throw here -
-    // silently keep the app usable without a token, same as every other
-    // best-effort sync in this app.
+    // Simulators/emulators without real push credentials throw here - the
+    // app stays usable without a token; the reason is logged for staff.
+    if (userId) await logPushStep(userId, 'exception', false, e?.message ?? e);
   }
 }
 

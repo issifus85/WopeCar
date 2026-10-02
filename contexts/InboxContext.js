@@ -3,7 +3,7 @@ import { AppState } from 'react-native';
 import * as inboxStorage from '../services/inboxStorage';
 import * as conversationsApi from '../services/conversationsApi';
 import * as notificationsApi from '../services/notificationsApi';
-import { sendLocalPushNotification, registerNotificationResponseHandler } from '../services/pushNotifications';
+import { sendLocalPushNotification, registerNotificationResponseHandler, setAppBadgeCount } from '../services/pushNotifications';
 import { sendEmail } from '../services/emailService';
 import { sendSms } from '../services/smsService';
 import { useSettings } from './SettingsContext';
@@ -653,6 +653,14 @@ export function InboxProvider({ children }) {
     const unreadNotifications = notifications.filter((n) => !n.readAt).length;
     return unreadMessages + unreadNotifications;
   }, [conversations, notifications]);
+
+  // The number on the app icon mirrors the in-app unread count (messages +
+  // notifications) - and drops to 0 on sign-out so a signed-out phone doesn't
+  // keep showing the last user's number. A push can also carry its own badge
+  // (send-push-notification) which this corrects the next time the app is open.
+  useEffect(() => {
+    setAppBadgeCount(user ? totalUnreadCount : 0);
+  }, [user, totalUnreadCount]);
 
   const value = useMemo(() => ({
     conversations,
