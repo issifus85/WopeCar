@@ -1,14 +1,16 @@
 import { useState, useMemo } from 'react';
+import { useRouter } from 'expo-router';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import SectionHeading from './SectionHeading';
 
-const COLLAPSED_COUNT = 3;
+const COLLAPSED_COUNT = 2;
 
 export default function FaqSection({ faqs }) {
   const { colors } = useAppTheme();
+  const router = useRouter();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [showAll, setShowAll] = useState(false);
   const [openIndexes, setOpenIndexes] = useState(new Set());
@@ -52,7 +54,7 @@ export default function FaqSection({ faqs }) {
       {hasMore && (
         <TouchableOpacity onPress={() => setShowAll(v => !v)} style={styles.toggleButton}>
           <Text style={styles.toggleText}>
-            {showAll ? 'Show Less' : `View All ${faqs.length} FAQs`}
+            {showAll ? 'Show Less' : 'Show More'}
           </Text>
           <Ionicons
             name={showAll ? 'chevron-up' : 'chevron-down'}
@@ -61,6 +63,10 @@ export default function FaqSection({ faqs }) {
           />
         </TouchableOpacity>
       )}
+      <TouchableOpacity onPress={() => router.push('/settings/help-centre')} style={styles.allLink}>
+        <Text style={styles.toggleText}>View all FAQs</Text>
+        <Ionicons name="arrow-forward" size={14} color={colors.teal} />
+      </TouchableOpacity>
     </View>
   );
 }
@@ -97,6 +103,13 @@ function createStyles(colors) {
       justifyContent: 'center',
       gap: 4,
       marginTop: 12,
+      paddingVertical: 8,
+    },
+    allLink: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
       paddingVertical: 8,
     },
     toggleText: {
