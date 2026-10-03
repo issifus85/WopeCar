@@ -502,10 +502,24 @@ export default function CheckoutPaymentScreen() {
     setError(null);
     try {
       const {
-        rentalCost, addonsCost, deliveryFee, securityDeposit,
+        rentalCost, addonsCost, deliveryFee, securityDeposit, promoDiscountAmount,
         wopeCarePlanId, wopeCareDailyRate, wopeCareCost,
         withDriverDailyRate, withDriverCost, billableDays,
       } = await buildPricingBreakdown();
+
+      // Same guard as handlePay: the total shown (draft.totalCost) and the
+      // components saved on this row are derived separately, so if an
+      // admin-configured value resolved between the two they would disagree
+      // and the row (and its QuickBooks invoice) would not add up. Stop
+      // before anything is saved and show the corrected amount instead.
+      const breakdownTotal = rentalCost + addonsCost - promoDiscountAmount + deliveryFee
+        + securityDeposit + wopeCareCost + withDriverCost;
+      if (Math.abs(breakdownTotal - draft.totalCost) > 0.5) {
+        updateDraft({ totalCost: breakdownTotal });
+        throw new Error(
+          `The price was just updated to ${formatCurrency(breakdownTotal, activeCurrency)}. Please check the amount and tap Save & Pay Later again.`
+        );
+      }
       const expiresAt = new Date(Date.now() + SAVED_BOOKING_HOLD_MS);
 
       const pendingInvoice = await createPendingInvoiceRow({
@@ -532,6 +546,10 @@ export default function CheckoutPaymentScreen() {
         with_driver: !!draft.withDriver,
         with_driver_daily_rate: withDriverDailyRate,
         with_driver_total_cost: withDriverCost,
+        // Display/invoice only - the code is redeemed (and its use counted)
+        // when the renter actually pays, not here.
+        promo_code: draft.promoCode || null,
+        promo_discount_amount: promoDiscountAmount,
         total_cost: draft.totalCost,
         expires_at: expiresAt.toISOString(),
       });
