@@ -182,7 +182,14 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: updateError.message }, 500);
     }
 
-    let renterBody = `Your booking ${booking.booking_ref} was cancelled.`;
+    // Who did it, in the words a recipient should read. Admin/support is
+    // checked BEFORE ownership: a staff account that is also the booking's
+    // renter (common for internal test accounts) cancelling from the admin
+    // tools is still WopeCar Support cancelling, not "the client".
+    const cancelledByLabel = isAdmin ? 'WopeCar Support' : isOwner ? 'the client' : 'the vendor';
+    const cancelledBySuffix = isAdmin ? ' by WopeCar Support' : isVendorCaller ? ' by the vendor' : '';
+
+    let renterBody = `Your booking ${booking.booking_ref} was cancelled${cancelledBySuffix}.`;
     if (refundProcessed) {
       renterBody += ` GH₵${Math.round(refundAmount)} has been refunded.`;
     } else if (refundAmount > 0) {
@@ -193,7 +200,12 @@ Deno.serve(async (req) => {
     if (reason) renterBody += ` Reason: ${reason}`;
 
     const pushNotifications: { userId: string; title: string; body: string }[] = [];
+    // One notification per person: the renter/vendor rows below and the
+    // admin fan-out can name the same user (a staff renter, or a vendor who
+    // is also support), who used to receive both.
+    const notified = new Set<string>();
 
+    notified.add(booking.renter_id);
     await adminClient.from('notifications').insert({
       user_id: booking.renter_id,
       type: 'booking_cancelled',
@@ -203,8 +215,9 @@ Deno.serve(async (req) => {
     });
     pushNotifications.push({ userId: booking.renter_id, title: 'Booking cancelled', body: renterBody });
 
-    if (vendorUserId) {
-      const vendorBody = `Booking ${booking.booking_ref} was cancelled.${reason ? ` Reason: ${reason}` : ''}`;
+    if (vendorUserId && !notified.has(vendorUserId)) {
+      notified.add(vendorUserId);
+      const vendorBody = `Booking ${booking.booking_ref} was cancelled${cancelledBySuffix}.${reason ? ` Reason: ${reason}` : ''}`;
       await adminClient.from('notifications').insert({
         user_id: vendorUserId,
         type: 'booking_cancelled',
@@ -219,10 +232,13 @@ Deno.serve(async (req) => {
     // now (previously email-only for this event, same as every other
     // booking event in this app). "cancelledBy" mirrors send-booking-
     // cancelled's own wording for the admin email.
-    const cancelledBy = isOwner ? 'the client' : isVendorCaller ? 'the vendor' : 'admin/support';
-    const adminBody = `Booking ${booking.booking_ref} was cancelled by ${cancelledBy}.${reason ? ` Reason: ${reason}` : ''}`;
+    const adminBody = `Booking ${booking.booking_ref} was cancelled by ${cancelledByLabel}.${reason ? ` Reason: ${reason}` : ''}`;
     const { data: adminUsers } = await adminClient.from('users').select('id').or('role.eq.admin,is_support.eq.true');
     for (const adminUser of adminUsers ?? []) {
+      // Skip anyone already told above, and the staff member who just did
+      // the cancelling themselves.
+      if (notified.has(adminUser.id) || adminUser.id === caller.id) continue;
+      notified.add(adminUser.id);
       await adminClient.from('notifications').insert({
         user_id: adminUser.id,
         type: 'booking_cancelled',

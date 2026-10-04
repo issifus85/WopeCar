@@ -26,9 +26,18 @@ function normalizeServerNotification(raw) {
  * 0002_rls_policies.sql) already scopes this to the caller's own rows.
  */
 export async function getServerNotifications() {
+  // RLS alone isn't enough here: admin/support accounts also match the
+  // notifications_admin_all policy, so without an explicit user_id filter
+  // their inbox (and unread badge) pulled in EVERY user's notifications -
+  // each admin saw one copy of the same cancellation per fanned-out
+  // recipient, and a count in the thousands.
+  const { data: { session } } = await supabase.auth.getSession();
+  const userId = session?.user?.id;
+  if (!userId) return [];
   const { data, error } = await supabase
     .from('notifications')
     .select('id, type, title, body, booking_id, conversation_id, is_read, created_at')
+    .eq('user_id', userId)
     .order('created_at', { ascending: false });
   if (error) throw error;
   return (data ?? []).map(normalizeServerNotification);

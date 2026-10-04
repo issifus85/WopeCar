@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
+import supabase from '../services/supabase';
 import * as inboxStorage from '../services/inboxStorage';
 import * as conversationsApi from '../services/conversationsApi';
 import * as notificationsApi from '../services/notificationsApi';
@@ -9,6 +10,8 @@ import { sendSms } from '../services/smsService';
 import { useSettings } from './SettingsContext';
 import { useAuth } from './AuthContext';
 import { useBookings } from './BookingsContext';
+
+const isSupabaseBookingId = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
 // These two already get a full, richer templated email from a dedicated
 // Edge Function at their real write site (send-booking-confirmation from
@@ -106,7 +109,7 @@ export function InboxProvider({ children }) {
   const dataRef = useRef(data);
   const { settings } = useSettings();
   const { user } = useAuth();
-  const { bookings } = useBookings();
+  const { bookings, refreshBookings } = useBookings();
 
   useEffect(() => {
     dataRef.current = data;
@@ -340,15 +343,31 @@ export function InboxProvider({ children }) {
     });
     if (due.length === 0) return;
 
-    due.forEach((booking) => notifyBookingEvent('reminder', booking));
+    // `bookings` is whatever this device last fetched, so a booking an admin
+    // or vendor cancelled in the meantime still reads Confirmed here and
+    // used to trigger "Upcoming Pickup" for a trip that no longer exists.
+    // Confirm each candidate's live status first; if the check itself fails
+    // skip this pass (the next scan retries) rather than risk a false alert.
+    const serverIds = due.filter((b) => isSupabaseBookingId(b.id)).map((b) => b.id);
+    const checkLiveStatus = serverIds.length
+      ? supabase.from('bookings').select('id, status').in('id', serverIds)
+      : Promise.resolve({ data: [], error: null });
+    checkLiveStatus.then(({ data: live, error }) => {
+      if (error) return;
+      const cancelledIds = new Set((live ?? []).filter((r) => r.status === 'cancelled' || r.status === 'completed').map((r) => r.id));
+      const remindable = due.filter((b) => !cancelledIds.has(b.id));
+      remindable.forEach((booking) => notifyBookingEvent('reminder', booking));
 
-    setData((prev) => {
-      const remindedBookingIds = [...prev.remindedBookingIds, ...due.map((b) => b.id)];
-      const next = { ...prev, remindedBookingIds };
-      inboxStorage.setInboxData(next);
-      return next;
+      // Cancelled/completed ones are marked handled too so they're never re-checked.
+      setData((prev) => {
+        const remindedBookingIds = [...prev.remindedBookingIds, ...due.map((b) => b.id)];
+        const next = { ...prev, remindedBookingIds };
+        inboxStorage.setInboxData(next);
+        return next;
+      });
+      if (cancelledIds.size > 0) refreshBookings();
     });
-  }, [bookings, notifyBookingEvent]);
+  }, [bookings, notifyBookingEvent, refreshBookings]);
 
   useEffect(() => {
     if (isLoading) return;
