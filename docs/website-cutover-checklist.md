@@ -24,7 +24,8 @@ The only DNS change is **one A record**. Everything else is verification.
 - [ ] **Note the current record** exactly (so rollback is a copy-paste): `A  wopecar.com  209.182.202.254  TTL 900`.
 - [ ] **Freeze blog publishing on the OLD site.** Any post published there after today won't exist on the new site. (Ask me to import any that appear — it's a 10-minute job per post.)
 - [ ] **Supabase Auth URLs** (Dashboard → Authentication → URL Configuration, production project `tndkuzxaddrwrunhbrap`): Site URL = `https://wopecar.com`; Redirect URLs include `https://wopecar.com/**` and `https://www.wopecar.com/**`. Needed for email-confirmation / password-reset links from the website. *(Not verifiable from here.)*
-- [ ] **Paystack**: decide whether the website takes live payments on Friday. If yes: do one small live payment + refund after the cut-over, before announcing.
+- [ ] **Paystack webhook URL** (Paystack dashboard → Settings → API Keys & Webhooks): set the **Live** webhook URL to `https://tndkuzxaddrwrunhbrap.supabase.co/functions/v1/paystack-webhook` (and the **Test** one to `https://qvactycnufaowwsiqdrz.supabase.co/functions/v1/paystack-webhook` if you want webhook testing on preprod). The function is deployed to both projects; it rejects anything without Paystack's signature.
+- [ ] **Paystack**: payments are now confirmed server-side (`confirm-booking-payment`). Decide whether the website takes live payments on Friday. If yes: do one small live payment + refund after the cut-over, before announcing.
 - [ ] Google Search Console: have `wopecar.com` verified (domain property is easiest — DNS TXT record, added in the same InMotion zone, doesn't affect anything else).
 - [ ] Content sign-off: legal pages (Terms, Privacy, EULA, WopeCare terms), Detty December banner/dates.
 - [ ] Decide on the 2 dead images in the blog post "Teamwork at EMY Africa Expo 2025…" (already broken on the old site) — re-upload or remove in admin.
@@ -69,6 +70,9 @@ Notes:
 
 ## After the cut-over (not blocking)
 
+- **Lock payment fields in the database** (migration to add to `restrict_renter_booking_update`): once the mobile OTA with server-side confirmation has reached users, stop renters writing `payment_status`/`payment_ref`/`refund_amount` directly. Doing it earlier would break app builds that still confirm payments from the phone.
+- The mobile app's Paystack callback bridge page lives on `https://wopecarpreprod.com/payment/callback` (hardcoded in `services/paystackApi.js`, used by production too). It is unaffected by the wopecar.com cut-over but that domain must stay up.
+- Bookings confirmed by the webhook (customer closed the tab) are marked paid but don't get the confirmation emails / QuickBooks payment record the client normally triggers — the downstream functions need a user session. Admin should reconcile any such booking (rare).
 - Mobile app share links + universal links (`wopecar.com/book-a-car/<slug>`): needs app-store builds with associated domains — plan after the stores are live (see `app/car/[id].js` TODO).
 - Raise the A record TTL back to 900s+ after a stable week.
 - Watch Search Console "Pages" / "Not found (404)" for a few weeks; I can add redirects for anything real that shows up.
