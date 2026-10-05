@@ -1,16 +1,22 @@
 import supabase from './supabase';
 
-// Same host the Laravel backend still runs on - this callback bridge is a
-// plain unauthenticated web route (routes/web.php), not the JSON API, so
-// it's unaffected by the dead-Laravel-auth-token issue that took out the
-// two functions below. Left as-is: Paystack's hosted checkout needs a real
-// http(s) callback_url (it doesn't reliably honor the app's custom-scheme
-// deep link - exp:// in Expo Go, wopecar:// in a standalone build - falling
-// back to a default configured in the Paystack dashboard instead), so this
-// wraps the real app redirect URL in a bridge page that Paystack can
-// redirect to, which then forwards the browser on to the actual app deep
-// link. Confirmed still live via curl before keeping this unchanged.
-const SITE_URL = 'https://wopecarpreprod.com';
+// Paystack's hosted checkout needs a real http(s) callback_url (it doesn't
+// reliably honor the app's custom-scheme deep link - exp:// in Expo Go,
+// wopecar:// in a standalone build - falling back to a default configured in
+// the Paystack dashboard instead), so this wraps the real app redirect URL in
+// a bridge page that Paystack can redirect to, which then forwards the
+// browser on to the actual app deep link.
+//
+// The bridge is the new website's /payment/callback route
+// (wopecar-website app/payment/callback/route.ts, allow-lists app_redirect).
+// It used to be the legacy Laravel route on wopecarpreprod.com, which this
+// app's production builds also pointed at by mistake. The Vercel alias is
+// used (not wopecar.com) so it works both before and after wopecar.com's DNS
+// cut-over; on native the in-app WebView intercepts this URL before it even
+// loads (components/PaystackWebViewModal.js), so it's mainly a unique,
+// well-formed https prefix there. Older installed builds keep using
+// wopecarpreprod.com until they update.
+const SITE_URL = 'https://wopecar-website.vercel.app';
 
 export function buildPaystackCallbackUrl(appRedirectUrl) {
   return `${SITE_URL}/payment/callback?app_redirect=${encodeURIComponent(appRedirectUrl)}`;
