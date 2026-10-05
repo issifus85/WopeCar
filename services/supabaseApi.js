@@ -138,6 +138,52 @@ export async function updateBooking(id, patch) {
 }
 
 /**
+ * Marks a reserved booking paid after a successful Paystack charge, via the
+ * confirm-booking-payment Edge Function - which re-verifies the transaction
+ * (status, amount covers the booking, reference not reused, booking belongs
+ * to the caller) and writes payment_status/payment_ref with the service role.
+ * This replaces the old direct `updateBooking(id, { payment_status: 'paid',
+ * payment_ref })`, which any signed-in user could forge since renters may
+ * edit payment fields on their own row.
+ *
+ * Resolves { outcome: 'confirmed' | 'dates_conflict' | 'failed' }. Throws on
+ * a rejected payment (err.rejected = true, message is the server's reason -
+ * don't retry) or a transient failure (retry-able).
+ */
+export async function confirmBookingPayment(bookingId, reference) {
+  const { data, error } = await supabase.functions.invoke('confirm-booking-payment', {
+    body: { bookingIds: [bookingId], reference },
+  });
+  if (error) {
+    let message = 'We could not confirm your payment.';
+    let status;
+    try {
+      status = error.context?.status;
+      const body = await error.context?.json();
+      if (body?.error) message = body.error;
+    } catch {
+      // keep the generic message
+    }
+    const err = new Error(message);
+    err.rejected = typeof status === 'number' && status >= 400 && status < 500;
+    throw err;
+  }
+  if (data?.transaction_status && data.transaction_status !== 'success') {
+    const err = new Error('Payment was not successful. Please try again.');
+    err.rejected = true;
+    throw err;
+  }
+  return { outcome: data?.outcomes?.[bookingId] ?? 'failed' };
+}
+
+/** Re-reads one of the caller's own bookings (RLS-scoped) in full. */
+export async function getBookingById(id) {
+  const { data, error } = await supabase.from('bookings').select('*').eq('id', id).single();
+  if (error) throw error;
+  return data;
+}
+
+/**
  * Uploads a license-front/license-back/proof-of-address image to the
  * `documents` bucket (folder-ownership RLS already set up in
  * 0003_storage_policies.sql) and records it in the `documents` table

@@ -33,11 +33,14 @@ function waitForWebPopupRedirect(popup, callbackUrl) {
 }
 
 /**
+ * `bookingIds` (optional) are the reserved bookings this charge pays for;
+ * paystack-initialize stamps them on the transaction so the server-side
+ * confirmation (confirm-booking-payment / paystack-webhook) can match them.
  * Runs a full Paystack hosted-checkout charge for `amount` (in GHS) and
  * resolves with the verified transaction reference once payment succeeds.
  * Throws an Error with a user-facing message on cancellation or failure.
  */
-export async function payWithPaystack(amount) {
+export async function payWithPaystack(amount, bookingIds) {
   let popup = null;
   if (Platform.OS === 'web') {
     popup = window.open('about:blank', '_blank');
@@ -52,6 +55,7 @@ export async function payWithPaystack(amount) {
     const { authorization_url: authUrl, reference } = await initializePayment({
       amount,
       callbackUrl,
+      bookingIds,
     });
 
     let result;

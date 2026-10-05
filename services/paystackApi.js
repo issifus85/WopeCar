@@ -24,9 +24,9 @@ export function buildPaystackCallbackUrl(appRedirectUrl) {
  * nothing has written since auth moved to Supabase - every real booking's
  * payment step was silently 401ing before this.
  */
-export async function initializePayment({ amount, callbackUrl }) {
+export async function initializePayment({ amount, callbackUrl, bookingIds }) {
   const { data, error } = await supabase.functions.invoke('paystack-initialize', {
-    body: { amount, callbackUrl },
+    body: { amount, callbackUrl, bookingIds },
   });
   if (error) throw error;
   return data;

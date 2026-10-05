@@ -22,6 +22,8 @@ import { redeemPromoCode } from '../../services/promoApi';
 import {
   createBooking,
   updateBooking as confirmSupabaseBooking,
+  confirmBookingPayment,
+  getBookingById,
   uploadBookingDocument,
   linkExistingBookingDocument,
   sendBookingConfirmationEmail,
@@ -375,48 +377,45 @@ export default function CheckoutPaymentScreen() {
       const withDriverDailyRate = reserved.with_driver_daily_rate;
       const withDriverCost = reserved.with_driver_total_cost;
 
-      const reference = await payWithPaystack(draft.totalCost);
+      const reference = await payWithPaystack(draft.totalCost, [reserved.id]);
 
       // Last fragile step: the row already exists (visible to the renter/
       // vendor/admin either way), so a failure here is a "confirm this
-      // paid booking" data-fix, not a lost-money-with-no-record situation
-      // like before. Still worth a few retries rather than a bare attempt,
-      // since this is genuinely the one place left where a transient
-      // failure would leave real state (a successful charge) unreflected.
+      // paid booking" data-fix, not a lost-money-with-no-record situation.
+      // The server (confirm-booking-payment) re-verifies the Paystack charge
+      // and marks the booking paid - this device no longer writes
+      // payment_status itself (any signed-in user could have forged that).
+      // A few retries for transient failures, but never for a rejection
+      // (wrong amount, reference reused...), which would fail identically.
       //
-      // One error is not transient and must not be retried: Postgres code
-      // 23P01 is the bookings_no_overlapping_paid_dates exclusion
-      // constraint (see supabase/migrations/0041_...) rejecting this
-      // payment_status: 'paid' update because another renter's booking for
-      // these same car+dates was confirmed first. Retrying would fail
-      // identically every time - the charge already succeeded above, so
-      // this is surfaced as its own honest message rather than the generic
-      // "please try again" error, and the payment reference is recorded on
-      // the now-cancelled reservation so support can find and refund it.
+      // The 'dates_conflict' outcome is the bookings_no_overlapping_paid_dates
+      // exclusion constraint (supabase/migrations/0041_...) rejecting the paid
+      // update because another renter's booking for these same car+dates was
+      // confirmed first. The server already cancelled the reservation and
+      // recorded the payment reference on it for support to refund; the
+      // charge succeeded, so this is its own honest message, not the generic
+      // "please try again".
       let confirmed;
       let lastConfirmError;
       let datesConflict = false;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          confirmed = await confirmSupabaseBooking(reserved.id, {
-            payment_status: 'paid',
-            payment_ref: reference,
-          });
+          const { outcome } = await confirmBookingPayment(reserved.id, reference);
+          if (outcome === 'dates_conflict') {
+            datesConflict = true;
+          } else if (outcome === 'confirmed') {
+            confirmed = await getBookingById(reserved.id);
+          } else {
+            lastConfirmError = new Error('We could not confirm your payment. Contact WopeCar support with reference ' + reference + '.');
+          }
           break;
         } catch (e) {
           lastConfirmError = e;
-          if (e.code === '23P01') {
-            datesConflict = true;
-            break;
-          }
+          if (e.rejected) break;
         }
       }
       if (!confirmed) {
         if (datesConflict) {
-          await confirmSupabaseBooking(reserved.id, {
-            status: 'cancelled',
-            cancellation_reason: `Payment succeeded (ref ${reference}) but these dates were booked by another renter first - needs manual refund.`,
-          }).catch(() => {});
           throw new Error(
             `Your payment went through, but these dates were just booked by another renter. Contact WopeCar support with reference ${reference} for a refund.`
           );

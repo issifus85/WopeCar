@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'PAYSTACK_SECRET_KEY is not configured for this project.' }, 500);
     }
 
-    const { amount, callbackUrl } = await req.json();
+    const { amount, callbackUrl, bookingIds } = await req.json();
     const numericAmount = Number(amount);
     if (!numericAmount || numericAmount <= 0) {
       return jsonResponse({ error: 'A positive amount is required.' }, 400);
@@ -65,6 +65,22 @@ Deno.serve(async (req) => {
     }
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+    // Optional: the reserved bookings this charge is for. Stamped into the
+    // Paystack transaction's metadata so confirm-booking-payment and
+    // paystack-webhook can later check the payment against exactly these
+    // bookings, and so the webhook can finish them if the client never does.
+    // Older app builds don't send it and simply get no metadata.
+    let metadata: { booking_ids: string[]; user_id: string } | undefined;
+    if (Array.isArray(bookingIds) && bookingIds.length > 0) {
+      const ids = Array.from(new Set(bookingIds.filter((id: unknown) => typeof id === 'string'))) as string[];
+      const { data: owned } = await adminClient.from('bookings').select('id').in('id', ids).eq('renter_id', user.id);
+      if (!owned || owned.length !== ids.length) {
+        return jsonResponse({ error: 'These bookings do not belong to this account.' }, 403);
+      }
+      metadata = { booking_ids: ids, user_id: user.id };
+    }
+
     const { data: profile } = await adminClient.from('users').select('email').eq('id', user.id).maybeSingle();
     const email = profile?.email || user.email;
     if (!email) {
@@ -84,6 +100,7 @@ Deno.serve(async (req) => {
         email,
         amount: Math.round(numericAmount * 100),
         callback_url: callbackUrl,
+        ...(metadata ? { metadata } : {}),
       }),
     });
     const paystackJson = await paystackRes.json();
