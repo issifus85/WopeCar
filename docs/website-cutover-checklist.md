@@ -71,7 +71,7 @@ Notes:
 ## After the cut-over (not blocking)
 
 - **Lock payment fields in the database** (migration to add to `restrict_renter_booking_update`): once the mobile OTA with server-side confirmation has reached users, stop renters writing `payment_status`/`payment_ref`/`refund_amount` directly. Doing it earlier would break app builds that still confirm payments from the phone.
-- The mobile app's Paystack callback bridge page lives on `https://wopecarpreprod.com/payment/callback` (hardcoded in `services/paystackApi.js`, used by production too). It is unaffected by the wopecar.com cut-over but that domain must stay up.
+- The mobile app's Paystack callback bridge now lives on the new website (`/payment/callback`, allow-listed). Apps that haven't updated yet still use `wopecarpreprod.com`, so keep that domain up until they have. Optional: swap `SITE_URL` in `services/paystackApi.js` from the Vercel alias to `https://wopecar.com` after the cut-over.
 - Bookings confirmed by the webhook (customer closed the tab) are marked paid but don't get the confirmation emails / QuickBooks payment record the client normally triggers — the downstream functions need a user session. Admin should reconcile any such booking (rare).
 - Mobile app share links + universal links (`wopecar.com/book-a-car/<slug>`): needs app-store builds with associated domains — plan after the stores are live (see `app/car/[id].js` TODO).
 - Raise the A record TTL back to 900s+ after a stable week.
