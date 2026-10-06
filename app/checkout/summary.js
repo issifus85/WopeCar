@@ -92,6 +92,25 @@ export default function CheckoutSummaryScreen() {
 
   const isSelfDrive = car?.drivenBy === 'Self-drive';
 
+  // Days grouped by the rate they bill at, so a trip that includes
+  // seasonal custom-priced dates (car_date_prices, e.g. December) reads
+  // "Standard rate x N + Seasonal rate x M" instead of leaving the renter to
+  // wonder why the total isn't the car's listed daily rate x days. Only built
+  // when at least one day differs from the car's normal rate; amounts are
+  // pre-discount (the discount rows below subtract any promo/length-of-trip
+  // reduction), so the groups sum to baseRentalCost.
+  const rateGroups = useMemo(() => {
+    if (!pricing?.dailyBreakdown?.length || !car) return [];
+    const groups = [];
+    pricing.dailyBreakdown.forEach(({ rate }) => {
+      const seasonal = rate !== car.pricePerDay;
+      const existing = groups.find((g) => g.rate === rate);
+      if (existing) existing.days += 1;
+      else groups.push({ rate, days: 1, seasonal });
+    });
+    return groups.some((g) => g.seasonal) ? groups : [];
+  }, [pricing, car]);
+
   const rentalCost = pricing?.rentalCost ?? 0;
   const baseRentalCost = pricing?.baseRentalCost ?? 0;
   const hasDiscount = !!pricing && pricing.totalDiscount > 0;
@@ -221,6 +240,15 @@ export default function CheckoutSummaryScreen() {
               <Text style={styles.costValue}>{formatCurrency(rentalCost, activeCurrency)}</Text>
             </View>
           </View>
+
+          {rateGroups.map((g) => (
+            <View style={styles.costRow} key={`${g.seasonal}-${g.rate}`}>
+              <Text style={[styles.costLabel, styles.rateLineLabel]}>
+                {g.seasonal ? 'Seasonal rate' : 'Standard rate'}: {formatCurrency(g.rate, activeCurrency)} × {g.days} {g.days === 1 ? 'day' : 'days'}
+              </Text>
+              <Text style={[styles.costValue, styles.rateLineValue]}>{formatCurrency(g.rate * g.days, activeCurrency)}</Text>
+            </View>
+          ))}
 
           {hasDiscount && (
             <View style={styles.costRow}>
@@ -429,6 +457,16 @@ function createStyles(colors) {
   },
   discountLabel: {
     color: colors.success,
+  },
+  // Indented, lighter sub-lines under "Rental (N days)" itemising rate groups.
+  rateLineLabel: {
+    paddingLeft: 12,
+    fontSize: 12,
+    color: colors.textSubtle,
+  },
+  rateLineValue: {
+    fontSize: 12,
+    color: colors.textSubtle,
   },
   noProtectionLabel: {
     color: colors.textSubtle,
