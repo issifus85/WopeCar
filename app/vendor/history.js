@@ -10,16 +10,17 @@ import { useVendor } from '../../contexts/VendorContext';
 import VendorHeader from '../../components/VendorHeader';
 import VendorStatusBadge from '../../components/VendorStatusBadge';
 import OptionPickerModal from '../../components/OptionPickerModal';
+import { parseDateOnly } from '../../constants/dateUtils';
 
 const ALL_TIME = 'All Time';
 const ALL_CARS = 'All Cars';
 
 function monthLabel(iso) {
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+  return parseDateOnly(iso).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
 }
 
 function formatDate(iso) {
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return parseDateOnly(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export default function VendorHistoryScreen() {

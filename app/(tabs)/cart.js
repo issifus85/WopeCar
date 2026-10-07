@@ -15,6 +15,7 @@ import { fetchCarById } from '../../services/carsApi';
 import CarListCard from '../../components/CarListCard';
 import ConfirmModal from '../../components/ConfirmModal';
 import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
+import { parseDateOnly } from '../../constants/dateUtils';
 
 // app/car/[id].js's hero and app/checkout/payment.js's summary card each
 // render at their own size - different resizeImageUrl cache keys than this
@@ -25,7 +26,7 @@ const SAVED_CARD_IMAGE_SIZE = 56;
 
 function formatShortDate(iso) {
   if (!iso) return '';
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return parseDateOnly(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 // hoursLeft is a plain number (not a Date diff) so callers doing the

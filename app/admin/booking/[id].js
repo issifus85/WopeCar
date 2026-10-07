@@ -15,6 +15,7 @@ import {
   modifyBooking, recomputeBookingCost, getModifyPricingContext,
 } from '../../../services/adminBookingsApi';
 import { getUserVerificationDocuments, getBookingInspections, getInspectionReportSignedUrl } from '../../../services/adminDocumentsApi';
+import { parseDateOnly } from '../../../constants/dateUtils';
 
 const VERIFICATION_DOC_LABELS = [
   { type: 'license_front', label: "License - Front" },
@@ -152,7 +153,7 @@ const TIME_SLOTS = [
 
 function formatDate(d) {
   if (!d) return '—';
-  return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return parseDateOnly(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 function daysBetween(start, end) {
   if (!start || !end) return 0;

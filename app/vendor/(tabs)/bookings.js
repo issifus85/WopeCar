@@ -11,10 +11,11 @@ import { sendLocalPushNotification } from '../../../services/pushNotifications';
 import VendorHeader from '../../../components/VendorHeader';
 import ConfirmModal from '../../../components/ConfirmModal';
 import DeclineReasonModal from '../../../components/DeclineReasonModal';
+import { parseDateOnly } from '../../../constants/dateUtils';
 
 function formatDate(iso) {
   if (!iso) return '';
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return parseDateOnly(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export default function VendorBookingsScreen() {

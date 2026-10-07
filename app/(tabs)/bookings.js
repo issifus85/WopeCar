@@ -11,6 +11,7 @@ import { formatCurrency } from '../../constants/pricing';
 import { useBookings } from '../../contexts/BookingsContext';
 import { logScreen } from '../../services/analytics';
 import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
+import { parseDateOnly } from '../../constants/dateUtils';
 
 const CARD_IMAGE_WIDTH = 100;
 const CARD_IMAGE_HEIGHT = 118;
@@ -32,7 +33,7 @@ function getStatusColors(colors) {
 
 function formatDate(iso) {
   if (!iso) return '';
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return parseDateOnly(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function BookingCard({ booking, onPress, styles, colors, currency }) {

@@ -47,6 +47,7 @@ import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 import ConfirmModal from '../../components/ConfirmModal';
 import { logScreen, logBookingCompleted, logSaveToCart } from '../../services/analytics';
+import { parseDateOnly } from '../../constants/dateUtils';
 
 const SAVED_BOOKING_HOLD_MS = 24 * 60 * 60 * 1000;
 
@@ -61,7 +62,7 @@ function toISODate(value) {
 
 function formatShortDate(value) {
   if (!value) return '';
-  return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return parseDateOnly(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 export default function CheckoutPaymentScreen() {

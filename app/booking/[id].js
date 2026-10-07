@@ -33,6 +33,7 @@ import DateRangeModal, { formatDateShort } from '../../components/DateRangeModal
 import LocationSearchModal from '../../components/LocationSearchModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
+import { parseDateOnly } from '../../constants/dateUtils';
 
 const CARD_IMAGE_SIZE = 72;
 
@@ -479,7 +480,7 @@ export default function BookingDetailScreen() {
   // "Today" per calendar date, not exact time - a booking whose pickup is
   // today should prompt regardless of what time pickup is scheduled for.
   const isPickupToday = booking.startDate
-    && new Date(booking.startDate).toDateString() === new Date().toDateString();
+    && parseDateOnly(booking.startDate).toDateString() === new Date().toDateString();
   const showDirectionsPrompt = mode === 'view' && settings.autoOpenDirections && isPickupToday
     && booking.status === 'Confirmed' && !!booking.pickupLocation && !directionsPromptDismissed;
 

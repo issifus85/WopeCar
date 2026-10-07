@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import DateRangeModal from './DateRangeModal';
+import { parseDateOnly } from '../constants/dateUtils';
 
 const DISCOUNT_TYPE_OPTIONS = [
   { key: 'percentage', label: '%' },
@@ -12,7 +13,7 @@ const DISCOUNT_TYPE_OPTIONS = [
 
 function formatDateLabel(iso) {
   if (!iso) return null;
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return parseDateOnly(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 // Two independent discount mechanisms, both optional:

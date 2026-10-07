@@ -18,6 +18,7 @@ import {
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 import SignaturePad from '../../components/SignaturePad';
 import ObligationsModal from '../../components/ObligationsModal';
+import { parseDateOnly } from '../../constants/dateUtils';
 
 const REQUIRED_FIELDS = ['lesseeName', 'vehicleRegistration', 'vehicleMake', 'dailyRate', 'durationStart', 'durationEnd'];
 const SIGNATURE_MODES = [
@@ -28,7 +29,7 @@ const SYNC_DEBOUNCE_MS = 800;
 
 function formatDate(value) {
   if (!value) return '—';
-  return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return parseDateOnly(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function SignatureSlot({ label, value, mode, onModeChange, padRef, onOK, onEmpty, onBegin, onEnd, onEdit, styles }) {
