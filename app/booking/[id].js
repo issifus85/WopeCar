@@ -49,6 +49,8 @@ const TIME_SLOTS = [
   '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
   '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM',
 ];
+// Self-drive handovers run 9:00 AM-5:00 PM (same window as checkout/dates.js).
+const SELF_DRIVE_TIME_SLOTS = TIME_SLOTS.filter((slot) => slot !== '8:00 AM' && slot !== '6:00 PM');
 
 function formatDate(date) {
   if (!date) return '';
@@ -96,12 +98,12 @@ function toISODate(value) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function TimeSlotPicker({ label, value, onChange, styles }) {
+function TimeSlotPicker({ label, value, onChange, styles, slots = TIME_SLOTS }) {
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <View style={styles.slotGrid}>
-        {TIME_SLOTS.map((slot) => (
+        {slots.map((slot) => (
           <TouchableOpacity
             key={slot}
             style={[styles.slot, value === slot && styles.slotActive]}
@@ -728,8 +730,8 @@ export default function BookingDetailScreen() {
             )}
           </View>
 
-          <TimeSlotPicker label="Pickup Time" value={editPickupTime} onChange={setEditPickupTime} styles={styles} />
-          <TimeSlotPicker label="Return Time" value={editReturnTime} onChange={setEditReturnTime} styles={styles} />
+          <TimeSlotPicker label="Pickup Time" value={editPickupTime} onChange={setEditPickupTime} styles={styles} slots={isChauffeurBooking ? TIME_SLOTS : SELF_DRIVE_TIME_SLOTS} />
+          <TimeSlotPicker label="Return Time" value={editReturnTime} onChange={setEditReturnTime} styles={styles} slots={isChauffeurBooking ? TIME_SLOTS : SELF_DRIVE_TIME_SLOTS} />
 
           <View style={styles.field}>
             <Text style={styles.fieldLabel}>{deliveryLocationLabel}</Text>

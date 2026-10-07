@@ -24,17 +24,24 @@ const MONTH_NAMES = [
 const SHORT_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+// Self-drive handovers run 9:00 AM to 5:00 PM (was 8-6; changed Oct 2026).
 const SELF_DRIVE_SLOTS = [
+  '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
+  '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM',
+];
+
+// Chauffeur bookings keep the original 8:00 AM-6:00 PM base window - the
+// self-drive cut-down above must NOT narrow them, so they build on their own
+// list rather than on SELF_DRIVE_SLOTS.
+const CHAUFFEUR_BASE_SLOTS = [
   '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
   '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM',
 ];
 
 // Chauffeur bookings get a wider window on both ends (a driver can start
-// earlier and finish later than a self-drive handover requires) - the
-// self-drive list is untouched, just extended at either end rather than
-// redefined, so the two stay obviously in sync if the base hours ever move.
-const CHAUFFEUR_PICKUP_SLOTS = ['5:30 AM', '6:00 AM', '7:00 AM', ...SELF_DRIVE_SLOTS];
-const CHAUFFEUR_RETURN_SLOTS = [...SELF_DRIVE_SLOTS, '7:00 PM', '8:00 PM', '8:30 PM'];
+// earlier and finish later than a self-drive handover requires).
+const CHAUFFEUR_PICKUP_SLOTS = ['5:30 AM', '6:00 AM', '7:00 AM', ...CHAUFFEUR_BASE_SLOTS];
+const CHAUFFEUR_RETURN_SLOTS = [...CHAUFFEUR_BASE_SLOTS, '7:00 PM', '8:00 PM', '8:30 PM'];
 
 // e.g. "Mon 17 Aug" - used by the 24hr rental note below, distinct from
 // the calendar grid's 2-letter WEEKDAYS and the month-nav's full MONTH_NAMES.
