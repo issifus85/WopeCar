@@ -20,8 +20,21 @@ function normalizeAgreement(row) {
     ghanaOnlyUse: row.ghana_only_use ?? true,
     hasClientSignature: !!row.client_signature_path,
     hasRepresentativeSignature: !!row.representative_signature_path,
+    clientSignaturePath: row.client_signature_path ?? null,
+    representativeSignaturePath: row.representative_signature_path ?? null,
     submittedAt: row.submitted_at,
   };
+}
+
+/**
+ * A short-lived signed URL for a stored signature image, or null when the
+ * viewer can't read it (the documents bucket is private: the renter and
+ * admins can, a vendor can't - callers fall back to a "signed" tick).
+ */
+export async function getRentalAgreementSignatureUrl(path) {
+  if (!path) return null;
+  const { data } = await supabase.storage.from('documents').createSignedUrl(path, 3600);
+  return data?.signedUrl ?? null;
 }
 
 /**

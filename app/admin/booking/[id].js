@@ -16,6 +16,7 @@ import {
 } from '../../../services/adminBookingsApi';
 import { getUserVerificationDocuments, getBookingInspections, getInspectionReportSignedUrl } from '../../../services/adminDocumentsApi';
 import { parseDateOnly } from '../../../constants/dateUtils';
+import { getRentalAgreement } from '../../../services/rentalAgreementApi';
 
 const VERIFICATION_DOC_LABELS = [
   { type: 'license_front', label: "License - Front" },
@@ -140,6 +141,52 @@ function InspectionReportsSection({ bookingId, router, styles, colors }) {
             </TouchableOpacity>
           );
         })
+      )}
+    </View>
+  );
+}
+
+function agreementBadgeLabel(agreement) {
+  if (!agreement) return 'Not Started';
+  if (agreement.status === 'submitted') return 'Signed';
+  const signed = [agreement.hasClientSignature, agreement.hasRepresentativeSignature].filter(Boolean).length;
+  return signed > 0 ? `In Progress (${signed}/2 signatures)` : 'In Progress';
+}
+
+/**
+ * Status of the booking's client rental agreement - the admin had no way to
+ * see whether it was signed. Tapping opens the existing read-only agreement
+ * report screen (now showing the signature images).
+ */
+function RentalAgreementSection({ bookingId, router, styles, colors }) {
+  const [agreement, setAgreement] = useState(undefined);
+
+  useEffect(() => {
+    if (!bookingId) return;
+    getRentalAgreement(bookingId)
+      .then(setAgreement)
+      .catch(() => setAgreement(null));
+  }, [bookingId]);
+
+  if (!bookingId) return null;
+
+  return (
+    <View style={styles.section}>
+      <SectionHeading>Rental Agreement</SectionHeading>
+      {agreement === undefined ? (
+        <ActivityIndicator color={colors.teal} style={{ marginVertical: 8 }} />
+      ) : (
+        <TouchableOpacity
+          style={styles.row}
+          disabled={!agreement}
+          onPress={() => router.push({ pathname: '/rental-agreement/report', params: { bookingId } })}
+        >
+          <Text style={styles.rowLabel}>Client agreement</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Text style={styles.rowValue}>{agreementBadgeLabel(agreement)}</Text>
+            {!!agreement && <Ionicons name="chevron-forward" size={16} color={colors.teal} />}
+          </View>
+        </TouchableOpacity>
       )}
     </View>
   );
@@ -364,6 +411,8 @@ export default function AdminBookingDetailScreen() {
             <VerificationDocsSection renterId={booking.renter?.id} styles={styles} colors={colors} />
 
             <InspectionReportsSection bookingId={booking.id} router={router} styles={styles} colors={colors} />
+
+            <RentalAgreementSection bookingId={booking.id} router={router} styles={styles} colors={colors} />
 
             <View style={styles.section}>
               <SectionHeading>Car</SectionHeading>
