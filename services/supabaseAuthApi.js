@@ -308,6 +308,12 @@ export async function loginWithApple() {
   });
   if (error) throw error;
 
+  // Hand Apple's one-time authorization code to the server so it can keep the refresh token and revoke it if this
+  // account is ever deleted (App Store 5.1.1(v)). Fire-and-forget: sign-in must never wait on or fail because of it.
+  if (credential.authorizationCode) {
+    supabase.functions.invoke('apple-store-token', { body: { authorizationCode: credential.authorizationCode } }).catch(() => {});
+  }
+
   // Apple hands back the user's name only on the FIRST authorization ever
   // granted to this app - never in the identity token itself, and
   // signInWithIdToken (unlike signUp()) has no field for extra signup

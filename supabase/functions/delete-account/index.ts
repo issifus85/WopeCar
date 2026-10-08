@@ -13,6 +13,7 @@
 // environment - no manual secret configuration needed.)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { isAppleConfigured, revokeAppleToken } from '../_shared/appleAuth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -175,6 +176,18 @@ Deno.serve(async (req) => {
     // Read the display name before it's scrubbed - the support notice
     // below reads better with a name than just an email.
     const { data: profile } = await adminClient.from('users').select('full_name').eq('id', user.id).maybeSingle();
+
+    // Sign in with Apple accounts: revoke Apple's token before the account goes away (App Store 5.1.1(v)).
+    // Best effort and only when the Apple secrets are configured - never blocks deletion.
+    try {
+      if (providers.includes('apple') && isAppleConfigured()) {
+        const { data: tokenRow } = await adminClient.from('apple_auth_tokens').select('refresh_token').eq('user_id', user.id).maybeSingle();
+        if (tokenRow?.refresh_token) await revokeAppleToken(tokenRow.refresh_token);
+      }
+      await adminClient.from('apple_auth_tokens').delete().eq('user_id', user.id);
+    } catch (e) {
+      console.error('Failed to revoke Apple token during account deletion:', e);
+    }
 
     // Best-effort - a user's own uploaded ID/licence photos are sensitive
     // and should genuinely go away, but a storage hiccup here must never

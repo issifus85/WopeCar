@@ -253,7 +253,7 @@ Deno.serve(async (req) => {
 
     const { data: booking, error: bookingError } = await adminClient
       .from('bookings')
-      .select('*, cars(name, payout_per_day), renter:renter_id(id, full_name, email)')
+      .select('*, cars(name), renter:renter_id(id, full_name, email)')
       .eq('id', bookingId)
       .single();
     if (bookingError || !booking) {
@@ -291,7 +291,9 @@ Deno.serve(async (req) => {
     }
 
     const newBillableDays = Number(billableDays ?? 0);
-    const payoutPerDay = Number(booking.cars?.payout_per_day ?? 0);
+    // The payout rate lives in the admin-only car_payouts table (not on cars, which is publicly readable).
+    const { data: payoutRow } = await adminClient.from('car_payouts').select('payout_per_day').eq('car_id', booking.car_id).maybeSingle();
+    const payoutPerDay = Number(payoutRow?.payout_per_day ?? 0);
     const vendorPayoutTotal = Math.round(payoutPerDay * Math.max(newBillableDays, 0) * 100) / 100;
     const newTotalCost = Number(totalCost);
     const wopecarMargin = Math.round((newTotalCost - vendorPayoutTotal) * 100) / 100;
