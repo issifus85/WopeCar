@@ -38,7 +38,8 @@ export async function getServerNotifications() {
     .from('notifications')
     .select('id, type, title, body, booking_id, conversation_id, is_read, created_at')
     .eq('user_id', userId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(100);
   if (error) throw error;
   return (data ?? []).map(normalizeServerNotification);
 }

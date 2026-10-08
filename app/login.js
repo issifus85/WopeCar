@@ -114,6 +114,12 @@ export default function LoginScreen() {
   // account), so this works regardless of which tab is active.
   const handleSocialLogin = async (provider) => {
     setError(null);
+    // Creating an account (Sign Up tab) requires the same Terms/EULA agreement as email signup -
+    // the social buttons used to bypass the checkbox entirely (Apple 1.2).
+    if (isSignUp && !acceptedTerms) {
+      setError('Please agree to the Terms of Service and EULA to continue.');
+      return;
+    }
     setSocialProvider(provider);
     try {
       await loginWithSocial(provider);

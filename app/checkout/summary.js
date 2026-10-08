@@ -54,12 +54,28 @@ export default function CheckoutSummaryScreen() {
   // Per-date custom pricing for just this trip's range - falls back to the
   // car's base price_per_day for any date without an override (see
   // calculateRentalPricing's getDatePrice).
+  // The price shown (and charged) depends on this lookup - December's +5% lives in it - so Proceed is
+  // held until it has actually loaded. It used to be fire-and-forget with errors swallowed: on a slow or
+  // failed fetch the renter silently saw (and could pay) the flat rate.
+  const [datePricesStatus, setDatePricesStatus] = useState('loading'); // 'loading' | 'ready' | 'error'
+  const [datePricesAttempt, setDatePricesAttempt] = useState(0);
   useEffect(() => {
     if (!carId || !draft.startDate || !draft.endDate) return;
+    let cancelled = false;
+    setDatePricesStatus('loading');
     getDatePriceMap(carId, { fromDate: toISODate(draft.startDate), toDate: toISODate(draft.endDate) })
-      .then(setDatePriceMap)
-      .catch(() => {});
-  }, [carId, draft.startDate, draft.endDate]);
+      .then((map) => {
+        if (cancelled) return;
+        setDatePriceMap(map);
+        setDatePricesStatus('ready');
+      })
+      .catch(() => {
+        if (!cancelled) setDatePricesStatus('error');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [carId, draft.startDate, draft.endDate, datePricesAttempt]);
 
   const pricing = useMemo(() => {
     if (!draft.startDate || !draft.endDate || !car) return null;
@@ -178,6 +194,7 @@ export default function CheckoutSummaryScreen() {
   };
 
   const handleContinue = () => {
+    if (datePricesStatus !== 'ready') return;
     updateDraft({ totalCost: total });
     router.push({ pathname: '/checkout/form', params: { carId } });
   };
@@ -363,7 +380,11 @@ export default function CheckoutSummaryScreen() {
         </View>
       </ScrollView>
 
-      <CheckoutFooterButton label="Proceed" onPress={handleContinue} />
+      <CheckoutFooterButton
+        label={datePricesStatus === 'error' ? 'Retry loading prices' : datePricesStatus === 'loading' ? 'Loading prices…' : 'Proceed'}
+        onPress={datePricesStatus === 'error' ? () => setDatePricesAttempt((n) => n + 1) : handleContinue}
+        disabled={datePricesStatus === 'loading'}
+      />
       </KeyboardAvoidingView>
     </View>
   );

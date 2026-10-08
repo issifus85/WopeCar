@@ -10,6 +10,7 @@ import { sendSms } from '../services/smsService';
 import { useSettings } from './SettingsContext';
 import { useAuth } from './AuthContext';
 import { useBookings } from './BookingsContext';
+import { parseDateOnly } from '../constants/dateUtils';
 
 const isSupabaseBookingId = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
@@ -232,6 +233,9 @@ export function InboxProvider({ children }) {
     syncServerConversations();
     syncServerNotifications();
     const interval = setInterval(() => {
+      // Don't poll while the app is backgrounded (Android keeps the JS timer alive) - battery and data.
+      // Coming back to the foreground re-syncs immediately via the AppState listener below.
+      if (AppState.currentState !== 'active') return;
       syncServerConversations();
       syncServerNotifications();
     }, LIST_POLL_MS);
@@ -337,7 +341,7 @@ export function InboxProvider({ children }) {
     const due = bookings.filter((b) => {
       if (b.status !== 'Pending' && b.status !== 'Confirmed') return false;
       if (!b.startDate) return false;
-      const startMs = new Date(b.startDate).getTime();
+      const startMs = parseDateOnly(b.startDate).getTime();
       if (Number.isNaN(startMs) || startMs <= now || startMs > cutoff) return false;
       return !dataRef.current.remindedBookingIds.includes(b.id);
     });

@@ -142,11 +142,11 @@ export function AuthProvider({ children }) {
     await refresh();
   }, [refresh]);
 
-  const deleteAccount = useCallback(async (password) => {
+  const deleteAccount = useCallback(async (password, confirmation) => {
     // The delete-account Edge Function already deleted the auth user
     // (and signed this session out) server-side - just drop local state
     // to match, same end state as logout().
-    await authApi.deleteAccount(password);
+    await authApi.deleteAccount(password, confirmation);
     setUser(null);
     await clearLocalUserData();
   }, []);

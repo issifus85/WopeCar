@@ -533,12 +533,12 @@ function notifyPasswordChanged() {
  * service_role internally. .functions.invoke() automatically attaches the
  * current session's access token as the Authorization header.
  */
-export async function deleteAccount(password) {
+export async function deleteAccount(password, confirmation) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('Not signed in.');
 
   const { data, error } = await supabase.functions.invoke('delete-account', {
-    body: { password },
+    body: { password, confirmation },
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);

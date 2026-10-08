@@ -49,6 +49,11 @@ export async function payWithPaystack(amount, bookingIds) {
     }
   }
 
+  // The reference is known as soon as the transaction is initialised. If the sheet is then dismissed
+  // or fails, the charge may STILL have gone through (e.g. a Mobile Money approval landing after the
+  // WebView closed) - so the reference is attached to the thrown error and checkout re-checks it
+  // before ever opening a second charge.
+  let startedReference = null;
   try {
     const appRedirectUrl = Linking.createURL('payment-callback');
     const callbackUrl = buildPaystackCallbackUrl(appRedirectUrl);
@@ -57,6 +62,7 @@ export async function payWithPaystack(amount, bookingIds) {
       callbackUrl,
       bookingIds,
     });
+    startedReference = reference;
 
     let result;
     if (Platform.OS === 'web') {
@@ -84,6 +90,7 @@ export async function payWithPaystack(amount, bookingIds) {
     return reference;
   } catch (e) {
     if (popup && !popup.closed) popup.close();
+    if (startedReference && e && typeof e === 'object') e.reference = startedReference;
     throw e;
   }
 }

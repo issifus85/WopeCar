@@ -93,10 +93,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Missing Authorization header.' }, 401);
     }
 
-    const { password } = await req.json();
-    if (!password) {
-      return jsonResponse({ error: 'Password is required to delete your account.' }, 400);
-    }
+    const { password, confirmation } = await req.json();
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -114,17 +111,28 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Invalid or expired session.' }, 401);
     }
 
-    // Step 2: re-verify the password before deleting anything - same
-    // "re-enter your password" requirement Laravel's DELETE /api/account
-    // already enforces. A throwaway anon client, so this sign-in attempt
-    // never touches the caller's real session/token.
-    const verifyClient = createClient(supabaseUrl, anonKey);
-    const { error: passwordError } = await verifyClient.auth.signInWithPassword({
-      email: user.email,
-      password,
-    });
-    if (passwordError) {
-      return jsonResponse({ error: 'Incorrect password.' }, 401);
+    // Step 2: re-confirm intent before deleting anything. Accounts with an email/password
+    // identity must re-enter the password (same requirement as before). Accounts created with
+    // Sign in with Apple / Google / Facebook have NO password to re-enter - they used to be
+    // unable to delete their account at all (App Store 5.1.1(v) / Google Play account-deletion
+    // policy), so they confirm by typing DELETE instead.
+    const providers: string[] = (user.app_metadata?.providers as string[] | undefined) ?? [];
+    const hasPassword = providers.includes('email');
+    if (hasPassword) {
+      if (!password) {
+        return jsonResponse({ error: 'Password is required to delete your account.' }, 400);
+      }
+      // A throwaway anon client, so this sign-in attempt never touches the caller's real session/token.
+      const verifyClient = createClient(supabaseUrl, anonKey);
+      const { error: passwordError } = await verifyClient.auth.signInWithPassword({
+        email: user.email,
+        password,
+      });
+      if (passwordError) {
+        return jsonResponse({ error: 'Incorrect password.' }, 401);
+      }
+    } else if (confirmation !== 'DELETE') {
+      return jsonResponse({ error: 'Type DELETE to confirm deleting your account.' }, 400);
     }
 
     // Step 3: only now, with identity + password both confirmed, use

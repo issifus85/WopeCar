@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,6 +6,7 @@ import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import ConfirmModal from '../../components/ConfirmModal';
+import supabase from '../../services/supabase';
 
 export default function DeleteAccountScreen() {
   const router = useRouter();
@@ -14,6 +15,16 @@ export default function DeleteAccountScreen() {
   const { user, deleteAccount } = useAuth();
 
   const [password, setPassword] = useState('');
+  // Accounts created with Apple / Google / Facebook have no password - they confirm by typing DELETE.
+  const [isPasswordless, setIsPasswordless] = useState(false);
+  const [confirmation, setConfirmation] = useState('');
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      const providers = data?.user?.app_metadata?.providers ?? [];
+      setIsPasswordless(providers.length > 0 && !providers.includes('email'));
+    }).catch(() => {});
+  }, []);
+  const canSubmit = isPasswordless ? confirmation.trim() === 'DELETE' : !!password;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -27,7 +38,7 @@ export default function DeleteAccountScreen() {
     }
     setIsSubmitting(true);
     try {
-      await deleteAccount(password);
+      await deleteAccount(isPasswordless ? undefined : password, isPasswordless ? confirmation.trim() : undefined);
       router.replace('/login');
     } catch (e) {
       setError(e.message || 'Something went wrong. Please try again.');
@@ -46,23 +57,40 @@ export default function DeleteAccountScreen() {
       </View>
 
       <View style={styles.field}>
-        <Text style={styles.label}>Enter your password to confirm</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="••••••••"
-          placeholderTextColor={colors.textSubtle}
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
+        {isPasswordless ? (
+          <>
+            <Text style={styles.label}>Type DELETE to confirm</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="DELETE"
+              placeholderTextColor={colors.textSubtle}
+              value={confirmation}
+              onChangeText={setConfirmation}
+              autoCapitalize="characters"
+              autoCorrect={false}
+            />
+          </>
+        ) : (
+          <>
+            <Text style={styles.label}>Enter your password to confirm</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="••••••••"
+              placeholderTextColor={colors.textSubtle}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+            />
+          </>
+        )}
       </View>
 
       {!!error && <Text style={styles.errorText}>{error}</Text>}
 
       <TouchableOpacity
-        style={[styles.deleteButton, (isSubmitting || !password) && styles.deleteButtonDisabled]}
+        style={[styles.deleteButton, (isSubmitting || !canSubmit) && styles.deleteButtonDisabled]}
         onPress={() => setShowConfirm(true)}
-        disabled={isSubmitting || !password}
+        disabled={isSubmitting || !canSubmit}
       >
         {isSubmitting ? (
           <ActivityIndicator color={colors.white} />

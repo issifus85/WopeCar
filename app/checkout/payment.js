@@ -101,6 +101,11 @@ export default function CheckoutPaymentScreen() {
   // see handlePay's comment for why both of these exist.
   const isSubmittingRef = useRef(false);
   const reservedBookingRef = useRef(null);
+  // References of Paystack charges already started for this reservation: the last one that completed
+  // (confirmation may have failed afterwards) and the last one that was dismissed/failed mid-way (the
+  // charge can still have succeeded). Checked before any retry so Pay never charges the card twice.
+  const lastPaidReferenceRef = useRef(null);
+  const abandonedReferenceRef = useRef(null);
 
   useEffect(() => {
     fetchCarById(carId)
@@ -152,11 +157,34 @@ export default function CheckoutPaymentScreen() {
   // same calculateRentalPricing() engine as summary.js, so the rentalCost
   // persisted to bookings.rental_cost matches what the renter was shown -
   // custom per-date pricing and discounts included, not the flat rate.
+  // Returns the Paystack reference of a payment that already went through for this reservation (so the
+  // normal confirm step below can finish it without a new charge), or null when nothing was paid.
+  const findExistingPaymentReference = async (bookingId) => {
+    try {
+      const row = await getBookingById(bookingId);
+      if (row?.payment_status === 'paid' && row.payment_ref) return row.payment_ref;
+    } catch {
+      // fall through to the reference checks below
+    }
+    for (const ref of [lastPaidReferenceRef.current, abandonedReferenceRef.current]) {
+      if (!ref) continue;
+      try {
+        const { outcome } = await confirmBookingPayment(bookingId, ref);
+        if (outcome === 'confirmed' || outcome === 'dates_conflict') return ref;
+      } catch {
+        // not paid (or rejected) - try the next reference
+      }
+    }
+    return null;
+  };
+
   const buildPricingBreakdown = async () => {
+    // No silent fallback: if this can't be loaded the booking must NOT be priced at the flat rate
+    // (it would under-charge seasonal dates and write a wrong booking row) - let it fail loudly.
     const datePriceMap = await getDatePriceMap(carId, {
       fromDate: toISODate(draft.startDate),
       toDate: toISODate(draft.endDate),
-    }).catch(() => ({}));
+    });
     const pricing = calculateRentalPricing({
       startDate: draft.startDate,
       endDate: draft.endDate,
@@ -378,7 +406,21 @@ export default function CheckoutPaymentScreen() {
       const withDriverDailyRate = reserved.with_driver_daily_rate;
       const withDriverCost = reserved.with_driver_total_cost;
 
-      const reference = await payWithPaystack(draft.totalCost, [reserved.id]);
+      // A retry on an existing reservation: the earlier attempt (or Paystack's webhook) may already have
+      // taken the payment. Check that first and only open a NEW charge if nothing was paid.
+      let reference = null;
+      if (reservedBookingRef.current && reserved?.id) {
+        reference = await findExistingPaymentReference(reserved.id);
+      }
+      if (!reference) {
+        try {
+          reference = await payWithPaystack(draft.totalCost, [reserved.id]);
+          lastPaidReferenceRef.current = reference;
+        } catch (payError) {
+          if (payError?.reference) abandonedReferenceRef.current = payError.reference;
+          throw payError;
+        }
+      }
 
       // Last fragile step: the row already exists (visible to the renter/
       // vendor/admin either way), so a failure here is a "confirm this
