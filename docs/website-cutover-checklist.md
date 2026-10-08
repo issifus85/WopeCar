@@ -20,11 +20,11 @@ The only DNS change is **one A record**. Everything else is verification.
 
 ## Before Friday (Wed/Thu)
 
-- [ ] **Lower the A record TTL** to 300s (currently 900s) so a rollback is ~5 min. Do this at least 15 min (old TTL) before the change — Wednesday is plenty.
+- [x] **Lower the A record TTL** to 300s (done, verified 8 Oct) (currently 900s) so a rollback is ~5 min. Do this at least 15 min (old TTL) before the change — Wednesday is plenty.
 - [ ] **Note the current record** exactly (so rollback is a copy-paste): `A  wopecar.com  209.182.202.254  TTL 900`.
 - [ ] **Freeze blog publishing on the OLD site.** Any post published there after today won't exist on the new site. (Ask me to import any that appear — it's a 10-minute job per post.)
 - [ ] **Supabase Auth URLs** (Dashboard → Authentication → URL Configuration, production project `tndkuzxaddrwrunhbrap`): Site URL = `https://wopecar.com`; Redirect URLs include `https://wopecar.com/**` and `https://www.wopecar.com/**`. Needed for email-confirmation / password-reset links from the website. *(Not verifiable from here.)*
-- [ ] **Paystack webhook URL** (Paystack dashboard → Settings → API Keys & Webhooks): set the **Live** webhook URL to `https://tndkuzxaddrwrunhbrap.supabase.co/functions/v1/paystack-webhook` (and the **Test** one to `https://qvactycnufaowwsiqdrz.supabase.co/functions/v1/paystack-webhook` if you want webhook testing on preprod). The function is deployed to both projects; it rejects anything without Paystack's signature.
+- [x] **Paystack webhook URL** — confirmed set to the production function in Live mode (8 Oct). (Paystack dashboard → Settings → API Keys & Webhooks): set the **Live** webhook URL to `https://tndkuzxaddrwrunhbrap.supabase.co/functions/v1/paystack-webhook` (and the **Test** one to `https://qvactycnufaowwsiqdrz.supabase.co/functions/v1/paystack-webhook` if you want webhook testing on preprod). The function is deployed to both projects; it rejects anything without Paystack's signature.
 - [ ] **Paystack**: payments are now confirmed server-side (`confirm-booking-payment`). Decide whether the website takes live payments on Friday. If yes: do one small live payment + refund after the cut-over, before announcing.
 - [ ] Google Search Console: have `wopecar.com` verified (domain property is easiest — DNS TXT record, added in the same InMotion zone, doesn't affect anything else).
 - [ ] Content sign-off: legal pages (Terms, Privacy, EULA, WopeCare terms), Detty December banner/dates.
@@ -38,6 +38,13 @@ The only DNS change is **one A record**. Everything else is verification.
 4. [ ] Submit `https://wopecar.com/sitemap.xml` in Search Console.
 
 > Do **not** change nameservers — that would take over *all* records (including mail). Only the A record changes.
+
+## Paystack follow-ups (only after DNS is live and the smoke tests pass)
+
+- [ ] **Apple Pay domain**: open `https://wopecar.com/.well-known/apple-developer-merchantid-domain-association` in a browser - it must show a short string of letters/numbers (not a 404 or certificate warning). The file is already deployed with the website (`public/.well-known/`); it can only be verified once the domain points at Vercel. Then in Paystack (Settings -> Apple Pay -> Add domain) enter `wopecar.com` (no `https://`) and click **Add domain**.
+- [ ] **Test Apple Pay**: on an iPhone/Mac in Safari with a card in Apple Wallet, start a website checkout - Apple Pay should show as an option on Paystack's payment page. If the button is missing, ask Paystack support whether Apple Pay needs enabling on the live account. (Website only - the mobile app's checkout is separate and not covered.)
+- [ ] **Paystack Live Callback URL** (Settings -> API Keys & Webhooks): change `https://wopecar.com/booking/confirm/paystack` to `https://wopecar.com/payment/callback`. Optional tidy-up - the app and website send their own callback per payment, and a temporary redirect already forwards the old path to the new page. Do not do this before the DNS switch (the page does not exist on the old server).
+- [ ] **First live payment check**: after one real payment, confirm Paystack -> Webhooks -> Logs shows the `charge.success` delivery with a 200 response from `paystack-webhook` (the webhook is the safety net now that renters can no longer mark their own bookings paid).
 
 ## Smoke tests (10 min)
 
