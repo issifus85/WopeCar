@@ -54,6 +54,19 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
+    // Abuse control: this public endpoint creates an auto-confirmed account + live session for any
+    // email address, so cap how often one client (IP) or one email can hit it.
+    const ip = (req.headers.get('cf-connecting-ip') ?? req.headers.get('x-forwarded-for') ?? 'unknown').split(',')[0].trim();
+    const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const [{ count: ipCount }, { count: emailCount }] = await Promise.all([
+      adminClient.from('guest_checkout_attempts').select('id', { count: 'exact', head: true }).eq('ip', ip).gte('created_at', since),
+      adminClient.from('guest_checkout_attempts').select('id', { count: 'exact', head: true }).eq('email', normalizedEmail).gte('created_at', since),
+    ]);
+    if ((ipCount ?? 0) >= 8 || (emailCount ?? 0) >= 4) {
+      return jsonResponse({ error: 'too_many_attempts', message: 'Too many attempts. Please wait a while and try again, or sign in.' }, 429);
+    }
+    await adminClient.from('guest_checkout_attempts').insert({ ip, email: normalizedEmail });
+
     const { data: existing } = await adminClient.from('users').select('id').eq('email', normalizedEmail).maybeSingle();
     if (existing) {
       return jsonResponse(
@@ -68,7 +81,8 @@ Deno.serve(async (req) => {
       user_metadata: { full_name: fullName || null, phone: phone || null, role: 'renter' },
     });
     if (createError || !created?.user) {
-      return jsonResponse({ error: createError?.message || 'Could not create guest account.' }, 500);
+      console.error('guest-checkout createUser failed:', createError?.message);
+      return jsonResponse({ error: 'Could not create guest account.' }, 500);
     }
 
     // Mint a real session for the account we just created, without a
@@ -81,7 +95,8 @@ Deno.serve(async (req) => {
       email: normalizedEmail,
     });
     if (linkError || !linkData?.properties?.hashed_token) {
-      return jsonResponse({ error: linkError?.message || 'Could not start guest session.' }, 500);
+      console.error('guest-checkout generateLink failed:', linkError?.message);
+      return jsonResponse({ error: 'Could not start guest session.' }, 500);
     }
 
     const anonClient = createClient(supabaseUrl, anonKey);
@@ -90,7 +105,8 @@ Deno.serve(async (req) => {
       type: 'magiclink',
     });
     if (verifyError || !sessionData.session) {
-      return jsonResponse({ error: verifyError?.message || 'Could not verify guest session.' }, 500);
+      console.error('guest-checkout verifyOtp failed:', verifyError?.message);
+      return jsonResponse({ error: 'Could not verify guest session.' }, 500);
     }
 
     return jsonResponse({
@@ -99,6 +115,7 @@ Deno.serve(async (req) => {
       user_id: created.user.id,
     });
   } catch (e) {
-    return jsonResponse({ error: e instanceof Error ? e.message : 'Unexpected error.' }, 500);
+    console.error('guest-checkout error:', e instanceof Error ? e.message : e);
+    return jsonResponse({ error: 'Unexpected error.' }, 500);
   }
 });

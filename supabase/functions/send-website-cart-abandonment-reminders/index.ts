@@ -29,6 +29,7 @@
 // DNS still points at the old Laravel site (see [[email_universal_link_todo]]).
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { isTrustedInternalCaller, unauthorizedResponse } from '../_shared/cronAuth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -105,6 +106,9 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
+
+  // Internal-only (cron / DB trigger): reject anyone without the shared secret.
+  if (!(await isTrustedInternalCaller(req))) return unauthorizedResponse();
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;

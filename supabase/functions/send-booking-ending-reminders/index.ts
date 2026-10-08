@@ -27,6 +27,7 @@
 // Reuses the same RESEND_API_KEY secret as every other email function.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { isTrustedInternalCaller, unauthorizedResponse } from '../_shared/cronAuth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -126,6 +127,9 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
+
+  // Internal-only (cron / DB trigger): reject anyone without the shared secret.
+  if (!(await isTrustedInternalCaller(req))) return unauthorizedResponse();
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;

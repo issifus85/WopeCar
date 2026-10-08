@@ -50,6 +50,7 @@
 // paystack-initialize/paystack-verify already use.)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getInternalSecret } from '../_shared/cronAuth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -258,9 +259,12 @@ Deno.serve(async (req) => {
     // already succeeded above.
     if (refundAmount > 0) {
       try {
+        // quickbooks-credit-note only accepts staff or this internal secret - a renter cancelling
+        // their own booking is not allowed to post credit memos directly.
+        const internalSecret = await getInternalSecret();
         await fetch(`${supabaseUrl}/functions/v1/quickbooks-credit-note`, {
           method: 'POST',
-          headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
+          headers: { Authorization: authHeader, 'Content-Type': 'application/json', ...(internalSecret ? { 'x-cron-secret': internalSecret } : {}) },
           body: JSON.stringify({ bookingId: booking.id, refundAmount, reason: reason || 'Booking cancellation refund' }),
         });
       } catch (e) {
