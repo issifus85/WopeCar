@@ -178,8 +178,8 @@ export default function CheckoutSummaryScreen() {
     setIsApplyingPromo(true);
     setPromoError(null);
     try {
-      const result = await validatePromoCode(promoInput.trim());
-      updateDraft({ promoCode: result.code, promoDiscountType: result.discountType, promoDiscountValue: result.discountValue });
+      const result = await validatePromoCode(promoInput.trim(), days);
+      updateDraft({ promoCode: result.code, promoDiscountType: result.discountType, promoDiscountValue: result.discountValue, promoMinDays: result.minDays });
       setPromoInput('');
     } catch (e) {
       setPromoError(e.message || 'Invalid promo code.');
@@ -188,9 +188,17 @@ export default function CheckoutSummaryScreen() {
     }
   };
 
+  // A code with a minimum length stops applying if the dates are later shortened below it.
+  useEffect(() => {
+    if (draft.promoCode && draft.promoMinDays && days > 0 && days < draft.promoMinDays) {
+      setPromoError(`${draft.promoCode} needs a booking of at least ${draft.promoMinDays} days, so it was removed.`);
+      updateDraft({ promoCode: null, promoDiscountType: null, promoDiscountValue: 0, promoMinDays: null });
+    }
+  }, [days, draft.promoCode, draft.promoMinDays]);
+
   const handleRemovePromo = () => {
     setPromoError(null);
-    updateDraft({ promoCode: null, promoDiscountType: null, promoDiscountValue: 0 });
+    updateDraft({ promoCode: null, promoDiscountType: null, promoDiscountValue: 0, promoMinDays: null });
   };
 
   const handleContinue = () => {

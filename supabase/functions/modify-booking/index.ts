@@ -291,6 +291,15 @@ Deno.serve(async (req) => {
     }
 
     const newBillableDays = Number(billableDays ?? 0);
+
+    // A booking made with a promo code that has a minimum length can't be shortened below it afterwards
+    // (otherwise the discount could be kept while cutting the days). Staff can still override.
+    if (booking.promo_code && !isAdmin) {
+      const { data: promoRow } = await adminClient.from('promo_codes').select('min_days').ilike('code', booking.promo_code).maybeSingle();
+      if (promoRow?.min_days && newBillableDays < promoRow.min_days) {
+        return jsonResponse({ error: `This booking used promo code ${booking.promo_code}, which needs at least ${promoRow.min_days} days. Please keep it at ${promoRow.min_days} days or more.` }, 400);
+      }
+    }
     // The payout rate lives in the admin-only car_payouts table (not on cars, which is publicly readable).
     const { data: payoutRow } = await adminClient.from('car_payouts').select('payout_per_day').eq('car_id', booking.car_id).maybeSingle();
     const payoutPerDay = Number(payoutRow?.payout_per_day ?? 0);

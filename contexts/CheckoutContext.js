@@ -40,6 +40,8 @@ const EMPTY_DRAFT = {
   promoCode: null,
   promoDiscountType: null,
   promoDiscountValue: 0,
+  // The code's minimum booking length (days), if it has one - checked again whenever the dates change.
+  promoMinDays: null,
   form: {
     firstName: '',
     lastName: '',
