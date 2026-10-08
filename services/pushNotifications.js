@@ -154,15 +154,20 @@ export async function registerPushToken() {
       return;
     }
 
-    const { data: tokenData } = await Notifications.getExpoPushTokenAsync({ projectId });
-    if (!tokenData?.data) {
+    // getExpoPushTokenAsync resolves to { type: 'expo', data: '<ExponentPushToken[...]>' } -
+    // the token string is its `.data`. (This used to destructure `{ data: tokenData }`
+    // and then read `tokenData.data`, i.e. `.data` of the string itself - always
+    // undefined, so no device ever registered a push token.)
+    const tokenResponse = await Notifications.getExpoPushTokenAsync({ projectId });
+    const pushToken = tokenResponse?.data;
+    if (!pushToken) {
       await logPushStep(userId, 'token', false, 'getExpoPushTokenAsync returned no token');
       return;
     }
 
     const { error } = await supabase
       .from('push_tokens')
-      .upsert({ user_id: userId, token: tokenData.data, platform: Platform.OS, updated_at: new Date().toISOString() }, { onConflict: 'token' });
+      .upsert({ user_id: userId, token: pushToken, platform: Platform.OS, updated_at: new Date().toISOString() }, { onConflict: 'token' });
     if (error) {
       await logPushStep(userId, 'save', false, error.message);
       return;
