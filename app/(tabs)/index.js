@@ -18,6 +18,7 @@ import CurrencyModal from '../../components/CurrencyModal';
 import FilterModal from '../../components/FilterModal';
 import CarListCard from '../../components/CarListCard';
 import CarTileCard from '../../components/CarTileCard';
+import PromoBanner from '../../components/PromoBanner';
 import { logScreen, logSearchCars } from '../../services/analytics';
 
 // Matches the tile FlatList's own initialNumToRender + a small buffer for
@@ -327,6 +328,8 @@ export default function HomeScreen() {
           />
         </TouchableOpacity>
       </View>
+
+      <PromoBanner />
 
       {showCartBanner && (
         <View style={styles.cartBanner}>
