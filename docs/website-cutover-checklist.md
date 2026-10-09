@@ -1,5 +1,7 @@
 # wopecar.com cut-over — Friday 9 October 2026
 
+> **DONE 9 Oct 2026 (~18:30 UTC).** A record changed to `76.76.21.21`; all resolvers switched within minutes. Vercel did not auto-issue the HTTPS certificate - it was issued manually with `vercel certs issue wopecar.com www.wopecar.com` (16 s). Smoke tests below pass. Still to do: confirm Supabase Auth URLs, Apple Pay domain + Paystack callback URL, Search Console sitemap, one live payment, mail test.
+
 Goal: point `wopecar.com` at the new website (Vercel project `wopecar-website`).
 The only DNS change is **one A record**. Everything else is verification.
 
