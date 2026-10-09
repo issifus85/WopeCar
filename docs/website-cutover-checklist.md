@@ -1,6 +1,6 @@
 # wopecar.com cut-over — Friday 9 October 2026
 
-> **DONE 9 Oct 2026 (~18:30 UTC).** A record changed to `76.76.21.21`; all resolvers switched within minutes. Vercel did not auto-issue the HTTPS certificate - it was issued manually with `vercel certs issue wopecar.com www.wopecar.com` (16 s). Smoke tests below pass. Still to do: confirm Supabase Auth URLs, Apple Pay domain + Paystack callback URL, Search Console sitemap, one live payment, mail test.
+> **DONE 9 Oct 2026 (~18:30 UTC).** A record changed to `76.76.21.21`; all resolvers switched within minutes. Vercel did not auto-issue the HTTPS certificate - it was issued manually with `vercel certs issue wopecar.com www.wopecar.com` (16 s). Smoke tests below pass. Supabase Auth URLs confirmed. Still to do: Apple Pay domain + Paystack callback URL, Search Console sitemap, one live payment, mail test.
 
 Goal: point `wopecar.com` at the new website (Vercel project `wopecar-website`).
 The only DNS change is **one A record**. Everything else is verification.
@@ -25,7 +25,7 @@ The only DNS change is **one A record**. Everything else is verification.
 - [x] **Lower the A record TTL** to 300s (done, verified 8 Oct) (currently 900s) so a rollback is ~5 min. Do this at least 15 min (old TTL) before the change — Wednesday is plenty.
 - [ ] **Note the current record** exactly (so rollback is a copy-paste): `A  wopecar.com  209.182.202.254  TTL 900`.
 - [ ] **Freeze blog publishing on the OLD site.** Any post published there after today won't exist on the new site. (Ask me to import any that appear — it's a 10-minute job per post.)
-- [ ] **Supabase Auth URLs** (Dashboard → Authentication → URL Configuration, production project `tndkuzxaddrwrunhbrap`): Site URL = `https://wopecar.com`; Redirect URLs include `https://wopecar.com/**` and `https://www.wopecar.com/**`. Needed for email-confirmation / password-reset links from the website. *(Not verifiable from here.)*
+- [x] **Supabase Auth URLs** (confirmed by user 9 Oct) (Dashboard → Authentication → URL Configuration, production project `tndkuzxaddrwrunhbrap`): Site URL = `https://wopecar.com`; Redirect URLs include `https://wopecar.com/**` and `https://www.wopecar.com/**`. Needed for email-confirmation / password-reset links from the website. *(Not verifiable from here.)*
 - [x] **Paystack webhook URL** — confirmed set to the production function in Live mode (8 Oct). (Paystack dashboard → Settings → API Keys & Webhooks): set the **Live** webhook URL to `https://tndkuzxaddrwrunhbrap.supabase.co/functions/v1/paystack-webhook` (and the **Test** one to `https://qvactycnufaowwsiqdrz.supabase.co/functions/v1/paystack-webhook` if you want webhook testing on preprod). The function is deployed to both projects; it rejects anything without Paystack's signature.
 - [ ] **Paystack**: payments are now confirmed server-side (`confirm-booking-payment`). Decide whether the website takes live payments on Friday. If yes: do one small live payment + refund after the cut-over, before announcing.
 - [ ] Google Search Console: have `wopecar.com` verified (domain property is easiest — DNS TXT record, added in the same InMotion zone, doesn't affect anything else).
