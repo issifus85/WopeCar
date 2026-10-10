@@ -450,6 +450,11 @@ export default function AdminBookingDetailScreen() {
                 </View>
               </TouchableOpacity>
               <Row label="Vendor" value={booking.vendors?.business_name} styles={styles} />
+              <Row
+                label="Booked via"
+                value={booking.booking_source === 'app' ? 'Mobile app' : booking.booking_source === 'website' ? 'Website' : booking.booking_source === 'admin' ? 'Admin' : 'Unknown (before tracking)'}
+                styles={styles}
+              />
             </View>
 
             <View style={styles.section}>

@@ -10,7 +10,7 @@ const BOOKING_SELECT = `
   pickup_time, return_time, pickup_location, return_location, drive_type,
   addon_names, addon_days, rental_cost, addons_cost, delivery_fee,
   security_deposit, total_cost, status, payment_ref, payment_status,
-  vendor_accepted, created_at, updated_at,
+  vendor_accepted, created_at, updated_at, booking_source,
   wopecare_plan, wopecare_daily_rate, wopecare_total_cost, wopecare_coverage,
   with_driver, with_driver_daily_rate, with_driver_total_cost,
   promo_code, promo_discount_amount,

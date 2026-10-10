@@ -32,7 +32,7 @@ export async function createBooking(bookingData) {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const { data, error } = await supabase
       .from('bookings')
-      .insert({ ...bookingData, booking_ref: generateBookingRef() })
+      .insert({ ...bookingData, booking_source: 'app', booking_ref: generateBookingRef() })
       .select()
       .single();
 
