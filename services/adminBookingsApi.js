@@ -14,7 +14,7 @@ const BOOKING_SELECT = `
   wopecare_plan, wopecare_daily_rate, wopecare_total_cost, wopecare_coverage,
   with_driver, with_driver_daily_rate, with_driver_total_cost,
   promo_code, promo_discount_amount,
-  cars ( name, type, price_per_day, regional_addons, discount_enabled, discount_type, discount_value, discount_starts_at, discount_ends_at, length_of_stay_discounts ),
+  cars ( name, type, images, price_per_day, regional_addons, discount_enabled, discount_type, discount_value, discount_starts_at, discount_ends_at, length_of_stay_discounts ),
   renter:renter_id ( id, full_name, email, phone ),
   vendors ( id, user_id, business_name )
 `;

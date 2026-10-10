@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Image, Linking, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Image, Linking, KeyboardAvoidingView, Platform, PixelRatio } from 'react-native';
+import { Image as CarImage } from 'expo-image';
 import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../../constants/theme';
@@ -16,6 +17,7 @@ import {
 } from '../../../services/adminBookingsApi';
 import { getUserVerificationDocuments, getBookingInspections, getInspectionReportSignedUrl } from '../../../services/adminDocumentsApi';
 import { parseDateOnly } from '../../../constants/dateUtils';
+import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../../utils/imageUrl';
 import { getRentalAgreement } from '../../../services/rentalAgreementApi';
 
 const VERIFICATION_DOC_LABELS = [
@@ -416,8 +418,37 @@ export default function AdminBookingDetailScreen() {
 
             <View style={styles.section}>
               <SectionHeading>Car</SectionHeading>
-              <Row label="Name" value={booking.cars?.name} styles={styles} />
-              <Row label="Type" value={booking.cars?.type} styles={styles} />
+              {/* Photo + name + link to the car's admin screen, so two look-alike cars from the same vendor can be told apart. */}
+              <TouchableOpacity
+                style={styles.carCard}
+                activeOpacity={0.7}
+                disabled={!booking.car_id}
+                onPress={() => router.push(`/admin/car/edit/${booking.car_id}`)}
+              >
+                {booking.cars?.images?.[0] ? (
+                  <CarImage
+                    source={{ uri: resizeImageUrl(booking.cars.images[0], { width: 72 * PixelRatio.get(), height: 72 * PixelRatio.get() }) }}
+                    style={styles.carThumb}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    transition={200}
+                    placeholder={CAR_PHOTO_BLURHASH}
+                    placeholderContentFit="cover"
+                  />
+                ) : (
+                  <View style={[styles.carThumb, styles.carThumbPlaceholder]} />
+                )}
+                <View style={styles.carCardInfo}>
+                  <Text style={styles.carCardName} numberOfLines={2}>{booking.cars?.name ?? '—'}</Text>
+                  {!!booking.cars?.type && <Text style={styles.carCardType} numberOfLines={1}>{booking.cars.type}</Text>}
+                  {!!booking.car_id && (
+                    <View style={styles.carCardLink}>
+                      <Text style={styles.carCardLinkText}>View car</Text>
+                      <Ionicons name="chevron-forward" size={14} color={colors.teal} />
+                    </View>
+                  )}
+                </View>
+              </TouchableOpacity>
               <Row label="Vendor" value={booking.vendors?.business_name} styles={styles} />
             </View>
 
@@ -732,6 +763,50 @@ function createStyles(colors) {
       paddingVertical: 6,
       borderBottomWidth: 1,
       borderBottomColor: colors.divider,
+    },
+    carCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingBottom: 10,
+      marginBottom: 4,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.divider,
+    },
+    carThumb: {
+      width: 72,
+      height: 72,
+      borderRadius: 12,
+      backgroundColor: colors.divider,
+    },
+    carThumbPlaceholder: {
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    carCardInfo: {
+      flex: 1,
+      gap: 3,
+    },
+    carCardName: {
+      fontFamily: FONTS.bold,
+      fontSize: 15,
+      color: colors.textPrimary,
+    },
+    carCardType: {
+      fontFamily: FONTS.regular,
+      fontSize: 12,
+      color: colors.textSubtle,
+    },
+    carCardLink: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2,
+      marginTop: 2,
+    },
+    carCardLinkText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 12.5,
+      color: colors.teal,
     },
     rowLabel: {
       fontFamily: FONTS.regular,
