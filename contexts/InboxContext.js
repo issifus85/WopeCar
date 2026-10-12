@@ -78,7 +78,9 @@ function rawServerConversationId(id) {
 // (already returned by list_conversations for every category), not that
 // same hardcoded label again.
 function toLocalConversationShape(raw, isSupportViewer) {
-  const participant = isSupportViewer
+  // Someone invited into a chat by support (e.g. a driver) is looking at the
+  // customer's conversation, not a support thread - show the customer.
+  const participant = (isSupportViewer || raw.myRole === 'invited')
     ? { id: 'customer', name: raw.pinnedSummary?.customerName ?? 'Customer', role: 'Customer', avatar: null }
     : { id: 'support', name: 'WopeCar Support', role: 'Support', avatar: null };
   return {
@@ -665,6 +667,7 @@ export function InboxProvider({ children }) {
         title: n.title,
         body: n.body,
         bookingId: n.bookingId,
+        conversationId: n.conversationId ?? null,
         createdAt: n.createdAt,
         readAt: n.readAt,
       }));

@@ -17,6 +17,7 @@ function normalizeConversation(raw) {
     unreadCount: raw.unread_count ?? raw.unreadCount ?? 0,
     isResolved: raw.is_resolved ?? raw.isResolved ?? false,
     isUrgent: raw.is_urgent ?? raw.isUrgent ?? false,
+    myRole: raw.my_role ?? raw.myRole ?? null,
     participants: (raw.participants ?? []).map(normalizeParticipant),
   };
 }

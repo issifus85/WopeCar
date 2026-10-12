@@ -25,6 +25,7 @@ const NOTIFICATION_ICONS = {
   payment: 'card-outline',
   reminder: 'alarm-outline',
   vendor_calendar_reminder: 'calendar-outline',
+  conversation_invited: 'chatbubbles-outline',
   vendor_admin_alert: 'megaphone-outline',
 };
 
@@ -148,6 +149,8 @@ export default function InboxScreen() {
     markNotificationRead(notification.id);
     if (notification.bookingId) {
       router.push(`/booking/${notification.bookingId}?from=inbox`);
+    } else if (notification.conversationId) {
+      router.push(`/inbox/booking-${notification.conversationId}`);
     } else if (NOTIFICATION_ROUTES[notification.type]) {
       router.push(NOTIFICATION_ROUTES[notification.type]);
     }

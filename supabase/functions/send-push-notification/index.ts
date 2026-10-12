@@ -27,6 +27,7 @@
 // Deploy with: supabase functions deploy send-push-notification
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { isTrustedInternalCaller } from '../_shared/cronAuth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -67,7 +68,9 @@ Deno.serve(async (req) => {
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    const isTrustedInternalCall = authHeader.replace(/^Bearer\s+/i, '') === serviceRoleKey;
+    // Trusted internal callers: server code holding the service-role key, or a DB function / cron job that presents the
+    // internal secret (e.g. invite_conversation_participant telling someone they were added to a chat).
+    const isTrustedInternalCall = authHeader.replace(/^Bearer\s+/i, '') === serviceRoleKey || (await isTrustedInternalCaller(req));
     if (!isTrustedInternalCall) {
       const callerClient = createClient(supabaseUrl, anonKey, {
         global: { headers: { Authorization: authHeader } },
