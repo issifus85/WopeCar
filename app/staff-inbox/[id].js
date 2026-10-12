@@ -187,8 +187,8 @@ export default function StaffConversationScreen() {
         visible={isInviteVisible}
         onClose={() => setIsInviteVisible(false)}
         conversationId={id}
+        // Stays open so several people can be added in one go; the sheet itself confirms who was added.
         onInvited={() => {
-          setIsInviteVisible(false);
           loadMeta();
         }}
       />

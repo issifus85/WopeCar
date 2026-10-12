@@ -15,11 +15,15 @@ export default function InviteParticipantModal({ visible, onClose, conversationI
   const [results, setResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [invitingId, setInvitingId] = useState(null);
+  const [error, setError] = useState(null);
+  const [addedNames, setAddedNames] = useState([]);
 
   useEffect(() => {
     if (!visible) {
       setQuery('');
       setResults([]);
+      setError(null);
+      setAddedNames([]);
     }
   }, [visible]);
 
@@ -27,9 +31,13 @@ export default function InviteParticipantModal({ visible, onClose, conversationI
     if (!visible) return;
     const timer = setTimeout(() => {
       setIsSearching(true);
+      setError(null);
       conversationsApi.searchParticipantCandidates(conversationId, query)
         .then(setResults)
-        .catch(() => setResults([]))
+        .catch((e) => {
+          setResults([]);
+          setError(e?.message || 'Could not search users. Check your connection and try again.');
+        })
         .finally(() => setIsSearching(false));
     }, 300);
     return () => clearTimeout(timer);
@@ -37,12 +45,14 @@ export default function InviteParticipantModal({ visible, onClose, conversationI
 
   const handleInvite = (candidate) => {
     setInvitingId(candidate.id);
+    setError(null);
     conversationsApi.inviteParticipant(conversationId, candidate.id)
       .then(() => {
         setResults((prev) => prev.filter((c) => c.id !== candidate.id));
+        setAddedNames((prev) => [...prev, candidate.name || candidate.email]);
         onInvited?.();
       })
-      .catch(() => {})
+      .catch((e) => setError(e?.message || 'Could not add that user. Please try again.'))
       .finally(() => setInvitingId(null));
   };
 
@@ -76,6 +86,11 @@ export default function InviteParticipantModal({ visible, onClose, conversationI
             placeholderTextColor={colors.textSubtle}
             autoFocus
           />
+
+          {addedNames.length > 0 && (
+            <Text style={styles.successText}>Added: {addedNames.join(', ')}. They can now see this chat and reply.</Text>
+          )}
+          {!!error && <Text style={styles.errorText}>{error}</Text>}
 
           {isSearching ? (
             <ActivityIndicator style={styles.loader} color={colors.teal} />
@@ -114,6 +129,18 @@ function createStyles(colors) {
   return StyleSheet.create({
     keyboardAvoider: {
       flex: 1,
+    },
+    successText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 13,
+      color: colors.success,
+      marginBottom: 8,
+    },
+    errorText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 13,
+      color: colors.error,
+      marginBottom: 8,
     },
     backdrop: {
       flex: 1,
