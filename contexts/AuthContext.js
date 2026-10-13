@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import * as authApi from '../services/supabaseAuthApi';
 import supabase from '../services/supabase';
 import { clearLocalUserData } from '../services/clearLocalUserData';
-import { registerPushToken } from '../services/pushNotifications';
+import { registerPushToken, unregisterPushToken } from '../services/pushNotifications';
 import { setCrashlyticsUser, logError } from '../services/analytics';
 
 const AuthContext = createContext(null);
@@ -114,6 +114,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(async () => {
+    await unregisterPushToken(); // while still signed in, so the delete is allowed
     await authApi.logout();
     setUser(null);
     await clearLocalUserData();

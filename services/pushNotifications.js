@@ -22,15 +22,25 @@ function openNotificationUrl(url) {
 // backend. Native uses expo-notifications; web (the only platform this
 // project's browser preview can actually verify) uses the browser's own
 // Notification API directly, since expo-notifications does not support web.
+// The chat thread currently open on screen (its route, e.g. '/inbox/booking-<id>'). A push for the conversation you are
+// already looking at is not shown - the message appears in the thread itself within seconds.
+let activeChatUrl = null;
+export function setActiveChatUrl(url) {
+  activeChatUrl = url;
+}
+
 if (Platform.OS !== 'web') {
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-    }),
+    handleNotification: async (notification) => {
+      const isOpenChat = !!activeChatUrl && notification?.request?.content?.data?.url === activeChatUrl;
+      return {
+        shouldShowAlert: !isOpenChat,
+        shouldShowBanner: !isOpenChat,
+        shouldShowList: !isOpenChat,
+        shouldPlaySound: !isOpenChat,
+        shouldSetBadge: true,
+      };
+    },
   });
 }
 
@@ -165,9 +175,9 @@ export async function registerPushToken() {
       return;
     }
 
-    const { error } = await supabase
-      .from('push_tokens')
-      .upsert({ user_id: userId, token: pushToken, platform: Platform.OS, updated_at: new Date().toISOString() }, { onConflict: 'token' });
+    // Server-side function, not a direct upsert: RLS blocks taking over a token row another account on this phone owns
+    // (see migration 0150), which left the previous account receiving this account's pushes.
+    const { error } = await supabase.rpc('register_push_token', { p_token: pushToken, p_platform: Platform.OS });
     if (error) {
       await logPushStep(userId, 'save', false, error.message);
       return;
@@ -177,6 +187,22 @@ export async function registerPushToken() {
     // Simulators/emulators without real push credentials throw here - the
     // app stays usable without a token; the reason is logged for staff.
     if (userId) await logPushStep(userId, 'exception', false, e?.message ?? e);
+  }
+}
+
+// Called on sign-out, while the session still exists: stops this phone receiving the signed-out account's pushes.
+// Best-effort - a failure here must never block sign-out.
+export async function unregisterPushToken() {
+  if (Platform.OS === 'web') return;
+  try {
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    if (!projectId) return;
+    const tokenResponse = await Notifications.getExpoPushTokenAsync({ projectId });
+    const pushToken = tokenResponse?.data;
+    if (!pushToken) return;
+    await supabase.from('push_tokens').delete().eq('token', pushToken);
+  } catch {
+    // Nothing to do - the next sign-in on this phone reassigns the token anyway.
   }
 }
 

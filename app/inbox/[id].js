@@ -7,6 +7,7 @@ import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useInbox } from '../../contexts/InboxContext';
 import MessageThread from '../../components/MessageThread';
+import { setActiveChatUrl } from '../../services/pushNotifications';
 import { pickAndUploadChatImage, pickAndUploadChatDocument, getCurrentLocationForChat } from '../../services/chatAttachmentsApi';
 import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
 
@@ -72,6 +73,12 @@ export default function ConversationScreen() {
   useEffect(() => {
     markConversationRead(id);
   }, [id, markConversationRead]);
+
+  // Don't pop a banner for the chat that is already open.
+  useEffect(() => {
+    setActiveChatUrl(`/inbox/${id}`);
+    return () => setActiveChatUrl(null);
+  }, [id]);
 
   // Server conversations (booking-anchored, see InboxContext.js) are
   // polled rather than pushed - no websocket infra is wired up for this
