@@ -66,6 +66,7 @@ const CURRENCY_KEYS = [
 const CONTACT_KEYS = [
   { key: 'support_phone_1', label: 'Primary Support Phone' },
   { key: 'support_phone_2', label: 'Secondary Support Phone' },
+  { key: 'support_phone_3', label: 'Third Support Phone' },
   { key: 'support_email', label: 'Support Email' },
   { key: 'support_address', label: 'Office Address' },
   { key: 'operations_lead_email', label: 'Operations Lead Email (Calendar Invites)' },
