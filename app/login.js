@@ -6,13 +6,13 @@ import {
   TextInput,
   TouchableOpacity,
   ImageBackground,
-  KeyboardAvoidingView,
   Keyboard,
   Platform,
   ScrollView,
   Image,
   ActivityIndicator,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { FontAwesome, Ionicons } from '@expo/vector-icons';
 import * as AppleAuthentication from 'expo-apple-authentication';
@@ -85,6 +85,9 @@ export default function LoginScreen() {
       return;
     }
 
+    // Close the keyboard now, not after the request: the dismiss animation then finishes while we wait on the network,
+    // instead of overlapping the auth-state change and screen transition (the Android flicker race).
+    Keyboard.dismiss();
     setIsSubmitting(true);
     try {
       if (isSignUp) {
@@ -120,6 +123,7 @@ export default function LoginScreen() {
       setError('Please agree to the Terms of Service and EULA to continue.');
       return;
     }
+    Keyboard.dismiss();
     setSocialProvider(provider);
     try {
       await loginWithSocial(provider);
@@ -138,6 +142,8 @@ export default function LoginScreen() {
       resizeMode="cover"
     >
       <View style={styles.overlay} />
+      {/* react-native-keyboard-controller's KeyboardAvoidingView, like every other form screen (see app/checkout/form.js):
+          the stock RN one fights Android edge-to-edge and made this screen visibly flicker while the keyboard opened/closed. */}
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
