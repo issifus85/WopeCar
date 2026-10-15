@@ -227,7 +227,7 @@ Deno.serve(async (req) => {
     const {
       bookingId, startDate, endDate, pickupTime, returnTime, pickupLocation, returnLocation,
       rentalCost, addonsCost, deliveryFee, securityDeposit, totalCost, billableDays,
-      wopecareTotalCost, withDriverTotalCost, paystackReference, amountCharged,
+      wopecareTotalCost, withDriverTotalCost, withDriver, paystackReference, amountCharged,
     } = await req.json();
 
     if (!bookingId || !startDate || !endDate || totalCost == null) {
@@ -253,7 +253,7 @@ Deno.serve(async (req) => {
 
     const { data: booking, error: bookingError } = await adminClient
       .from('bookings')
-      .select('*, cars(name), renter:renter_id(id, full_name, email)')
+      .select('*, cars(name, drive_type), renter:renter_id(id, full_name, email)')
       .eq('id', bookingId)
       .single();
     if (bookingError || !booking) {
@@ -300,6 +300,35 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: `This booking used promo code ${booking.promo_code}, which needs at least ${promoRow.min_days} days. Please keep it at ${promoRow.min_days} days or more.` }, 400);
       }
     }
+
+    // Adding or removing the WopeCar driver on a self-drive booking. Only runs when the caller states a choice (`withDriver`
+    // true/false) - older app builds don't, and keep the previous behaviour. The price is worked out here, not trusted from the
+    // client: a driver the renter already has keeps their quoted daily rate, a newly added one gets today's admin rate, and either
+    // way it is rate x the new number of billable days.
+    let driverPatch: { with_driver: boolean; with_driver_daily_rate: number; with_driver_total_cost: number } | null = null;
+    if (typeof withDriver === 'boolean' && booking.cars?.drive_type !== 'Chauffeur') {
+      const hadDriver = !!booking.with_driver || Number(booking.with_driver_total_cost ?? 0) > 0;
+      const today = new Date().toISOString().slice(0, 10);
+      if (withDriver !== hadDriver && !isAdmin && booking.start_date < today) {
+        return jsonResponse({ error: 'The driver option can no longer be changed because the trip has already started.' }, 400);
+      }
+      let rate = 0;
+      if (withDriver) {
+        if (hadDriver && Number(booking.with_driver_daily_rate) > 0) {
+          rate = Number(booking.with_driver_daily_rate);
+        } else {
+          const { data: feeRow } = await adminClient.from('app_settings').select('value').eq('key', 'with_driver_fee_per_day').maybeSingle();
+          rate = typeof feeRow?.value === 'number' && feeRow.value >= 0 ? feeRow.value : 200;
+        }
+      }
+      const cost = withDriver ? Math.round(rate * Math.max(newBillableDays, 0) * 100) / 100 : 0;
+      if (withDriverTotalCost != null && Math.abs(Number(withDriverTotalCost) - cost) > 0.5) {
+        return jsonResponse({ error: 'The driver price has changed since you opened this page. Please reload and try again.' }, 409);
+      }
+      driverPatch = { with_driver: withDriver, with_driver_daily_rate: withDriver ? rate : 0, with_driver_total_cost: cost };
+    }
+    const newDriverCost = driverPatch ? driverPatch.with_driver_total_cost : (withDriverTotalCost != null ? Number(withDriverTotalCost) : null);
+
     // The payout rate lives in the admin-only car_payouts table (not on cars, which is publicly readable).
     const { data: payoutRow } = await adminClient.from('car_payouts').select('payout_per_day').eq('car_id', booking.car_id).maybeSingle();
     const payoutPerDay = Number(payoutRow?.payout_per_day ?? 0);
@@ -327,7 +356,9 @@ Deno.serve(async (req) => {
     if (wopecareTotalCost != null) {
       updatePatch.wopecare_total_cost = Number(wopecareTotalCost);
     }
-    if (withDriverTotalCost != null) {
+    if (driverPatch) {
+      Object.assign(updatePatch, driverPatch);
+    } else if (withDriverTotalCost != null) {
       updatePatch.with_driver_total_cost = Number(withDriverTotalCost);
     }
 
@@ -363,7 +394,7 @@ Deno.serve(async (req) => {
       new_delivery_fee: Number(deliveryFee ?? booking.delivery_fee),
       new_security_deposit: Number(securityDeposit ?? booking.security_deposit),
       new_wopecare_total_cost: wopecareTotalCost != null ? Number(wopecareTotalCost) : (booking.wopecare_total_cost ?? 0),
-      new_with_driver_total_cost: withDriverTotalCost != null ? Number(withDriverTotalCost) : (booking.with_driver_total_cost ?? 0),
+      new_with_driver_total_cost: newDriverCost != null ? newDriverCost : (booking.with_driver_total_cost ?? 0),
       new_total_cost: newTotalCost,
       amount_charged: Number(amountCharged ?? (newTotalCost - Number(booking.total_cost))),
       payment_ref: paystackReference ?? null,
@@ -383,7 +414,10 @@ Deno.serve(async (req) => {
     const modifiedBy = isOwner ? 'the client' : 'admin/support';
     const breakdownBody = `Booking ${booking.booking_ref}: `
       + `${formatDate(mod.old_start_date)} → ${formatDate(mod.old_end_date)} is now ${formatDate(mod.new_start_date)} → ${formatDate(mod.new_end_date)}. `
-      + `Total ${formatCurrency(mod.old_total_cost)} → ${formatCurrency(mod.new_total_cost)}.`;
+      + `Total ${formatCurrency(mod.old_total_cost)} → ${formatCurrency(mod.new_total_cost)}.`
+      + (driverPatch && driverPatch.with_driver !== (!!booking.with_driver || Number(booking.with_driver_total_cost ?? 0) > 0)
+        ? ` A WopeCar driver was ${driverPatch.with_driver ? 'added to' : 'removed from'} the booking.`
+        : '');
 
     await adminClient.from('notifications').insert({
       user_id: booking.renter_id,
