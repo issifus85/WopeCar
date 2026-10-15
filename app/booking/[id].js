@@ -174,6 +174,8 @@ export default function BookingDetailScreen() {
   const [editPickupLocation, setEditPickupLocation] = useState('');
   const [editReturnLocation, setEditReturnLocation] = useState('');
   const [sameAsPickup, setSameAsPickup] = useState(false);
+  // Whether a WopeCar driver comes with the (self-drive) car after this change. Starts from what the booking has now.
+  const [editWithDriver, setEditWithDriver] = useState(false);
   const [isPickupModalVisible, setIsPickupModalVisible] = useState(false);
   const [isReturnModalVisible, setIsReturnModalVisible] = useState(false);
   // Dismissed for this screen visit only - not persisted, so the prompt is
@@ -249,6 +251,7 @@ export default function BookingDetailScreen() {
     setEditPickupLocation(booking.pickupLocation ?? '');
     setEditReturnLocation(booking.returnLocation ?? '');
     setSameAsPickup(!!booking.pickupLocation && booking.pickupLocation === booking.returnLocation);
+    setEditWithDriver(!!booking.withDriver?.selected);
     setPaymentError(null);
     setMode('editing');
   };
@@ -301,7 +304,7 @@ export default function BookingDetailScreen() {
   // security_deposit as its own column, same shape checkout/payment.js's
   // original booking insert already writes.
   const recomputedBreakdown = useMemo(() => {
-    const fallback = { rentalCost: 0, addonsCost: 0, deliveryFee: 0, securityDeposit: 0, total: booking?.totalCost ?? 0 };
+    const fallback = { rentalCost: 0, addonsCost: 0, deliveryFee: 0, securityDeposit: 0, withDriverCost: 0, driverDailyRate: 0, total: booking?.totalCost ?? 0 };
     if (!car || !pricing || !days) return fallback;
     const rentalCost = pricing.rentalCost;
     // booking.addons ({name, days}[]) is the current shape; bookings made
@@ -324,16 +327,18 @@ export default function BookingDetailScreen() {
     const isSelfDrive = car.drivenBy === 'Self-drive';
     // Waived when a WopeCar driver is already coming with the car - see
     // checkout/summary.js's identical formula.
-    const deliveryFee = isSelfDrive && !booking?.withDriver?.selected ? getSelfDriveDeliveryFee() : 0;
-    const securityDeposit = calculateSecurityDeposit(subtotal, car.drivenBy, booking?.withDriver?.selected);
-    // Same "recompute live from the current admin-set rate" treatment as
-    // deliveryFee above, not a per-car snapshot like WopeCare's rate -
-    // with_driver_fee_per_day is a single global setting, so an extension
-    // bills the current rate × the new day count.
-    const withDriverCost = booking?.withDriver?.selected ? getWithDriverFeePerDay() * days : 0;
+    const driverApplies = isSelfDrive && editWithDriver;
+    const deliveryFee = isSelfDrive && !driverApplies ? getSelfDriveDeliveryFee() : 0;
+    const securityDeposit = calculateSecurityDeposit(subtotal, car.drivenBy, driverApplies);
+    // A driver the renter already has keeps the daily rate they were quoted (matches modify-booking, which prices it
+    // server-side the same way); one added now is quoted today's admin rate. Either way: rate × the new day count.
+    const driverDailyRate = driverApplies
+      ? (booking?.withDriver?.selected && Number(booking.withDriver.dailyRate) > 0 ? Number(booking.withDriver.dailyRate) : getWithDriverFeePerDay())
+      : 0;
+    const withDriverCost = driverApplies ? Math.round(driverDailyRate * days * 100) / 100 : 0;
     const total = subtotal + deliveryFee + securityDeposit + recomputedWopeCareCost + withDriverCost;
-    return { rentalCost, addonsCost, deliveryFee, securityDeposit, withDriverCost, total };
-  }, [car, pricing, days, booking, originalDays, recomputedWopeCareCost]);
+    return { rentalCost, addonsCost, deliveryFee, securityDeposit, withDriverCost, driverDailyRate, total };
+  }, [car, pricing, days, booking, originalDays, recomputedWopeCareCost, editWithDriver]);
 
   const recomputedTotal = recomputedBreakdown.total;
   const difference = recomputedTotal - (booking?.totalCost ?? 0);
@@ -384,9 +389,12 @@ export default function BookingDetailScreen() {
     wopecareTotalCost: booking.wopeCare?.plan && booking.wopeCare.plan !== 'none'
       ? recomputedWopeCareCost
       : undefined,
-    withDriverTotalCost: booking.withDriver?.selected
-      ? recomputedBreakdown.withDriverCost
-      : undefined,
+    // Only self-drive cars can have a driver added/removed; chauffeur bookings leave these untouched (undefined).
+    withDriver: car?.drivenBy === 'Self-drive' ? editWithDriver : undefined,
+    withDriverDailyRate: car?.drivenBy === 'Self-drive' && editWithDriver ? recomputedBreakdown.driverDailyRate : undefined,
+    withDriverTotalCost: car?.drivenBy === 'Self-drive'
+      ? (editWithDriver ? recomputedBreakdown.withDriverCost : 0)
+      : (booking.withDriver?.selected ? recomputedBreakdown.withDriverCost : undefined),
     ...extra,
   });
 
@@ -763,6 +771,20 @@ export default function BookingDetailScreen() {
             </View>
           )}
 
+          {car?.drivenBy === 'Self-drive' && (
+            <TouchableOpacity style={styles.checkboxRow} onPress={() => setEditWithDriver((v) => !v)}>
+              <View style={[styles.checkbox, editWithDriver && styles.checkboxChecked]}>
+                {editWithDriver && <Ionicons name="checkmark" size={14} color={colors.white} />}
+              </View>
+              <Text style={styles.checkboxLabel}>
+                With a WopeCar driver
+                {recomputedBreakdown.driverDailyRate > 0 || !editWithDriver
+                  ? ` (+${formatCurrency(editWithDriver ? recomputedBreakdown.driverDailyRate : (booking.withDriver?.dailyRate > 0 ? booking.withDriver.dailyRate : getWithDriverFeePerDay()), activeCurrency)}/day)`
+                  : ''}
+              </Text>
+            </TouchableOpacity>
+          )}
+
           {!!car && days > 0 && (
             <View style={styles.recomputedBox}>
               <Text style={styles.recomputedLabel}>New total for {days} {days === 1 ? 'day' : 'days'}</Text>
@@ -800,6 +822,12 @@ export default function BookingDetailScreen() {
               <Text style={styles.rowLabel}>Original Total ({originalDays} {originalDays === 1 ? 'day' : 'days'})</Text>
               <Text style={styles.rowValue}>{formatCurrency(booking.totalCost, activeCurrency)}</Text>
             </View>
+            {!!booking.withDriver?.selected !== editWithDriver && car?.drivenBy === 'Self-drive' && (
+              <View style={styles.row}>
+                <Text style={styles.rowLabel}>WopeCar driver</Text>
+                <Text style={styles.rowValue}>{editWithDriver ? 'Added' : 'Removed'}</Text>
+              </View>
+            )}
             <View style={styles.row}>
               <Text style={styles.rowLabel}>New Total ({days} {days === 1 ? 'day' : 'days'})</Text>
               <Text style={styles.rowValue}>{formatCurrency(recomputedTotal, activeCurrency)}</Text>

@@ -180,6 +180,7 @@ export function BookingsProvider({ children }) {
         billableDays: fields.billableDays,
         wopecareTotalCost: fields.wopecareTotalCost,
         withDriverTotalCost: fields.withDriverTotalCost,
+        withDriver: fields.withDriver,
         paystackReference: fields.paystackReference,
         amountCharged: fields.amountCharged,
       },
@@ -200,9 +201,15 @@ export function BookingsProvider({ children }) {
         wopeCare: fields.wopecareTotalCost != null && b.wopeCare?.plan && b.wopeCare.plan !== 'none'
           ? { ...b.wopeCare, totalCost: fields.wopecareTotalCost }
           : b.wopeCare,
-        withDriver: fields.withDriverTotalCost != null && b.withDriver?.selected
-          ? { ...b.withDriver, totalCost: fields.withDriverTotalCost }
-          : b.withDriver,
+        withDriver: typeof fields.withDriver === 'boolean'
+          ? {
+            selected: fields.withDriver,
+            dailyRate: fields.withDriver ? (fields.withDriverDailyRate ?? b.withDriver?.dailyRate ?? 0) : 0,
+            totalCost: fields.withDriver ? (fields.withDriverTotalCost ?? 0) : 0,
+          }
+          : (fields.withDriverTotalCost != null && b.withDriver?.selected
+            ? { ...b.withDriver, totalCost: fields.withDriverTotalCost }
+            : b.withDriver),
       } : b));
       bookingsStorage.setBookings(next);
       return next;
