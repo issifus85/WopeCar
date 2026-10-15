@@ -411,6 +411,26 @@ Deno.serve(async (req) => {
     }
     const mod = insertedMod ?? modRow;
 
+    // Issue a NEW QuickBooks invoice + receipt for the changed booking and email the renter the updated receipt; finance voids the
+    // old ones by hand (the function emails them exactly which). Runs in the background so the renter isn't kept waiting, and a
+    // QuickBooks problem never undoes or fails the modification itself.
+    const reissue = (async () => {
+      try {
+        const { data: secretRow } = await adminClient.from('internal_secrets').select('value').eq('name', 'cron').maybeSingle();
+        const { error: reissueError } = await adminClient.functions.invoke('quickbooks-reissue-receipt', {
+          body: { bookingId, modificationId: insertedMod?.id ?? null },
+          headers: { 'x-cron-secret': secretRow?.value ?? '' },
+        });
+        if (reissueError) console.error('quickbooks-reissue-receipt failed:', reissueError.message);
+      } catch (e) {
+        console.error('quickbooks-reissue-receipt call failed:', e);
+      }
+    })();
+    // deno-lint-ignore no-explicit-any
+    const edgeRuntime = (globalThis as any).EdgeRuntime;
+    if (edgeRuntime?.waitUntil) edgeRuntime.waitUntil(reissue);
+    else await reissue;
+
     const modifiedBy = isOwner ? 'the client' : 'admin/support';
     const breakdownBody = `Booking ${booking.booking_ref}: `
       + `${formatDate(mod.old_start_date)} → ${formatDate(mod.old_end_date)} is now ${formatDate(mod.new_start_date)} → ${formatDate(mod.new_end_date)}. `
