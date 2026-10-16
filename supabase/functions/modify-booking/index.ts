@@ -295,7 +295,11 @@ Deno.serve(async (req) => {
     // A booking made with a promo code that has a minimum length can't be shortened below it afterwards
     // (otherwise the discount could be kept while cutting the days). Staff can still override.
     if (booking.promo_code && !isAdmin) {
-      const { data: promoRow } = await adminClient.from('promo_codes').select('min_days').ilike('code', booking.promo_code).maybeSingle();
+      const { data: promoRow } = await adminClient.from('promo_codes').select('min_days, valid_from, valid_to').ilike('code', booking.promo_code).maybeSingle();
+      // A code limited to a trip window (e.g. DETTY10: December only) stops applying if the booking is moved outside it.
+      if (promoRow && ((promoRow.valid_from && startDate < promoRow.valid_from) || (promoRow.valid_to && endDate > promoRow.valid_to))) {
+        return jsonResponse({ error: `This booking used promo code ${booking.promo_code}, which only applies to trips between ${promoRow.valid_from ?? 'the start'} and ${promoRow.valid_to ?? 'the end'}. Please keep the dates inside that period (or contact support).` }, 400);
+      }
       if (promoRow?.min_days && newBillableDays < promoRow.min_days) {
         return jsonResponse({ error: `This booking used promo code ${booking.promo_code}, which needs at least ${promoRow.min_days} days. Please keep it at ${promoRow.min_days} days or more.` }, 400);
       }

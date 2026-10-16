@@ -183,7 +183,7 @@ export default function CheckoutSummaryScreen() {
     setIsApplyingPromo(true);
     setPromoError(null);
     try {
-      const result = await validatePromoCode(promoInput.trim(), days);
+      const result = await validatePromoCode(promoInput.trim(), days, toISODate(draft.startDate), toISODate(draft.endDate));
       updateDraft({ promoCode: result.code, promoDiscountType: result.discountType, promoDiscountValue: result.discountValue, promoMinDays: result.minDays });
       setPromoInput('');
     } catch (e) {

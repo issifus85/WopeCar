@@ -11,9 +11,10 @@ function normalizeRow(row) {
  * limit. Actual redemption (which increments uses_count) only happens once,
  * at booking creation - see redeemPromoCode().
  */
-export async function validatePromoCode(code, days) {
-  // days = the booking's billable days; codes with a minimum length are checked against it in the database.
-  const { data, error } = await supabase.rpc('validate_promo_code', { p_code: code, p_days: days ?? null });
+export async function validatePromoCode(code, days, startDate, endDate) {
+  // days = the booking's billable days; codes with a minimum length are checked against it in the database. startDate/endDate
+  // (YYYY-MM-DD) are the trip's pickup and return dates, checked against a code's trip window (e.g. DETTY10: December only).
+  const { data, error } = await supabase.rpc('validate_promo_code', { p_code: code, p_days: days ?? null, p_start: startDate ?? null, p_end: endDate ?? null });
   if (error) throw new Error(error.message || 'Invalid or expired promo code.');
   const row = normalizeRow(data?.[0]);
   if (!row) throw new Error('Invalid or expired promo code.');
@@ -26,8 +27,8 @@ export async function validatePromoCode(code, days) {
  * discipline the rest of checkout already follows, so a code is only ever
  * spent by a booking that actually gets created.
  */
-export async function redeemPromoCode(code, days) {
-  const { data, error } = await supabase.rpc('redeem_promo_code', { p_code: code, p_days: days ?? null });
+export async function redeemPromoCode(code, days, startDate, endDate) {
+  const { data, error } = await supabase.rpc('redeem_promo_code', { p_code: code, p_days: days ?? null, p_start: startDate ?? null, p_end: endDate ?? null });
   if (error) throw new Error(error.message || 'Invalid or expired promo code.');
   const row = normalizeRow(data?.[0]);
   if (!row) throw new Error('Invalid or expired promo code.');

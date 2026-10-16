@@ -307,7 +307,7 @@ export default function CheckoutPaymentScreen() {
         // or charge exists, same as every other failure in this block.
         let promoCode = null;
         if (draft.promoCode) {
-          const redeemed = await redeemPromoCode(draft.promoCode, billableDays);
+          const redeemed = await redeemPromoCode(draft.promoCode, billableDays, toISODate(draft.startDate), toISODate(draft.endDate));
           promoCode = redeemed.code;
         }
 
