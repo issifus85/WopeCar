@@ -10,6 +10,7 @@ import {
   formatCurrency,
   calculateRentalPricing,
   calculateSecurityDeposit,
+  calculateWithDriver,
   getSelfDriveDeliveryFee,
   getWithDriverFeePerDay,
   WOPECARE_PLANS,
@@ -209,8 +210,10 @@ export default function CheckoutPaymentScreen() {
     const subtotal = rentalCost + addonsCost;
     // Waived when a WopeCar driver is already coming with the car - see
     // checkout/summary.js's identical formula.
-    const deliveryFee = car.drivenBy === 'Self-drive' && !draft.withDriver ? getSelfDriveDeliveryFee() : 0;
-    const securityDeposit = calculateSecurityDeposit(subtotal, car.drivenBy, draft.withDriver);
+    // Same driver rules as checkout/summary.js: a driver for only some of the days keeps self-drive delivery + deposit.
+    const driverCalc = calculateWithDriver(draft.withDriver, draft.withDriverDays, pricing.billableDays, getWithDriverFeePerDay());
+    const deliveryFee = car.drivenBy === 'Self-drive' && !driverCalc.coversAll ? getSelfDriveDeliveryFee() : 0;
+    const securityDeposit = calculateSecurityDeposit(subtotal, car.drivenBy, driverCalc.coversAll);
     // Same reactive formula as checkout/summary.js - recomputed against this
     // trip's actual subtotal rather than trusting a stored amount.
     const promoDiscountAmount = draft.promoCode
@@ -226,11 +229,12 @@ export default function CheckoutPaymentScreen() {
     const wopeCareCoverage = wopeCarePlanId ? WOPECARE_PLANS[wopeCarePlanId].coverage : 0;
     // Self-drive-only add-on - see checkout/summary.js's identical formula.
     const withDriverDailyRate = draft.withDriver ? getWithDriverFeePerDay() : 0;
-    const withDriverCost = draft.withDriver ? withDriverDailyRate * pricing.billableDays : 0;
+    const withDriverCost = driverCalc.cost;
+    const withDriverDays = draft.withDriver ? driverCalc.driverDays : null;
     return {
       rentalCost, addonsCost, deliveryFee, securityDeposit, promoDiscountAmount,
       wopeCarePlanId, wopeCareDailyRate, wopeCareCost, wopeCareCoverage,
-      withDriverDailyRate, withDriverCost,
+      withDriverDailyRate, withDriverCost, withDriverDays,
       billableDays: pricing.billableDays,
     };
   };
@@ -276,7 +280,7 @@ export default function CheckoutPaymentScreen() {
         const {
           rentalCost, addonsCost, deliveryFee, securityDeposit, promoDiscountAmount,
           wopeCarePlanId, wopeCareDailyRate, wopeCareCost, wopeCareCoverage,
-          withDriverDailyRate, withDriverCost, billableDays,
+          withDriverDailyRate, withDriverCost, withDriverDays, billableDays,
         } = await buildPricingBreakdown();
 
         // The amount charged (draft.totalCost, set on the Cost Breakdown
@@ -344,6 +348,7 @@ export default function CheckoutPaymentScreen() {
           with_driver: !!draft.withDriver,
           with_driver_daily_rate: withDriverDailyRate,
           with_driver_total_cost: withDriverCost,
+          with_driver_days: withDriverDays,
           total_cost: draft.totalCost,
           // vendor_payout_per_day/vendor_payout_total/wopecar_margin are
           // NOT set here - the bookings_compute_vendor_payout trigger stamps
@@ -405,6 +410,7 @@ export default function CheckoutPaymentScreen() {
       const withDriverSelected = !!reserved.with_driver;
       const withDriverDailyRate = reserved.with_driver_daily_rate;
       const withDriverCost = reserved.with_driver_total_cost;
+      const withDriverDays = reserved.with_driver_days ?? null;
 
       // A retry on an existing reservation: the earlier attempt (or Paystack's webhook) may already have
       // taken the payment. Check that first and only open a NEW charge if nothing was paid.
@@ -504,8 +510,10 @@ export default function CheckoutPaymentScreen() {
           selected: withDriverSelected,
           dailyRate: withDriverDailyRate,
           totalCost: withDriverCost,
+          days: withDriverDays,
         },
         totalCost: draft.totalCost,
+        billableDays,
         form: draft.form,
         paystackReference: reference,
         status: 'Pending',
@@ -546,7 +554,7 @@ export default function CheckoutPaymentScreen() {
       const {
         rentalCost, addonsCost, deliveryFee, securityDeposit, promoDiscountAmount,
         wopeCarePlanId, wopeCareDailyRate, wopeCareCost,
-        withDriverDailyRate, withDriverCost, billableDays,
+        withDriverDailyRate, withDriverCost, withDriverDays, billableDays,
       } = await buildPricingBreakdown();
 
       // Same guard as handlePay: the total shown (draft.totalCost) and the
@@ -588,6 +596,7 @@ export default function CheckoutPaymentScreen() {
         with_driver: !!draft.withDriver,
         with_driver_daily_rate: withDriverDailyRate,
         with_driver_total_cost: withDriverCost,
+        with_driver_days: withDriverDays,
         // Display/invoice only - the code is redeemed (and its use counted)
         // when the renter actually pays, not here.
         promo_code: draft.promoCode || null,
@@ -616,7 +625,7 @@ export default function CheckoutPaymentScreen() {
         driveType: car.drivenBy,
         addons: draft.addons,
         wopeCare: { plan: wopeCarePlanId ?? 'none', totalCost: wopeCareCost },
-        withDriver: { selected: !!draft.withDriver, dailyRate: withDriverDailyRate, totalCost: withDriverCost },
+        withDriver: { selected: !!draft.withDriver, dailyRate: withDriverDailyRate, totalCost: withDriverCost, days: withDriverDays },
         deliveryFee,
         securityDeposit,
         rentalCost,

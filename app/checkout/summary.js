@@ -10,6 +10,7 @@ import {
   formatCurrency,
   useSelfDriveDeliveryFee,
   useWithDriverFeePerDay,
+  calculateWithDriver,
   calculateSecurityDeposit,
   calculateRentalPricing,
   WOPECARE_PLANS,
@@ -138,8 +139,13 @@ export default function CheckoutSummaryScreen() {
   // Waived when a WopeCar driver is already coming with the car - there's
   // no separate self-service handover left to charge a delivery fee for.
   const liveSelfDriveDeliveryFee = useSelfDriveDeliveryFee();
-  const deliveryFee = isSelfDrive && !draft.withDriver ? liveSelfDriveDeliveryFee : 0;
-  const securityDeposit = calculateSecurityDeposit(subtotal, car?.drivenBy, draft.withDriver);
+  // A WopeCar driver for only SOME of the days leaves the renter self-driving the rest, so delivery fee and the normal
+  // self-drive deposit still apply; only a driver for the whole trip waives delivery and uses the flat chauffeur deposit.
+  const liveWithDriverFeePerDay = useWithDriverFeePerDay();
+  const driverCalc = calculateWithDriver(draft.withDriver, draft.withDriverDays, days, liveWithDriverFeePerDay);
+  const driverCoversAll = driverCalc.coversAll;
+  const deliveryFee = isSelfDrive && !driverCoversAll ? liveSelfDriveDeliveryFee : 0;
+  const securityDeposit = calculateSecurityDeposit(subtotal, car?.drivenBy, driverCoversAll);
 
   // Recomputed live from this screen's own `days` (not trusted from
   // draft.wopeCareDetails, a snapshot taken back on the addons screen) so
@@ -152,9 +158,8 @@ export default function CheckoutSummaryScreen() {
   // Self-drive-only add-on, recomputed live from the current admin-set rate
   // (same "never trust a stale draft snapshot" reasoning as the fields
   // above) - see constants/pricing.js's useWithDriverFeePerDay().
-  const liveWithDriverFeePerDay = useWithDriverFeePerDay();
   const withDriverDailyRate = draft.withDriver ? liveWithDriverFeePerDay : 0;
-  const withDriverCost = draft.withDriver ? withDriverDailyRate * days : 0;
+  const withDriverCost = driverCalc.cost;
 
   // Recomputed from the promo's own discount shape (not a stored amount) so
   // it stays correct if the renter goes back and changes dates/addons after
@@ -298,7 +303,7 @@ export default function CheckoutSummaryScreen() {
 
           {!!draft.withDriver && (
             <View style={styles.costRow}>
-              <Text style={styles.costLabel}>With Driver ({days} {days === 1 ? 'day' : 'days'})</Text>
+              <Text style={styles.costLabel}>With Driver ({driverCalc.driverDays === days ? `${days} ${days === 1 ? 'day' : 'days'}` : `${driverCalc.driverDays} of ${days} days`})</Text>
               <Text style={styles.costValue}>{formatCurrency(withDriverCost, activeCurrency)}</Text>
             </View>
           )}
@@ -322,7 +327,7 @@ export default function CheckoutSummaryScreen() {
           {isSelfDrive && (
             <View style={styles.costRow}>
               <Text style={styles.costLabel}>Delivery fee</Text>
-              {draft.withDriver ? (
+              {driverCoversAll ? (
                 <Text style={styles.costValue}>Waived (Driver Included)</Text>
               ) : (
                 <Text style={styles.costValue}>{formatCurrency(deliveryFee, activeCurrency)}</Text>

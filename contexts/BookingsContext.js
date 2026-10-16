@@ -41,8 +41,11 @@ function normalizeSupabaseBooking(row) {
       selected: !!row.with_driver,
       dailyRate: row.with_driver_daily_rate ?? 0,
       totalCost: row.with_driver_total_cost ?? 0,
+      // null = every billable day (all bookings made before the driver could cover only some days)
+      days: row.with_driver_days ?? null,
     },
     totalCost: row.total_cost,
+    billableDays: row.billable_days ?? null,
     paystackReference: row.payment_ref,
     status: STATUS_MAP[row.status] ?? 'Pending',
     createdAt: row.created_at,
@@ -181,6 +184,7 @@ export function BookingsProvider({ children }) {
         wopecareTotalCost: fields.wopecareTotalCost,
         withDriverTotalCost: fields.withDriverTotalCost,
         withDriver: fields.withDriver,
+        withDriverDays: fields.withDriverDays,
         paystackReference: fields.paystackReference,
         amountCharged: fields.amountCharged,
       },
@@ -206,6 +210,7 @@ export function BookingsProvider({ children }) {
             selected: fields.withDriver,
             dailyRate: fields.withDriver ? (fields.withDriverDailyRate ?? b.withDriver?.dailyRate ?? 0) : 0,
             totalCost: fields.withDriver ? (fields.withDriverTotalCost ?? 0) : 0,
+            days: fields.withDriver ? (fields.withDriverDays ?? null) : null,
           }
           : (fields.withDriverTotalCost != null && b.withDriver?.selected
             ? { ...b.withDriver, totalCost: fields.withDriverTotalCost }

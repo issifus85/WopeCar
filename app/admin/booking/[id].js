@@ -470,7 +470,7 @@ export default function AdminBookingDetailScreen() {
               {booking.drive_type === 'Self-drive' && (
                 <Row
                   label="Driver"
-                  value={booking.with_driver ? `WopeCar Driver (${formatCurrency(booking.with_driver_daily_rate)}/day)` : 'Self-drive (no driver)'}
+                  value={booking.with_driver ? `WopeCar Driver (${formatCurrency(booking.with_driver_daily_rate)}/day${booking.with_driver_days ? `, ${booking.with_driver_days} of ${booking.billable_days} days` : ''})` : 'Self-drive (no driver)'}
                   styles={styles}
                 />
               )}

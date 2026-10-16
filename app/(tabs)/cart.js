@@ -163,6 +163,7 @@ export default function CartScreen() {
       addons: booking.addons,
       wopeCare: booking.wopeCare?.plan ?? 'none',
       withDriver: booking.withDriver?.selected ?? false,
+      withDriverDays: booking.withDriver?.days ?? null,
       totalCost: booking.totalCost,
       form: booking.form,
       licenseFront: booking.licenseFront,

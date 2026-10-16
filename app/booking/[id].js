@@ -14,6 +14,8 @@ import {
   getWithDriverFeePerDay,
   calculateSecurityDeposit,
   calculateRentalPricing,
+  calculateWithDriver,
+  clampDriverDays,
   getMinBookingDays,
   WOPECARE_PLANS,
   calculateWopeCareCost,
@@ -176,6 +178,8 @@ export default function BookingDetailScreen() {
   const [sameAsPickup, setSameAsPickup] = useState(false);
   // Whether a WopeCar driver comes with the (self-drive) car after this change. Starts from what the booking has now.
   const [editWithDriver, setEditWithDriver] = useState(false);
+  // Days the driver is needed for; null = every day of the (possibly changed) trip.
+  const [editDriverDays, setEditDriverDays] = useState(null);
   const [isPickupModalVisible, setIsPickupModalVisible] = useState(false);
   const [isReturnModalVisible, setIsReturnModalVisible] = useState(false);
   // Dismissed for this screen visit only - not persisted, so the prompt is
@@ -252,6 +256,10 @@ export default function BookingDetailScreen() {
     setEditReturnLocation(booking.returnLocation ?? '');
     setSameAsPickup(!!booking.pickupLocation && booking.pickupLocation === booking.returnLocation);
     setEditWithDriver(!!booking.withDriver?.selected);
+    // A driver that covered the whole trip keeps following the trip length when the dates change; a partial one keeps its days.
+    const originalBillable = booking.billableDays ?? daysBetween(booking.startDate, booking.endDate);
+    const storedDriverDays = booking.withDriver?.selected ? booking.withDriver.days : null;
+    setEditDriverDays(storedDriverDays != null && storedDriverDays < originalBillable ? storedDriverDays : null);
     setPaymentError(null);
     setMode('editing');
   };
@@ -304,7 +312,7 @@ export default function BookingDetailScreen() {
   // security_deposit as its own column, same shape checkout/payment.js's
   // original booking insert already writes.
   const recomputedBreakdown = useMemo(() => {
-    const fallback = { rentalCost: 0, addonsCost: 0, deliveryFee: 0, securityDeposit: 0, withDriverCost: 0, driverDailyRate: 0, total: booking?.totalCost ?? 0 };
+    const fallback = { rentalCost: 0, addonsCost: 0, deliveryFee: 0, securityDeposit: 0, withDriverCost: 0, driverDailyRate: 0, driverDays: 0, total: booking?.totalCost ?? 0 };
     if (!car || !pricing || !days) return fallback;
     const rentalCost = pricing.rentalCost;
     // booking.addons ({name, days}[]) is the current shape; bookings made
@@ -328,17 +336,20 @@ export default function BookingDetailScreen() {
     // Waived when a WopeCar driver is already coming with the car - see
     // checkout/summary.js's identical formula.
     const driverApplies = isSelfDrive && editWithDriver;
-    const deliveryFee = isSelfDrive && !driverApplies ? getSelfDriveDeliveryFee() : 0;
-    const securityDeposit = calculateSecurityDeposit(subtotal, car.drivenBy, driverApplies);
     // A driver the renter already has keeps the daily rate they were quoted (matches modify-booking, which prices it
-    // server-side the same way); one added now is quoted today's admin rate. Either way: rate × the new day count.
+    // server-side the same way); one added now is quoted today's admin rate. Either way: rate × the driver days.
     const driverDailyRate = driverApplies
       ? (booking?.withDriver?.selected && Number(booking.withDriver.dailyRate) > 0 ? Number(booking.withDriver.dailyRate) : getWithDriverFeePerDay())
       : 0;
-    const withDriverCost = driverApplies ? Math.round(driverDailyRate * days * 100) / 100 : 0;
+    const driverCalc = calculateWithDriver(driverApplies, editDriverDays, days, driverDailyRate);
+    // A driver for only some of the days leaves the renter self-driving the rest: delivery fee + normal deposit still apply.
+    const deliveryFee = isSelfDrive && !driverCalc.coversAll ? getSelfDriveDeliveryFee() : 0;
+    const securityDeposit = calculateSecurityDeposit(subtotal, car.drivenBy, driverCalc.coversAll);
+    const withDriverCost = driverCalc.cost;
+    const driverDays = driverCalc.driverDays;
     const total = subtotal + deliveryFee + securityDeposit + recomputedWopeCareCost + withDriverCost;
-    return { rentalCost, addonsCost, deliveryFee, securityDeposit, withDriverCost, driverDailyRate, total };
-  }, [car, pricing, days, booking, originalDays, recomputedWopeCareCost, editWithDriver]);
+    return { rentalCost, addonsCost, deliveryFee, securityDeposit, withDriverCost, driverDailyRate, driverDays, total };
+  }, [car, pricing, days, booking, originalDays, recomputedWopeCareCost, editWithDriver, editDriverDays]);
 
   const recomputedTotal = recomputedBreakdown.total;
   const difference = recomputedTotal - (booking?.totalCost ?? 0);
@@ -392,6 +403,7 @@ export default function BookingDetailScreen() {
     // Only self-drive cars can have a driver added/removed; chauffeur bookings leave these untouched (undefined).
     withDriver: car?.drivenBy === 'Self-drive' ? editWithDriver : undefined,
     withDriverDailyRate: car?.drivenBy === 'Self-drive' && editWithDriver ? recomputedBreakdown.driverDailyRate : undefined,
+    withDriverDays: car?.drivenBy === 'Self-drive' && editWithDriver ? recomputedBreakdown.driverDays : undefined,
     withDriverTotalCost: car?.drivenBy === 'Self-drive'
       ? (editWithDriver ? recomputedBreakdown.withDriverCost : 0)
       : (booking.withDriver?.selected ? recomputedBreakdown.withDriverCost : undefined),
@@ -785,6 +797,37 @@ export default function BookingDetailScreen() {
             </TouchableOpacity>
           )}
 
+          {car?.drivenBy === 'Self-drive' && editWithDriver && days > 1 && (
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Days with driver (of {days})</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                <TouchableOpacity
+                  onPress={() => setEditDriverDays(clampDriverDays(recomputedBreakdown.driverDays - 1, days))}
+                  disabled={recomputedBreakdown.driverDays <= 1}
+                  hitSlop={8}
+                >
+                  <Ionicons name="remove-circle-outline" size={28} color={recomputedBreakdown.driverDays <= 1 ? colors.disabled : colors.teal} />
+                </TouchableOpacity>
+                <Text style={styles.checkboxLabel}>
+                  {recomputedBreakdown.driverDays} {recomputedBreakdown.driverDays === 1 ? 'day' : 'days'}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    const next = clampDriverDays(recomputedBreakdown.driverDays + 1, days);
+                    setEditDriverDays(next >= days ? null : next);
+                  }}
+                  disabled={recomputedBreakdown.driverDays >= days}
+                  hitSlop={8}
+                >
+                  <Ionicons name="add-circle-outline" size={28} color={recomputedBreakdown.driverDays >= days ? colors.disabled : colors.teal} />
+                </TouchableOpacity>
+              </View>
+              {recomputedBreakdown.driverDays < days && (
+                <Text style={styles.noPaymentNote}>You drive the other days yourself, so the delivery fee and standard security deposit apply.</Text>
+              )}
+            </View>
+          )}
+
           {!!car && days > 0 && (
             <View style={styles.recomputedBox}>
               <Text style={styles.recomputedLabel}>New total for {days} {days === 1 ? 'day' : 'days'}</Text>
@@ -906,7 +949,9 @@ export default function BookingDetailScreen() {
             <View style={[styles.row, styles.rowLast]}>
               <View style={styles.wopeCareTitleRow}>
                 <Ionicons name="person" size={16} color={colors.success} />
-                <Text style={styles.rowLabel}>WopeCar Driver</Text>
+                <Text style={styles.rowLabel}>
+                  WopeCar Driver{booking.withDriver.days != null && booking.billableDays != null && booking.withDriver.days < booking.billableDays ? ` (${booking.withDriver.days} of ${booking.billableDays} days)` : ''}
+                </Text>
               </View>
               <Text style={styles.rowValue}>{formatCurrency(booking.withDriver.totalCost, activeCurrency)}</Text>
             </View>

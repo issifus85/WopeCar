@@ -2,7 +2,7 @@ import { Alert } from 'react-native';
 import supabase from './supabase';
 import { notifyUser } from './adminNotify';
 import { sendBookingCancelledEmail, sendBookingConfirmedEmail } from './supabaseApi';
-import { getSelfDriveDeliveryFee, loadSelfDriveDeliveryFee, calculateSecurityDeposit, calculateRentalPricing } from '../constants/pricing';
+import { getSelfDriveDeliveryFee, loadSelfDriveDeliveryFee, calculateSecurityDeposit, calculateRentalPricing, calculateWithDriver } from '../constants/pricing';
 import { getDatePriceMap } from './carPricingApi';
 
 const BOOKING_SELECT = `
@@ -12,7 +12,7 @@ const BOOKING_SELECT = `
   security_deposit, total_cost, status, payment_ref, payment_status,
   vendor_accepted, created_at, updated_at, booking_source,
   wopecare_plan, wopecare_daily_rate, wopecare_total_cost, wopecare_coverage,
-  with_driver, with_driver_daily_rate, with_driver_total_cost,
+  with_driver, with_driver_daily_rate, with_driver_total_cost, with_driver_days,
   promo_code, promo_discount_amount,
   cars ( name, type, images, price_per_day, regional_addons, discount_enabled, discount_type, discount_value, discount_starts_at, discount_ends_at, length_of_stay_discounts ),
   renter:renter_id ( id, full_name, email, phone ),
@@ -248,10 +248,12 @@ export function recomputeBookingCost(booking, { startDate, endDate, pickupTime, 
 
   const subtotal = rentalCost + addonsCost;
   // Waived when a WopeCar driver comes with the car - same as checkout.
-  const deliveryFee = booking.drive_type === 'Self-drive' && !booking.with_driver
+  // A driver for only SOME of the days leaves the renter self-driving the rest: delivery fee + the normal deposit still apply.
+  const driverCalc = calculateWithDriver(booking.with_driver, booking.with_driver_days, pricing.billableDays, Number(booking.with_driver_daily_rate) || 0);
+  const deliveryFee = booking.drive_type === 'Self-drive' && !driverCalc.coversAll
     ? (ctx.deliveryFee ?? getSelfDriveDeliveryFee())
     : 0;
-  const securityDeposit = calculateSecurityDeposit(subtotal, booking.drive_type, booking.with_driver);
+  const securityDeposit = calculateSecurityDeposit(subtotal, booking.drive_type, driverCalc.coversAll);
   // WopeCare and the with-driver add-on are charged per billable day, so a
   // date change has to rescale them too - leaving them out of totalCost (as
   // this used to) silently dropped them from what the renter owes. A legacy
@@ -261,7 +263,7 @@ export function recomputeBookingCost(booking, { startDate, endDate, pickupTime, 
     ? Number(booking.wopecare_daily_rate) * pricing.billableDays
     : Number(booking.wopecare_total_cost) || 0;
   const withDriverTotalCost = Number(booking.with_driver_daily_rate) > 0
-    ? Number(booking.with_driver_daily_rate) * pricing.billableDays
+    ? driverCalc.cost
     : Number(booking.with_driver_total_cost) || 0;
   // Promo recomputed from its own definition against the new subtotal, like
   // checkout does (not left at the old amount); falls back to the stored

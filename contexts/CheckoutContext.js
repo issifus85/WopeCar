@@ -17,6 +17,9 @@ const EMPTY_DRAFT = {
   // priced per day via constants/pricing.js's getWithDriverFeePerDay(). Never
   // offered/settable for a Chauffeur car (see checkout/addons.js).
   withDriver: false,
+  // How many of the trip's billable days the driver is needed for (1..days). null = every day (the default, and what a forced
+  // driver on a short self-drive booking always is).
+  withDriverDays: null,
   // True when checkout/dates.js force-set withDriver above because the
   // selected self-drive range is under the minimum - addons.js reads this
   // to render the toggle checked and non-interactive instead of a normal

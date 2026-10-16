@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { formatCurrency, useWithDriverFeePerDay } from '../../constants/pricing';
+import { formatCurrency, useWithDriverFeePerDay, calculateRentalPricing, clampDriverDays } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
@@ -39,6 +39,8 @@ export default function CheckoutAddonsScreen() {
   // allowed to proceed, so it's forced on and can't be unchecked here.
   const isWithDriverLocked = !!draft.withDriverLocked;
   const withDriverFeePerDay = useWithDriverFeePerDay();
+  // How many days the driver is needed for - null = every billable day. Only changeable when the driver is optional.
+  const [driverDays, setDriverDays] = useState(draft.withDriverDays ?? null);
 
   useEffect(() => {
     fetchCarById(carId)
@@ -64,6 +66,20 @@ export default function CheckoutAddonsScreen() {
     return Math.round((new Date(draft.endDate) - new Date(draft.startDate)) / (1000 * 60 * 60 * 24)) + 1;
   }, [draft.startDate, draft.endDate]);
 
+  // Billable days (what the driver is charged per) - differs from the calendar `days` above for 24-hour-cycle self-drive trips.
+  const billableDays = useMemo(() => {
+    if (!car || !draft.startDate || !draft.endDate) return 0;
+    return calculateRentalPricing({
+      startDate: draft.startDate,
+      endDate: draft.endDate,
+      pickupTime: draft.pickupTime,
+      returnTime: draft.returnTime,
+      drivenBy: car.drivenBy,
+      dailyRate: car.pricePerDay,
+    }).billableDays;
+  }, [car, draft.startDate, draft.endDate, draft.pickupTime, draft.returnTime]);
+  const shownDriverDays = clampDriverDays(driverDays ?? billableDays, billableDays);
+
   const toggleAddon = (addon) => {
     setSelected((prev) => {
       const next = { ...prev };
@@ -88,6 +104,8 @@ export default function CheckoutAddonsScreen() {
     updateDraft({
       addons: Object.entries(selected).map(([name, addonDays]) => ({ name, days: addonDays })),
       withDriver,
+      // null (= every day) unless the renter deliberately picked fewer days; a forced driver is always every day.
+      withDriverDays: withDriver && !isWithDriverLocked && billableDays > 1 && shownDriverDays < billableDays ? shownDriverDays : null,
     });
     router.push({ pathname: '/checkout/wopecare', params: { carId } });
   };
@@ -114,7 +132,7 @@ export default function CheckoutAddonsScreen() {
             <Text style={styles.sectionSubtitle}>
               {isWithDriverLocked
                 ? 'Your selected dates are under the 3-day self-drive minimum, so a WopeCar driver is included for your whole trip.'
-                : 'Prefer not to drive yourself? Add a WopeCar driver for your entire trip.'}
+                : 'Prefer not to drive yourself? Add a WopeCar driver for the whole trip, or just the days you need.'}
             </Text>
             <View style={[styles.addonRow, withDriver && styles.addonRowSelected]}>
               <TouchableOpacity
@@ -128,11 +146,39 @@ export default function CheckoutAddonsScreen() {
                 <View style={styles.addonInfo}>
                   <Text style={styles.addonName}>Add a Driver</Text>
                   <Text style={styles.addonType}>
-                    {isWithDriverLocked ? 'Required for bookings under 3 days' : 'WopeCar provides a driver for the whole trip'}
+                    {isWithDriverLocked ? 'Required for bookings under 3 days' : 'WopeCar provides a driver - choose how many days below'}
                   </Text>
                 </View>
                 <Text style={styles.addonPrice}>+{formatCurrency(withDriverFeePerDay, activeCurrency)}/day</Text>
               </TouchableOpacity>
+
+              {withDriver && !isWithDriverLocked && billableDays > 1 && (
+                <View style={styles.daysStepperRow}>
+                  <Text style={styles.daysStepperLabel}>Days with driver (of {billableDays})</Text>
+                  <View style={styles.daysStepper}>
+                    <TouchableOpacity
+                      style={styles.stepperButton}
+                      onPress={() => setDriverDays(clampDriverDays(shownDriverDays - 1, billableDays))}
+                      disabled={shownDriverDays <= 1}
+                    >
+                      <Ionicons name="remove" size={16} color={shownDriverDays <= 1 ? colors.disabled : colors.teal} />
+                    </TouchableOpacity>
+                    <Text style={styles.stepperValue}>{shownDriverDays} {shownDriverDays === 1 ? 'day' : 'days'}</Text>
+                    <TouchableOpacity
+                      style={styles.stepperButton}
+                      onPress={() => setDriverDays(clampDriverDays(shownDriverDays + 1, billableDays))}
+                      disabled={shownDriverDays >= billableDays}
+                    >
+                      <Ionicons name="add" size={16} color={shownDriverDays >= billableDays ? colors.disabled : colors.teal} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+              {withDriver && !isWithDriverLocked && billableDays > 1 && shownDriverDays < billableDays && (
+                <Text style={styles.sectionSubtitle}>
+                  With the driver on only some days, you drive the other days yourself - so the delivery fee and the standard security deposit still apply.
+                </Text>
+              )}
             </View>
           </>
         )}

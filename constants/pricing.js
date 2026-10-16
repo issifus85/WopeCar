@@ -356,6 +356,21 @@ export const getSecurityDepositPercentage = makeSettingGetter('security_deposit_
 // risk profile as a chauffeured booking - it gets the chauffeur flat amount
 // too, regardless of trip cost, instead of the 25%-of-subtotal self-drive
 // formula below.
+// "With Driver" can cover only some of a self-drive trip's days. `requestedDays` null/undefined = every billable day (what every
+// booking made before this option meant). Returns the clamped day count, the cost (rate x days) and whether the driver covers the
+// WHOLE trip - only then do delivery become free and the flat chauffeur deposit apply; a partial driver keeps self-drive rules.
+export function clampDriverDays(requestedDays, billableDays) {
+  const max = Math.max(1, Math.round(Number(billableDays) || 1));
+  const n = Math.round(Number(requestedDays));
+  return Math.min(Math.max(Number.isFinite(n) ? n : max, 1), max);
+}
+
+export function calculateWithDriver(withDriver, requestedDays, billableDays, dailyRate) {
+  if (!withDriver || !(billableDays > 0)) return { driverDays: 0, coversAll: false, cost: 0 };
+  const driverDays = clampDriverDays(requestedDays ?? billableDays, billableDays);
+  return { driverDays, coversAll: driverDays >= Math.round(billableDays), cost: Math.round(Number(dailyRate) * driverDays * 100) / 100 };
+}
+
 export function calculateSecurityDeposit(subtotal, drivenBy, withDriver) {
   if (drivenBy === 'Chauffeur' || withDriver) return getChauffeurSecurityDeposit();
   return subtotal < getSecurityDepositThreshold() ? getSecurityDepositFlat() : subtotal * getSecurityDepositPercentage();

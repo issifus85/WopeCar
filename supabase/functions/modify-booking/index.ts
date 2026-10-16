@@ -227,7 +227,7 @@ Deno.serve(async (req) => {
     const {
       bookingId, startDate, endDate, pickupTime, returnTime, pickupLocation, returnLocation,
       rentalCost, addonsCost, deliveryFee, securityDeposit, totalCost, billableDays,
-      wopecareTotalCost, withDriverTotalCost, withDriver, paystackReference, amountCharged,
+      wopecareTotalCost, withDriverTotalCost, withDriver, withDriverDays, paystackReference, amountCharged,
     } = await req.json();
 
     if (!bookingId || !startDate || !endDate || totalCost == null) {
@@ -305,7 +305,7 @@ Deno.serve(async (req) => {
     // true/false) - older app builds don't, and keep the previous behaviour. The price is worked out here, not trusted from the
     // client: a driver the renter already has keeps their quoted daily rate, a newly added one gets today's admin rate, and either
     // way it is rate x the new number of billable days.
-    let driverPatch: { with_driver: boolean; with_driver_daily_rate: number; with_driver_total_cost: number } | null = null;
+    let driverPatch: { with_driver: boolean; with_driver_daily_rate: number; with_driver_total_cost: number; with_driver_days: number | null } | null = null;
     if (typeof withDriver === 'boolean' && booking.cars?.drive_type !== 'Chauffeur') {
       const hadDriver = !!booking.with_driver || Number(booking.with_driver_total_cost ?? 0) > 0;
       const today = new Date().toISOString().slice(0, 10);
@@ -321,11 +321,19 @@ Deno.serve(async (req) => {
           rate = typeof feeRow?.value === 'number' && feeRow.value >= 0 ? feeRow.value : 200;
         }
       }
-      const cost = withDriver ? Math.round(rate * Math.max(newBillableDays, 0) * 100) / 100 : 0;
+      // How many days the driver is needed for: the caller's choice (1..trip days); a caller that doesn't say (older app builds)
+      // keeps what the booking already had - its stored days if it was a partial-driver booking, otherwise every trip day.
+      const tripDays = Math.max(Math.round(newBillableDays), 1);
+      let driverDays = 0;
+      if (withDriver) {
+        const requested = withDriverDays != null ? Number(withDriverDays) : (booking.with_driver_days != null ? Number(booking.with_driver_days) : tripDays);
+        driverDays = Math.min(Math.max(Math.round(Number.isFinite(requested) ? requested : tripDays), 1), tripDays);
+      }
+      const cost = withDriver ? Math.round(rate * driverDays * 100) / 100 : 0;
       if (withDriverTotalCost != null && Math.abs(Number(withDriverTotalCost) - cost) > 0.5) {
         return jsonResponse({ error: 'The driver price has changed since you opened this page. Please reload and try again.' }, 409);
       }
-      driverPatch = { with_driver: withDriver, with_driver_daily_rate: withDriver ? rate : 0, with_driver_total_cost: cost };
+      driverPatch = { with_driver: withDriver, with_driver_daily_rate: withDriver ? rate : 0, with_driver_total_cost: cost, with_driver_days: withDriver ? driverDays : null };
     }
     const newDriverCost = driverPatch ? driverPatch.with_driver_total_cost : (withDriverTotalCost != null ? Number(withDriverTotalCost) : null);
 
