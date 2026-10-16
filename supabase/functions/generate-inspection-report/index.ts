@@ -1,6 +1,7 @@
 // Supabase Edge Function - generates a real PDF for a submitted vehicle
-// inspection (pre- or post-rental) and emails it to the renter, the
-// vendor, and WopeCar Operations. Reverses 0012_vehicle_inspections.sql's
+// inspection (pre- or post-rental) and emails it to ONE party plus WopeCar
+// Operations: the renter if the client's side did the inspection, the vendor if
+// the vendor did it - never both (see `inspectedBy` below). Reverses 0012_vehicle_inspections.sql's
 // own documented decision to skip PDF generation entirely - this is the
 // first PDF-generation capability in either repo (no template to copy;
 // the two existing "*-pdf" functions in wopecar-admin are pure proxies to
@@ -427,6 +428,11 @@ Deno.serve(async (req) => {
     if (!isAdmin && !isRenter && !isVendorOwner) {
       return jsonResponse({ error: 'Not authorized to generate this inspection report.' }, 403);
     }
+    // Who carried out this inspection decides who is emailed - never both the renter AND the vendor. An inspection the client
+    // does with WopeCar goes to the client and WopeCar; one the vendor does goes to the vendor and WopeCar. The two parties must
+    // not receive each other's reports (a vendor must never see client details such as their email address). A WopeCar agent
+    // submitting counts as the client's side. (Caller who is both renter and vendor owner: treated as the client.)
+    const inspectedBy: 'vendor' | 'renter' = isVendorOwner && !isRenter && !isAdmin ? 'vendor' : 'renter';
 
     // Idempotent - a retried fire-and-forget call must not regenerate the
     // PDF or re-send the email to every recipient a second time.
@@ -465,7 +471,7 @@ Deno.serve(async (req) => {
         const supportEmail = typeof supportSetting?.value === 'string' ? supportSetting.value : null;
         const fleetOpsEmail = typeof fleetOpsSetting?.value === 'string' ? fleetOpsSetting.value : null;
 
-        const to = [booking.renter?.email, vendorOwner?.email].filter(Boolean) as string[];
+        const to = [inspectedBy === 'vendor' ? vendorOwner?.email : booking.renter?.email].filter(Boolean) as string[];
         const bcc = [supportEmail, fleetOpsEmail].filter(Boolean) as string[];
 
         if (to.length > 0) {
@@ -492,7 +498,7 @@ Deno.serve(async (req) => {
     // must not fail the report generation that already succeeded above.
     try {
       const rows = [];
-      if (booking.renter_id) {
+      if (inspectedBy === 'renter' && booking.renter_id) {
         rows.push({
           user_id: booking.renter_id,
           type: 'inspection_report_ready',
@@ -501,7 +507,7 @@ Deno.serve(async (req) => {
           booking_id: booking.id,
         });
       }
-      if (booking.vendors?.user_id) {
+      if (inspectedBy === 'vendor' && booking.vendors?.user_id) {
         rows.push({
           user_id: booking.vendors.user_id,
           type: 'inspection_report_ready',
