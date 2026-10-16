@@ -154,7 +154,7 @@ Deno.serve(async (req) => {
       //     staff-raised total that was never collected has amount_charged 0).
       const { data: mods } = await adminClient
         .from('booking_modifications')
-        .select('old_total_cost, amount_charged, payment_ref, created_at')
+        .select('old_total_cost, old_security_deposit, amount_charged, payment_ref, created_at')
         .eq('booking_id', booking.id)
         .order('created_at', { ascending: true });
       const originalPaid = mods && mods.length > 0 ? Number(mods[0].old_total_cost) : Number(booking.total_cost);
@@ -168,7 +168,14 @@ Deno.serve(async (req) => {
         }
       }
       const paidBase = Math.round(parts.reduce((sum, part) => sum + part.cap, 0) * 100) / 100;
-      refundAmount = Math.round(paidBase * refundPercentage * 100) / 100;
+      // The security deposit is refundable by definition - it is only ever kept if the car comes back damaged - so cancelling before
+      // the trip returns it in FULL at every tier, even inside the no-refund window. The tiers apply to the rest (rental, add-ons,
+      // delivery, WopeCare, driver). The deposit paid is the one the booking had before its first modification (or its current one).
+      const depositPaid = Math.min(
+        paidBase,
+        Math.max(0, mods && mods.length > 0 ? Number(mods[0].old_security_deposit ?? booking.security_deposit) : Number(booking.security_deposit))
+      );
+      refundAmount = Math.round((depositPaid + (paidBase - depositPaid) * refundPercentage) * 100) / 100;
 
       let processedTotal = 0;
       let remaining = refundAmount;

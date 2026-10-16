@@ -45,7 +45,7 @@ function useCancellationPolicySummary() {
         const partialHours = Number(map.cancellation_partial_refund_hours ?? 24);
         const partialPct = Math.round(Number(map.cancellation_partial_refund_percentage ?? 0.5) * 100);
         setSummary(
-          `100% refund ${hoursToPhrase(fullHours)}+ before pickup · ${partialPct}% refund ${hoursToPhrase(partialHours)}–${hoursToPhrase(fullHours)} before · no refund under ${hoursToPhrase(partialHours)}`
+          `100% refund ${hoursToPhrase(fullHours)}+ before pickup · ${partialPct}% refund ${hoursToPhrase(partialHours)}–${hoursToPhrase(fullHours)} before · no refund of rental charges under ${hoursToPhrase(partialHours)} · security deposit always refunded`
         );
       })
       .catch(() => !cancelled && setSummary('Could not load — check your connection.'));
