@@ -1,21 +1,21 @@
 import supabase, { edgeFunctionErrorMessage } from './supabase';
 import { getVendorProfile } from './vendorCarsApi';
-import { getVendorBookings, sendBookingCancelledEmail, sendBookingConfirmedEmail } from './supabaseApi';
+import { VENDOR_BOOKING_COLUMNS, attachCarNames, getVendorBookings, sendBookingCancelledEmail, sendBookingConfirmedEmail } from './supabaseApi';
 
 // Same explicit-column guarantee as getVendorBookings() in supabaseApi.js -
 // used by acceptBookingRequest/declineBookingRequest below instead of
 // `select('*')`, so a booking's raw update/fetch response passing through
 // this vendor-facing module never carries renter_id/total_cost/rental_cost/
 // wopecar_margin etc. even transiently, not just omits them from the UI.
-const VENDOR_BOOKING_SELECT = `
-  id, booking_ref, car_id, vendor_id,
-  start_date, end_date, pickup_time, return_time,
-  pickup_location, return_location, drive_type, addon_names,
-  billable_days, vendor_payout_per_day, vendor_payout_total,
-  status, payment_ref, payment_status, vendor_accepted,
-  created_at, updated_at,
-  cars(name)
-`;
+const VENDOR_BOOKING_SELECT = VENDOR_BOOKING_COLUMNS;
+
+// One booking, read through the vendor_bookings view (see getVendorBookings).
+async function fetchVendorBooking(bookingId) {
+  const { data, error } = await supabase.from('vendor_bookings').select(VENDOR_BOOKING_SELECT).eq('id', bookingId).single();
+  if (error) throw error;
+  const [withCar] = await attachCarNames([data]);
+  return withCar;
+}
 
 // bookings.status ('pending'/'confirmed'/'completed'/'cancelled') plus
 // vendor_accepted (null until the vendor responds) together decide the
@@ -92,15 +92,11 @@ export async function getVendorBookingsSplit(vendor) {
  * renter only got a "received, pending confirmation" email at payment time.
  */
 export async function acceptBookingRequest(bookingId) {
-  const { data, error } = await supabase
-    .from('bookings')
-    .update({ status: 'confirmed', vendor_accepted: true })
-    .eq('id', bookingId)
-    .select(VENDOR_BOOKING_SELECT)
-    .single();
+  // vendor_accept_booking (migration 0153) does the status change server-side; vendors have no direct write access to bookings.
+  const { error } = await supabase.rpc('vendor_accept_booking', { p_booking_id: bookingId });
   if (error) throw error;
   sendBookingConfirmedEmail(bookingId).catch(() => {});
-  return normalizeVendorBooking(data);
+  return normalizeVendorBooking(await fetchVendorBooking(bookingId));
 }
 
 /**
@@ -123,7 +119,5 @@ export async function declineBookingRequest(bookingId, reason) {
 
   sendBookingCancelledEmail(bookingId, reason).catch(() => {});
 
-  const { data, error: fetchError } = await supabase.from('bookings').select(VENDOR_BOOKING_SELECT).eq('id', bookingId).single();
-  if (fetchError) throw fetchError;
-  return normalizeVendorBooking(data);
+  return normalizeVendorBooking(await fetchVendorBooking(bookingId));
 }

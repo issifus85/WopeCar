@@ -93,29 +93,38 @@ export async function getBookingModifications(bookingId) {
  * payout for each booking (vendor_payout_per_day/vendor_payout_total,
  * stamped server-side at booking creation by the
  * bookings_compute_vendor_payout trigger), never what the client paid.
- * There's also a column-masking `vendor_bookings_view` (same exclusions)
- * for defense-in-depth against a raw REST call bypassing this function
- * entirely - not used here since PostgREST's embedded `cars(*)` join
- * through a view is unverified in this project; this explicit list against
- * the base table is the same proven-working pattern already used for
- * renter_id above, just extended.
+ * Since migration 0153 this reads the `vendor_bookings` view (own bookings only, safe columns
+ * only) - vendors no longer have any direct read access to the bookings table, so a raw REST
+ * call can't return renter_id or the amounts the client paid either.
  */
 export async function getVendorBookings(vendorId) {
+  // Reads the vendor_bookings view (migration 0153), which only ever contains this vendor's own bookings and only the columns
+  // below - never renter_id, costs, payment reference or margin. The bookings table itself is no longer readable by vendors.
   const { data, error } = await supabase
-    .from('bookings')
-    .select(`
-      id, booking_ref, car_id, vendor_id,
-      start_date, end_date, pickup_time, return_time,
-      pickup_location, return_location, drive_type, addon_names,
-      billable_days, vendor_payout_per_day, vendor_payout_total,
-      status, payment_ref, payment_status, vendor_accepted,
-      created_at, updated_at,
-      cars(*)
-    `)
+    .from('vendor_bookings')
+    .select(VENDOR_BOOKING_COLUMNS)
     .eq('vendor_id', vendorId)
     .order('created_at', { ascending: false });
   if (error) throw error;
-  return data;
+  return attachCarNames(data ?? []);
+}
+
+export const VENDOR_BOOKING_COLUMNS = `
+  id, booking_ref, car_id, vendor_id,
+  start_date, end_date, pickup_time, return_time,
+  pickup_location, return_location, drive_type, addon_names,
+  billable_days, vendor_payout_per_day, vendor_payout_total,
+  status, payment_status, vendor_accepted,
+  created_at, updated_at
+`;
+
+// The view has no car relationship to embed, so the vendor's cars (readable by their owner) are fetched alongside.
+export async function attachCarNames(rows) {
+  const carIds = [...new Set(rows.map((r) => r.car_id).filter(Boolean))];
+  if (carIds.length === 0) return rows;
+  const { data: cars } = await supabase.from('cars').select('id, name').in('id', carIds);
+  const byId = new Map((cars ?? []).map((c) => [c.id, c]));
+  return rows.map((r) => ({ ...r, cars: byId.get(r.car_id) ?? null }));
 }
 
 /**
