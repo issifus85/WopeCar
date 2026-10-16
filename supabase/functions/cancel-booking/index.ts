@@ -126,6 +126,7 @@ Deno.serve(async (req) => {
     let refundAmount = 0;
     let refundPercentage = 0;
     let refundProcessed = false;
+    let refundedSoFar = 0; // what Paystack actually accepted (can be less than refundAmount if one of several refunds failed)
     let refundError: string | null = null;
 
     if (booking.payment_status === 'paid') {
@@ -145,29 +146,65 @@ Deno.serve(async (req) => {
       else if (hoursUntilPickup >= partialHours) refundPercentage = partialPct;
       else refundPercentage = 0;
 
-      refundAmount = Math.round(Number(booking.total_cost) * refundPercentage * 100) / 100;
+      // The cancellation tiers apply to what the renter has ACTUALLY PAID for this booking - not to its current total_cost. They differ
+      // once the booking was modified: a change that lowered the total never returned the difference (the team follows up on it), so the
+      // renter paid more than total_cost, and a change that raised it can have been paid in a separate Paystack transaction. Paid =
+      //   the total the booking had before its first modification (or total_cost if it was never modified)
+      //   + every amount charged with a later modification (positive amounts only: a reduction returns nothing by itself, and a
+      //     staff-raised total that was never collected has amount_charged 0).
+      const { data: mods } = await adminClient
+        .from('booking_modifications')
+        .select('old_total_cost, amount_charged, payment_ref, created_at')
+        .eq('booking_id', booking.id)
+        .order('created_at', { ascending: true });
+      const originalPaid = mods && mods.length > 0 ? Number(mods[0].old_total_cost) : Number(booking.total_cost);
+      // Each part is refunded against the Paystack transaction that took the money (a refund can't exceed its own transaction).
+      const parts: { ref: string | null; cap: number }[] = [{ ref: booking.payment_ref, cap: originalPaid }];
+      for (const m of mods ?? []) {
+        const charged = Number(m.amount_charged);
+        if (charged > 0) {
+          if (m.payment_ref && m.payment_ref !== booking.payment_ref) parts.push({ ref: m.payment_ref, cap: charged });
+          else parts[0].cap += charged;
+        }
+      }
+      const paidBase = Math.round(parts.reduce((sum, part) => sum + part.cap, 0) * 100) / 100;
+      refundAmount = Math.round(paidBase * refundPercentage * 100) / 100;
 
-      if (refundAmount > 0 && booking.payment_ref) {
+      let processedTotal = 0;
+      let remaining = refundAmount;
+      if (refundAmount > 0) {
         if (!paystackSecretKey) {
           refundError = 'Refunds are not configured for this project yet — process this refund manually.';
         } else {
-          try {
-            const paystackRes = await fetch('https://api.paystack.co/refund', {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${paystackSecretKey}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ transaction: booking.payment_ref, amount: Math.round(refundAmount * 100) }),
-            });
-            const paystackJson = await paystackRes.json();
-            if (paystackRes.ok && paystackJson.status) {
-              refundProcessed = true;
-            } else {
-              refundError = paystackJson.message || 'Paystack refund request failed — process this refund manually.';
+          for (const part of parts) {
+            if (remaining <= 0.001) break;
+            const take = Math.round(Math.min(remaining, part.cap) * 100) / 100;
+            if (take <= 0) continue;
+            if (!part.ref) {
+              refundError = 'A payment on this booking has no Paystack reference — process the rest of the refund manually.';
+              continue;
             }
-          } catch {
-            refundError = 'Could not reach Paystack to process the refund — process it manually.';
+            try {
+              const paystackRes = await fetch('https://api.paystack.co/refund', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${paystackSecretKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ transaction: part.ref, amount: Math.round(take * 100) }),
+              });
+              const paystackJson = await paystackRes.json();
+              if (paystackRes.ok && paystackJson.status) {
+                processedTotal = Math.round((processedTotal + take) * 100) / 100;
+                remaining = Math.round((remaining - take) * 100) / 100;
+              } else {
+                refundError = paystackJson.message || 'Paystack refund request failed — process this refund manually.';
+              }
+            } catch {
+              refundError = 'Could not reach Paystack to process the refund — process it manually.';
+            }
           }
         }
       }
+      refundProcessed = refundAmount > 0 && processedTotal >= refundAmount - 0.01;
+      refundedSoFar = processedTotal;
     }
 
     const updatePatch: Record<string, unknown> = { status: 'cancelled', cancellation_reason: reason || null };
@@ -177,6 +214,8 @@ Deno.serve(async (req) => {
     if (refundProcessed) {
       updatePatch.payment_status = 'refunded';
       updatePatch.refund_amount = refundAmount;
+    } else if (refundedSoFar > 0) {
+      updatePatch.refund_amount = refundedSoFar; // partly refunded - the rest is a manual follow-up (see refundError)
     }
     const { error: updateError } = await adminClient.from('bookings').update(updatePatch).eq('id', bookingId);
     if (updateError) {
