@@ -510,7 +510,17 @@ export default function AdminBookingDetailScreen() {
               )}
               <Row label="Delivery Fee" value={formatCurrency(booking.delivery_fee)} styles={styles} />
               <Row label="Security Deposit" value={formatCurrency(booking.security_deposit)} styles={styles} />
+              {Number(booking.promo_discount_amount) > 0 && (
+                <Row
+                  label={booking.promo_code ? `Promo Code (${booking.promo_code})` : 'Promo Discount'}
+                  value={`-${formatCurrency(booking.promo_discount_amount)}`}
+                  styles={styles}
+                />
+              )}
               <Row label="Total" value={formatCurrency(booking.total_cost)} styles={styles} />
+              {Number(booking.refund_amount) > 0 && (
+                <Row label="Refunded" value={formatCurrency(booking.refund_amount)} styles={styles} />
+              )}
             </View>
 
             <View style={styles.section}>
