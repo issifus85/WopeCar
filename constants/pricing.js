@@ -401,7 +401,13 @@ export function getMinBookingDays(drivenBy) {
 //     each additional 24h (or part thereof) is another day.
 //   - Chauffeur: 12-hour cycle. Any duration up to 12h is 1 billable day
 //     (e.g. 8:00 AM-8:00 PM); each additional 12h (or part thereof) is
-//     another day.
+//     another day. EXCEPT when the return time of day is later than the
+//     pickup time of day (a daytime hire, e.g. 7:00 AM-7:00 PM): then each
+//     calendar day is its own hire of that many hours - 4 calendar days of
+//     7 AM-7 PM bill 4 days, not the 7 cycles that 84 continuous hours would
+//     (the nights in between are not hired). Hours beyond 12 in a day add a
+//     cycle for every day. Overnight / same-clock-time rentals (return time
+//     at or before the pickup time) are continuous, as before.
 // A configurable grace period (default 29 minutes) only applies to the
 // self-drive cycle, absorbing minor lateness at each 24h boundary so a
 // return that's a few minutes over doesn't silently trigger a full extra
@@ -548,7 +554,16 @@ export function calculateRentalPricing({
   const cycleMinutes = cycleHours * MINUTES_PER_HOUR;
   const graceMinutes = !isChauffeur && useGracePeriod ? gracePeriodMinutes : 0;
 
-  const billableDays = Math.max(1, Math.ceil((durationMinutes - graceMinutes) / cycleMinutes));
+  let billableDays = Math.max(1, Math.ceil((durationMinutes - graceMinutes) / cycleMinutes));
+  if (isChauffeur) {
+    const dailyMinutes = returnAt.getHours() * MINUTES_PER_HOUR + returnAt.getMinutes() - (pickupAt.getHours() * MINUTES_PER_HOUR + pickupAt.getMinutes());
+    const calendarDays = Math.round(
+      (Date.UTC(returnAt.getFullYear(), returnAt.getMonth(), returnAt.getDate()) - Date.UTC(pickupAt.getFullYear(), pickupAt.getMonth(), pickupAt.getDate())) / 86400000
+    ) + 1;
+    if (dailyMinutes > 0 && calendarDays >= 1) {
+      billableDays = calendarDays * Math.max(1, Math.ceil(dailyMinutes / cycleMinutes));
+    }
+  }
 
   const pickupDateOnly = new Date(pickupAt.getFullYear(), pickupAt.getMonth(), pickupAt.getDate());
   const dailyBreakdown = [];

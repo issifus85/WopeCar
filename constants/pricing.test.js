@@ -142,6 +142,30 @@ describe('calculateRentalPricing - Chauffeur-Driven (12-hour cycle)', () => {
     expect(result.cycleHours).toBe(CHAUFFEUR_CYCLE_HOURS);
   });
 
+  it('bills a multi-day daytime hire per calendar day (7 AM-7 PM for 4 days = 4 days, not 7 cycles)', () => {
+    const result = calculateRentalPricing({
+      startDate: '2026-11-24',
+      endDate: '2026-11-27',
+      pickupTime: '7:00 AM',
+      returnTime: '7:00 PM',
+      drivenBy,
+      dailyRate,
+    });
+    expect(result.billableDays).toBe(4);
+  });
+
+  it('adds a cycle for every day when the daily hire is longer than 12 hours', () => {
+    const result = calculateRentalPricing({
+      startDate: '2026-11-24',
+      endDate: '2026-11-27',
+      pickupTime: '7:00 AM',
+      returnTime: '10:00 PM',
+      drivenBy,
+      dailyRate,
+    });
+    expect(result.billableDays).toBe(8);
+  });
+
   it('bills across multiple 12h cycles using real pickup/return time slots', () => {
     // Pickup 6:00 PM day 1, return 6:00 PM day 3 = exactly 48 hours = 4 cycles.
     const result = calculateRentalPricing({
