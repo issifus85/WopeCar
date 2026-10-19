@@ -125,20 +125,28 @@ function InspectionReportsSection({ bookingId, router, styles, colors }) {
       ) : (
         INSPECTION_ROWS.map(({ type, label }) => {
           const data = inspections[type] ?? EMPTY_INSPECTION_STATUS;
+          const isSubmitted = data.status === 'submitted';
+          // Admin can run the inspection with the client (same wizard the client uses, same record - the client sees it on their booking
+          // and gets the report emailed). A submitted inspection opens its report instead.
+          const startInspection = () =>
+            router.push({ pathname: '/inspection/mileage', params: { bookingId, localId: bookingId, type, from: 'admin' } });
           return (
             <TouchableOpacity
               key={type}
               style={styles.row}
-              onPress={() => router.push({ pathname: '/inspection/report', params: { bookingId, type } })}
+              onPress={() => (isSubmitted ? router.push({ pathname: '/inspection/report', params: { bookingId, type } }) : startInspection())}
             >
               <Text style={styles.rowLabel}>{label}</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <Text style={styles.rowValue}>{inspectionBadgeLabel(data.status)}</Text>
+                <Text style={styles.rowValue}>
+                  {isSubmitted ? 'Submitted' : data.status === 'draft' ? 'In Progress - Continue' : 'Not Started - Start'}
+                </Text>
                 {!!data.reportPdfPath && (
                   <TouchableOpacity onPress={() => handleOpenPdf(type, data.reportPdfPath)} disabled={openingType === type}>
                     <Ionicons name="document-text-outline" size={18} color={colors.teal} />
                   </TouchableOpacity>
                 )}
+                <Ionicons name={isSubmitted ? 'chevron-forward' : 'play-circle-outline'} size={18} color={colors.teal} />
               </View>
             </TouchableOpacity>
           );

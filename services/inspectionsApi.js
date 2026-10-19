@@ -158,6 +158,8 @@ const REQUIRED_ANGLES = PHOTO_ANGLES.map((a) => a.key);
 export async function submitInspection(inspectionId) {
   const inspection = await fetchById(inspectionId);
   if (!inspection) throw new Error('Inspection not found.');
+  // Already submitted (a retry, or another party - client or admin - finished it first): nothing left to do.
+  if (inspection.status === 'submitted') return inspection;
 
   const hasAllPhotos = REQUIRED_ANGLES.every((angle) => inspection.photos.some((p) => p.angle === angle));
   if (!hasAllPhotos) throw new Error(`All ${REQUIRED_ANGLES.length} photos are required before submitting.`);

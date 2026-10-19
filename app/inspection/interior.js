@@ -73,7 +73,7 @@ function CheckItem({ label, checked, onToggle, styles, colors }) {
 }
 
 export default function InspectionInteriorScreen() {
-  const { bookingId, localId, type } = useLocalSearchParams();
+  const { bookingId, localId, type, from } = useLocalSearchParams();
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -106,7 +106,7 @@ export default function InspectionInteriorScreen() {
     } finally {
       setIsSaving(false);
     }
-    router.push({ pathname: '/inspection/photos', params: { bookingId, localId, type } });
+    router.push({ pathname: '/inspection/photos', params: { bookingId, localId, type, from } });
   };
 
   return (

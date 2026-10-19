@@ -12,7 +12,7 @@ import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 const FUEL_LEVELS = ['Empty', '1/4', 'Half', '3/4', 'Full'];
 
 export default function InspectionMileageScreen() {
-  const { bookingId, localId, type } = useLocalSearchParams();
+  const { bookingId, localId, type, from } = useLocalSearchParams();
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -56,7 +56,7 @@ export default function InspectionMileageScreen() {
       updateDraft({ pendingSync: true });
     }
 
-    router.push({ pathname: '/inspection/exterior', params: { bookingId, localId, type } });
+    router.push({ pathname: '/inspection/exterior', params: { bookingId, localId, type, from } });
   };
 
   return (

@@ -58,7 +58,7 @@ function SignatureSlot({ label, value, mode, onModeChange, padRef, onOK, onEmpty
 }
 
 export default function InspectionSignaturesScreen() {
-  const { bookingId, localId, type } = useLocalSearchParams();
+  const { bookingId, localId, type, from } = useLocalSearchParams();
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -128,7 +128,9 @@ export default function InspectionSignaturesScreen() {
 
       Alert.alert(
         'Inspection Submitted',
-        'The inspection report has been saved and is available in Documents.',
+        from === 'admin'
+          ? 'The inspection report has been saved. The client can see it on their booking and has been emailed a copy.'
+          : 'The inspection report has been saved and is available in Documents.',
         [
           {
             text: 'View Report',
@@ -141,7 +143,7 @@ export default function InspectionSignaturesScreen() {
               // Booking Detail. Collapse the wizard first, then push the
               // report on top of Booking Detail, so back from the report
               // lands where the user actually expects.
-              router.dismissTo(`/booking/${localId}`);
+              router.dismissTo(from === 'admin' ? `/admin/booking/${bookingId}` : `/booking/${localId}`);
               router.push({ pathname: '/inspection/report', params: { bookingId, type } });
             },
           },
@@ -154,7 +156,7 @@ export default function InspectionSignaturesScreen() {
               // stack a *second* Booking Detail instance on top of all of
               // that instead of returning to the original one, leaving the
               // back button/swipe gesture pointing into a duplicated stack.
-              router.dismissTo(`/booking/${localId}`);
+              router.dismissTo(from === 'admin' ? `/admin/booking/${bookingId}` : `/booking/${localId}`);
             },
           },
         ]
