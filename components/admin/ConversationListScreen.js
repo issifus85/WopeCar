@@ -6,6 +6,7 @@ import { FONTS } from '../../constants/theme';
 import { formatRelativeTime } from '../../constants/dateUtils';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import * as conversationsApi from '../../services/conversationsApi';
+import { useInbox } from '../../contexts/InboxContext';
 import FilterTabs from './FilterTabs';
 import BadgeStatus from './BadgeStatus';
 
@@ -73,6 +74,7 @@ export default function ConversationListScreen({ category, title, subtitle, back
   const navigation = useNavigation();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const { reportSupportUnread } = useInbox();
   const [conversations, setConversations] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('all');
@@ -95,10 +97,14 @@ export default function ConversationListScreen({ category, title, subtitle, back
 
   const load = useCallback(() => {
     conversationsApi.getConversations({ scope: 'all', category })
-      .then(setConversations)
+      .then((list) => {
+        setConversations(list);
+        // Keep the Ride Support badge (profile menu / app icon) in step with what this list shows.
+        if (category === 'support_ops') reportSupportUnread(list.reduce((sum, c) => sum + (c.unreadCount ?? 0), 0));
+      })
       .catch(() => {})
       .finally(() => setIsLoading(false));
-  }, [category]);
+  }, [category, reportSupportUnread]);
 
   useEffect(() => {
     load();

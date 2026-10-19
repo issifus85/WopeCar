@@ -109,6 +109,9 @@ export function InboxProvider({ children }) {
   const [serverConversations, setServerConversations] = useState([]);
   const [serverMessagesByConversationId, setServerMessagesByConversationId] = useState({});
   const [serverNotifications, setServerNotifications] = useState([]);
+  // Staff only: unread messages across the Ride Support (booking / car-inquiry) conversations, which the Inbox list above deliberately
+  // doesn't hold (it is category-filtered to general conversations). Drives the badge on the Ride Support menu row and the app icon.
+  const [supportUnread, setSupportUnread] = useState(0);
   const dataRef = useRef(data);
   const { settings } = useSettings();
   const { user } = useAuth();
@@ -193,6 +196,11 @@ export function InboxProvider({ children }) {
   // they just created, instead of racing the screen they open.
   const syncServerConversations = useCallback(() => {
     if (!user) return Promise.resolve();
+    if (isSupportViewer) {
+      conversationsApi.getConversations({ scope: 'all', category: 'support_ops' })
+        .then((list) => setSupportUnread(list.reduce((sum, c) => sum + (c.unreadCount ?? 0), 0)))
+        .catch(() => {});
+    }
     return conversationsApi.getConversations(isSupportViewer ? { category: 'general' } : {})
       .then((fetched) => {
         setServerConversations((prev) => {
@@ -272,6 +280,7 @@ export function InboxProvider({ children }) {
       setServerConversations([]);
       setServerMessagesByConversationId({});
       setServerNotifications([]);
+      setSupportUnread(0);
     }
     prevUserRef.current = user;
   }, [user]);
@@ -685,14 +694,16 @@ export function InboxProvider({ children }) {
   // keep showing the last user's number. A push can also carry its own badge
   // (send-push-notification) which this corrects the next time the app is open.
   useEffect(() => {
-    setAppBadgeCount(user ? totalUnreadCount : 0);
-  }, [user, totalUnreadCount]);
+    setAppBadgeCount(user ? totalUnreadCount + supportUnread : 0);
+  }, [user, totalUnreadCount, supportUnread]);
 
   const value = useMemo(() => ({
     conversations,
     notifications,
     isLoading,
     totalUnreadCount,
+    supportUnread,
+    reportSupportUnread: setSupportUnread,
     getMessages,
     sendMessage,
     startInquiry,
@@ -709,7 +720,7 @@ export function InboxProvider({ children }) {
     syncServerConversations,
     ensureServerConversation,
   }), [
-    conversations, notifications, isLoading, totalUnreadCount, getMessages, sendMessage,
+    conversations, notifications, isLoading, totalUnreadCount, supportUnread, getMessages, sendMessage,
     startInquiry, startVendorSupport, markConversationRead, markNotificationRead, markAllNotificationsRead,
     markConversationUnread, deleteConversation, markNotificationUnread, deleteNotification, notifyBookingEvent,
     syncMessages, syncServerConversations, ensureServerConversation,

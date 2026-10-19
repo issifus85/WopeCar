@@ -31,7 +31,7 @@ export default function ProfileScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user } = useAuth();
-  const { totalUnreadCount } = useInbox();
+  const { totalUnreadCount, supportUnread } = useInbox();
   const { updateSetting } = useSettings();
 
   // Gated - a user needs a real vendor row before Vendor Mode opens (see
@@ -138,6 +138,11 @@ export default function ProfileScreen() {
             {item.route === '/inbox' && totalUnreadCount > 0 && (
               <View style={styles.menuBadge}>
                 <Text style={styles.menuBadgeText}>{totalUnreadCount}</Text>
+              </View>
+            )}
+            {item.route === '/staff-inbox' && supportUnread > 0 && (
+              <View style={styles.menuBadge}>
+                <Text style={styles.menuBadgeText}>{supportUnread > 99 ? '99+' : supportUnread}</Text>
               </View>
             )}
             <Ionicons name="chevron-forward" size={20} color={colors.textSubtle} />
