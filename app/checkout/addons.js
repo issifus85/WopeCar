@@ -80,13 +80,18 @@ export default function CheckoutAddonsScreen() {
   }, [car, draft.startDate, draft.endDate, draft.pickupTime, draft.returnTime]);
   const shownDriverDays = clampDriverDays(driverDays ?? billableDays, billableDays);
 
+  // A per-day regional add-on can never run for more days than the rental is billed for: a self-drive 10:00-to-10:00 trip over six
+  // dates is 5 billed days, so the add-on caps at 5 (not 6). Taking the smaller of calendar and billable days keeps the same-day
+  // chauffeur fix above (calendar 1 < billable 2) and the self-drive case (billable 5 < calendar 6) both right.
+  const addonCap = Math.max(1, billableDays > 0 ? Math.min(days, billableDays) : days);
+
   const toggleAddon = (addon) => {
     setSelected((prev) => {
       const next = { ...prev };
       if (addon.name in next) {
         delete next[addon.name];
       } else {
-        next[addon.name] = Math.max(1, days);
+        next[addon.name] = addonCap;
       }
       return next;
     });
@@ -95,14 +100,14 @@ export default function CheckoutAddonsScreen() {
   const adjustAddonDays = (name, delta) => {
     setSelected((prev) => {
       const current = prev[name] ?? 1;
-      const clamped = Math.min(Math.max(1, current + delta), Math.max(1, days));
+      const clamped = Math.min(Math.max(1, current + delta), addonCap);
       return { ...prev, [name]: clamped };
     });
   };
 
   const handleContinue = () => {
     updateDraft({
-      addons: Object.entries(selected).map(([name, addonDays]) => ({ name, days: addonDays })),
+      addons: Object.entries(selected).map(([name, addonDays]) => ({ name, days: Math.min(addonDays, addonCap) })),
       withDriver,
       // null (= every day) unless the renter deliberately picked fewer days; a forced driver is always every day.
       withDriverDays: withDriver && !isWithDriverLocked && billableDays > 1 && shownDriverDays < billableDays ? shownDriverDays : null,
@@ -197,7 +202,7 @@ export default function CheckoutAddonsScreen() {
           addons.map((addon) => {
             const isSelected = addon.name in selected;
             const isPerDay = addon.type === 'per_day';
-            const addonDays = selected[addon.name] ?? 1;
+            const addonDays = Math.min(selected[addon.name] ?? 1, addonCap);
             return (
               <View key={addon.name} style={[styles.addonRow, isSelected && styles.addonRowSelected]}>
                 <TouchableOpacity style={styles.addonToggleRow} onPress={() => toggleAddon(addon)}>
@@ -230,9 +235,9 @@ export default function CheckoutAddonsScreen() {
                       <TouchableOpacity
                         style={styles.stepperButton}
                         onPress={() => adjustAddonDays(addon.name, 1)}
-                        disabled={addonDays >= Math.max(1, days)}
+                        disabled={addonDays >= addonCap}
                       >
-                        <Ionicons name="add" size={16} color={addonDays >= Math.max(1, days) ? colors.disabled : colors.teal} />
+                        <Ionicons name="add" size={16} color={addonDays >= addonCap ? colors.disabled : colors.teal} />
                       </TouchableOpacity>
                     </View>
                   </View>
