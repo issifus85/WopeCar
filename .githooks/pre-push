@@ -1,0 +1,7 @@
+#!/bin/sh
+# Runs the same checks as CI before a push; a failure stops the push. Skip once with: git push --no-verify
+# Enable on a machine with: git config core.hooksPath .githooks
+echo "pre-push: running tests (app unit tests + Edge Function regression checks)..."
+npx jest --silent >/tmp/wopecar-prepush.log 2>&1 || { tail -30 /tmp/wopecar-prepush.log; echo "pre-push: app unit tests FAILED - push stopped (git push --no-verify to override)."; exit 1; }
+npm run --silent test:edge >/tmp/wopecar-prepush.log 2>&1 || { tail -30 /tmp/wopecar-prepush.log; echo "pre-push: Edge Function checks FAILED - push stopped (git push --no-verify to override)."; exit 1; }
+echo "pre-push: all checks passed."
