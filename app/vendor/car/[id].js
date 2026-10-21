@@ -41,7 +41,7 @@ function useCancellationPolicySummary() {
       .then(({ data }) => {
         if (cancelled || !data) return;
         const map = Object.fromEntries(data.map((row) => [row.key, row.value]));
-        const fullHours = Number(map.cancellation_full_refund_hours ?? 168);
+        const fullHours = Number(map.cancellation_full_refund_hours ?? 48);
         const partialHours = Number(map.cancellation_partial_refund_hours ?? 24);
         const partialPct = Math.round(Number(map.cancellation_partial_refund_percentage ?? 0.5) * 100);
         setSummary(

@@ -65,7 +65,7 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-const DEFAULT_FULL_REFUND_HOURS = 168;
+const DEFAULT_FULL_REFUND_HOURS = 48; // matches the configured app_settings value and the website fallback
 const DEFAULT_PARTIAL_REFUND_HOURS = 24;
 const DEFAULT_PARTIAL_REFUND_PERCENTAGE = 0.5;
 
