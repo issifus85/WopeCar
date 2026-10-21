@@ -40,6 +40,7 @@
 // Reuses PAYSTACK_SECRET_KEY and RESEND_API_KEY, same as the other
 // payment/email functions.
 
+import { computeModifyPricing } from '../_shared/modifyPricing.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
@@ -268,6 +269,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: `This booking is already ${booking.status} and can no longer be modified.` }, 400);
     }
 
+    let verifiedPaidAmount = 0; // what Paystack independently confirmed for this change (0 when nothing was charged)
     // A real amount was already charged client-side (payWithPaystack already
     // verified it once) - re-verify independently here so this function
     // never trusts a client-supplied amountCharged on its own before
@@ -284,6 +286,7 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: 'Could not verify this payment with Paystack.' }, 402);
       }
       const verifiedAmount = Number(paystackJson.data.amount) / 100;
+      verifiedPaidAmount = verifiedAmount;
       const claimedAmount = Number(amountCharged ?? 0);
       if (Math.abs(verifiedAmount - claimedAmount) > 0.5) {
         return jsonResponse({ error: 'The verified payment amount does not match this change.' }, 402);
@@ -339,13 +342,93 @@ Deno.serve(async (req) => {
       }
       driverPatch = { with_driver: withDriver, with_driver_daily_rate: withDriver ? rate : 0, with_driver_total_cost: cost, with_driver_days: withDriver ? driverDays : null };
     }
-    const newDriverCost = driverPatch ? driverPatch.with_driver_total_cost : (withDriverTotalCost != null ? Number(withDriverTotalCost) : null);
+    // --- Server-side pricing ----------------------------------------------------------------------------------------------------
+    // The client's totals are not trusted on their own. Add-on days, delivery, the security deposit, the promo and the driver cost follow
+    // simple shared rules, so they are worked out here from what the server knows; the total is rebuilt from the parts. The rental cost
+    // (seasonal prices, discounts) and the WopeCare cost still come from the client but the rental is range-checked below.
+    const car = booking.cars as { name: string; drive_type: string | null } | null;
+    const driveType = car?.drive_type ?? null;
+    const { data: carRow } = await adminClient.from('cars').select('price_per_day, regional_addons').eq('id', booking.car_id).maybeSingle();
+    const { data: settingRows } = await adminClient
+      .from('app_settings')
+      .select('key, value')
+      .in('key', ['self_drive_delivery_fee', 'chauffeur_security_deposit', 'security_deposit_threshold', 'security_deposit_flat', 'security_deposit_percentage']);
+    const settingsMap = Object.fromEntries((settingRows ?? []).map((r: { key: string; value: unknown }) => [r.key, r.value]));
+    let promoInfo: { discountType: string | null; discountValue: number } | null = null;
+    if (booking.promo_code) {
+      const { data: promoRow } = await adminClient.from('promo_codes').select('discount_type, discount_value').ilike('code', booking.promo_code).maybeSingle();
+      if (promoRow) promoInfo = { discountType: promoRow.discount_type, discountValue: Number(promoRow.discount_value) };
+    }
+
+    // The driver after this change. An explicit choice (driverPatch) wins; otherwise a driver the booking already has follows the new trip
+    // length (a driver for every day costs rate x the NEW days - it used to stay at the old amount when a trip was extended).
+    let driverPatchFinal = driverPatch;
+    if (!driverPatchFinal && driveType !== 'Chauffeur') {
+      const hadDriver = !!booking.with_driver || Number(booking.with_driver_total_cost ?? 0) > 0;
+      const rate = Number(booking.with_driver_daily_rate ?? 0);
+      if (hadDriver && rate > 0) {
+        const tripDays = Math.max(Math.round(newBillableDays), 1);
+        const days = booking.with_driver_days != null ? Math.min(Math.max(Math.round(Number(booking.with_driver_days)), 1), tripDays) : tripDays;
+        driverPatchFinal = {
+          with_driver: true,
+          with_driver_daily_rate: rate,
+          with_driver_total_cost: Math.round(rate * days * 100) / 100,
+          with_driver_days: booking.with_driver_days != null ? days : null,
+        };
+      }
+    }
+    const driverNow = driverPatchFinal
+      ? { active: driverPatchFinal.with_driver, cost: driverPatchFinal.with_driver_total_cost, days: driverPatchFinal.with_driver_days }
+      : { active: false, cost: driveType === 'Chauffeur' ? 0 : Math.max(0, Number(withDriverTotalCost ?? booking.with_driver_total_cost ?? 0)), days: null as number | null };
+
+    const newRentalCost = Number(rentalCost ?? booking.rental_cost);
+    if (!isAdmin && carRow?.price_per_day != null) {
+      // Floor on the rental: seasonal prices and discounts can lower it, but never below ~30% of the cheapest daily price for the days billed.
+      const { data: dateRows } = await adminClient.from('car_date_prices').select('price').eq('car_id', booking.car_id).gte('date', startDate).lte('date', endDate);
+      const cheapest = Math.min(Number(carRow.price_per_day), ...((dateRows ?? []).map((r: { price: number }) => Number(r.price))));
+      if (newRentalCost < 0.3 * cheapest * Math.max(newBillableDays, 1)) {
+        return jsonResponse({ error: 'This price is below the minimum allowed for this vehicle. Please reload and try again.' }, 400);
+      }
+    }
+
+    const priced = computeModifyPricing({
+      driveType,
+      billableDays: newBillableDays,
+      rentalCost: newRentalCost,
+      wopecareTotalCost: Number(wopecareTotalCost ?? booking.wopecare_total_cost ?? 0),
+      driver: driverNow,
+      addonNames: booking.addon_names ?? null,
+      addonDays: booking.addon_days ?? null,
+      addonDefs: (carRow?.regional_addons as { name: string; type: string; price: number }[] | null) ?? null,
+      currentAddonsCost: Number(booking.addons_cost ?? 0),
+      currentDeliveryFee: Number(booking.delivery_fee ?? 0),
+      promo: promoInfo,
+      settings: settingsMap,
+    });
+    const newTotalCost = priced.totalCost;
+    const clientTotal = Number(totalCost);
+    const oldTotal = Number(booking.total_cost);
+
+    // A paid booking can only go UP in price if Paystack really confirmed that increase.
+    if (!isAdmin && booking.payment_status === 'paid' && newTotalCost - oldTotal > 0.5 && verifiedPaidAmount < newTotalCost - oldTotal - 0.5) {
+      await adminClient.rpc('log_booking_price_audit', {
+        p_booking_id: booking.id, p_ref: booking.booking_ref, p_renter: caller.id, p_flags: ['modify_underpaid'],
+        p_rental: newRentalCost, p_total: clientTotal, p_expected: newTotalCost,
+      });
+      return jsonResponse({ error: 'The price for this change has been updated. Please reload the booking and try again.' }, 409);
+    }
+    if (Math.abs(clientTotal - newTotalCost) > 0.5) {
+      // The client and the server disagree (an old app build, or a tampered request). The server's number is the one saved.
+      await adminClient.rpc('log_booking_price_audit', {
+        p_booking_id: booking.id, p_ref: booking.booking_ref, p_renter: caller.id, p_flags: ['modify_total_mismatch'],
+        p_rental: newRentalCost, p_total: clientTotal, p_expected: newTotalCost,
+      });
+    }
 
     // The payout rate lives in the admin-only car_payouts table (not on cars, which is publicly readable).
     const { data: payoutRow } = await adminClient.from('car_payouts').select('payout_per_day').eq('car_id', booking.car_id).maybeSingle();
     const payoutPerDay = Number(payoutRow?.payout_per_day ?? 0);
     const vendorPayoutTotal = Math.round(payoutPerDay * Math.max(newBillableDays, 0) * 100) / 100;
-    const newTotalCost = Number(totalCost);
     const wopecarMargin = Math.round((newTotalCost - vendorPayoutTotal) * 100) / 100;
 
     const updatePatch: Record<string, unknown> = {
@@ -355,23 +438,23 @@ Deno.serve(async (req) => {
       return_time: returnTime ?? null,
       pickup_location: pickupLocation ?? null,
       return_location: returnLocation ?? null,
-      rental_cost: Number(rentalCost ?? booking.rental_cost),
-      addons_cost: Number(addonsCost ?? booking.addons_cost),
-      delivery_fee: Number(deliveryFee ?? booking.delivery_fee),
-      security_deposit: Number(securityDeposit ?? booking.security_deposit),
+      rental_cost: newRentalCost,
+      addons_cost: priced.addonsCost,
+      delivery_fee: priced.deliveryFee,
+      security_deposit: priced.securityDeposit,
+      promo_discount_amount: priced.promoDiscount,
       total_cost: newTotalCost,
       billable_days: newBillableDays,
       vendor_payout_per_day: payoutPerDay,
       vendor_payout_total: vendorPayoutTotal,
       wopecar_margin: wopecarMargin,
     };
+    if (priced.addonDays) updatePatch.addon_days = priced.addonDays;
     if (wopecareTotalCost != null) {
       updatePatch.wopecare_total_cost = Number(wopecareTotalCost);
     }
-    if (driverPatch) {
-      Object.assign(updatePatch, driverPatch);
-    } else if (withDriverTotalCost != null) {
-      updatePatch.with_driver_total_cost = Number(withDriverTotalCost);
+    if (driverPatchFinal) {
+      Object.assign(updatePatch, driverPatchFinal);
     }
 
     const { error: updateError } = await adminClient.from('bookings').update(updatePatch).eq('id', bookingId);
@@ -401,14 +484,14 @@ Deno.serve(async (req) => {
       new_return_time: returnTime ?? null,
       new_pickup_location: pickupLocation ?? null,
       new_return_location: returnLocation ?? null,
-      new_rental_cost: Number(rentalCost ?? booking.rental_cost),
-      new_addons_cost: Number(addonsCost ?? booking.addons_cost),
-      new_delivery_fee: Number(deliveryFee ?? booking.delivery_fee),
-      new_security_deposit: Number(securityDeposit ?? booking.security_deposit),
+      new_rental_cost: newRentalCost,
+      new_addons_cost: priced.addonsCost,
+      new_delivery_fee: priced.deliveryFee,
+      new_security_deposit: priced.securityDeposit,
       new_wopecare_total_cost: wopecareTotalCost != null ? Number(wopecareTotalCost) : (booking.wopecare_total_cost ?? 0),
-      new_with_driver_total_cost: newDriverCost != null ? newDriverCost : (booking.with_driver_total_cost ?? 0),
+      new_with_driver_total_cost: driverPatchFinal ? driverPatchFinal.with_driver_total_cost : (booking.with_driver_total_cost ?? 0),
       new_total_cost: newTotalCost,
-      amount_charged: Number(amountCharged ?? (newTotalCost - Number(booking.total_cost))),
+      amount_charged: Number(amountCharged ?? (newTotalCost - oldTotal)),
       payment_ref: paystackReference ?? null,
     };
     const { data: insertedMod, error: modError } = await adminClient

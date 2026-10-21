@@ -51,6 +51,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getInternalSecret } from '../_shared/cronAuth.ts';
+import { combineDateAndTime } from '../_shared/time.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -139,7 +140,9 @@ Deno.serve(async (req) => {
       const partialHours = Number(settingsMap.cancellation_partial_refund_hours ?? DEFAULT_PARTIAL_REFUND_HOURS);
       const partialPct = Number(settingsMap.cancellation_partial_refund_percentage ?? DEFAULT_PARTIAL_REFUND_PERCENTAGE);
 
-      const pickupAt = new Date(`${booking.start_date}T${(booking.pickup_time || '10:00').slice(0, 5)}:00`);
+      // The pickup time is "9:00 AM" for app bookings and "09:00" for website ones - read both (slicing the string left app bookings with an
+      // Invalid Date, so hoursUntilPickup was NaN and every cancellation fell into the 0% tier).
+      const pickupAt = combineDateAndTime(booking.start_date, booking.pickup_time, '10:00');
       const hoursUntilPickup = (pickupAt.getTime() - Date.now()) / 3600000;
 
       if (hoursUntilPickup >= fullHours) refundPercentage = 1;

@@ -26,6 +26,7 @@
 // Deploy with: supabase functions deploy send-booking-ending-reminders --no-verify-jwt
 // Reuses the same RESEND_API_KEY secret as every other email function.
 
+import { combineDateAndTime } from '../_shared/time.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { isTrustedInternalCaller, unauthorizedResponse } from '../_shared/cronAuth.ts';
 
@@ -49,22 +50,8 @@ function formatDate(dateOnly: string) {
   return new Date(`${dateOnly}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
-// Combines a 'YYYY-MM-DD' date with a "9:00 AM"-style time slot into a real
-// Date, evaluated in the server's own local time - safe here specifically
-// because this project's renters are all in Ghana (UTC+0, no DST), which
-// numerically matches this function's UTC runtime clock. Falls back to
-// midnight if return_time is missing/unparseable, same as
-// constants/pricing.js's combineDateAndTime.
-function combineDateAndTime(dateOnly: string, time: string | null) {
-  const [y, m, d] = dateOnly.split('-').map(Number);
-  const base = new Date(y, m - 1, d);
-  const match = time ? /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(time.trim()) : null;
-  if (!match) return base;
-  let hour = parseInt(match[1], 10) % 12;
-  if (match[3].toUpperCase() === 'PM') hour += 12;
-  base.setHours(hour, parseInt(match[2], 10), 0, 0);
-  return base;
-}
+// Return time -> a real Date (reads both the app's "9:00 AM" and the website's "09:00"; midnight if missing). Evaluated in the server's
+// own local time - safe here because this project's renters are all in Ghana (UTC+0, no DST), same as the UTC runtime clock.
 
 function emailShell(bodyHtml: string) {
   return `
