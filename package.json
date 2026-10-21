@@ -11,7 +11,8 @@
     "postinstall": "patch-package",
     "ota:development": "APP_ENV=development eas update --channel development",
     "ota:preview": "APP_ENV=preview eas update --channel preview",
-    "ota:production": "APP_ENV=production eas update --channel production"
+    "ota:production": "APP_ENV=production eas update --channel production",
+    "test:edge": "for tz in Africa/Accra America/New_York; do TZ=$tz node supabase/tests/edge-functions/tests.cjs || exit 1; done"
   },
   "dependencies": {
     "@expo-google-fonts/dancing-script": "^0.4.2",
