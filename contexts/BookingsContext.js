@@ -19,6 +19,8 @@ function normalizeSupabaseBooking(row) {
   return {
     id: row.id,
     carId: row.car_id,
+    // The drive type the booking was made with (cars.drive_type can change later).
+    driveType: row.drive_type ?? null,
     carName: row.cars?.name ?? 'Untitled Car',
     carImage: row.cars?.images?.[0] ?? null,
     startDate: row.start_date,

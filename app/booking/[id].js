@@ -189,7 +189,11 @@ export default function BookingDetailScreen() {
 
   useEffect(() => {
     if (booking?.carId) {
-      fetchCarById(booking.carId).then(setCar).catch(() => setCar(null));
+      // The booking keeps the drive type it was MADE with: a car re-labelled Chauffeur later must not flip an existing self-drive booking's
+      // billing cycle, delivery fee and deposit when it is modified.
+      fetchCarById(booking.carId)
+        .then((c) => setCar(c && booking.driveType ? { ...c, drivenBy: booking.driveType } : c))
+        .catch(() => setCar(null));
     }
   }, [booking?.carId]);
 
