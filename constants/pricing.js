@@ -418,6 +418,8 @@ export const CHAUFFEUR_CYCLE_HOURS = 12;
 export const DEFAULT_GRACE_PERIOD_MINUTES = 29;
 
 const TIME_SLOT_PATTERN = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i;
+// The website stores 24-hour times ("09:00", "17:00"); the app's own slots are "9:00 AM". Both must be read the same way.
+const TIME_24H_PATTERN = /^(\d{1,2}):(\d{2})(?::\d{2})?$/;
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 // A bare 'YYYY-MM-DD' string parses as UTC midnight in JS, which shifts to
@@ -441,7 +443,14 @@ function toISODate(date) {
 // own time component if no time string is given.
 function combineDateAndTime(date, time) {
   const base = typeof date === 'string' && DATE_ONLY_PATTERN.test(date) ? parseDateOnly(date) : new Date(date);
-  const match = time ? TIME_SLOT_PATTERN.exec(String(time).trim()) : null;
+  const text = time ? String(time).trim() : '';
+  const match24 = text ? TIME_24H_PATTERN.exec(text) : null;
+  if (match24 && Number(match24[1]) <= 23 && Number(match24[2]) <= 59) {
+    const combined24 = new Date(base);
+    combined24.setHours(Number(match24[1]), Number(match24[2]), 0, 0);
+    return combined24;
+  }
+  const match = text ? TIME_SLOT_PATTERN.exec(text) : null;
   if (!match) return base;
   const [, hourStr, minuteStr, meridiem] = match;
   let hour = parseInt(hourStr, 10) % 12;
@@ -547,7 +556,10 @@ export function calculateRentalPricing({
 }) {
   const pickupAt = combineDateAndTime(startDate, pickupTime);
   const returnAt = combineDateAndTime(endDate, returnTime);
-  const durationMinutes = Math.max(0, Math.round((returnAt - pickupAt) / (1000 * 60)));
+  // Wall-clock minutes (not elapsed milliseconds): a clock change in the viewer's timezone mid-trip adds or removes an hour of elapsed time,
+  // which pushed a 96-hour rental to 97 hours - beyond the 29-minute grace - and billed an extra day.
+  const wallClockMs = (d) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes());
+  const durationMinutes = Math.max(0, Math.round((wallClockMs(returnAt) - wallClockMs(pickupAt)) / (1000 * 60)));
 
   const isChauffeur = drivenBy === 'Chauffeur';
   const cycleHours = isChauffeur ? CHAUFFEUR_CYCLE_HOURS : SELF_DRIVE_CYCLE_HOURS;

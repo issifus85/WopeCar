@@ -17,7 +17,17 @@ export async function listDatePrices(carId, { fromDate, toDate } = {}) {
 
 /** {iso: price} lookup map, ready to hand to calculateRentalPricing's getDatePrice. */
 export async function getDatePriceMap(carId, range) {
-  const rows = await listDatePrices(carId, range);
+  // A continuous overnight chauffeur hire bills a 12-hour cycle per half day, so it can bill MORE days than the dates it spans (each priced
+  // against startDate + i): fetch past the end date by the trip length so those extra days pick up their custom price instead of the base rate.
+  let effective = range;
+  if (range?.fromDate && range?.toDate) {
+    const from = new Date(`${range.fromDate}T00:00:00Z`);
+    const to = new Date(`${range.toDate}T00:00:00Z`);
+    const span = Math.max(0, Math.round((to - from) / 86400000));
+    const extended = new Date(to.getTime() + (span + 2) * 86400000);
+    effective = { ...range, toDate: extended.toISOString().slice(0, 10) };
+  }
+  const rows = await listDatePrices(carId, effective);
   const map = {};
   rows.forEach((r) => { map[r.date] = Number(r.price); });
   return map;

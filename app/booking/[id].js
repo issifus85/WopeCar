@@ -29,6 +29,7 @@ import { getInspection } from '../../services/inspectionsApi';
 import { getRentalAgreement } from '../../services/rentalAgreementApi';
 import { getMyReviewForBooking } from '../../services/reviewsApi';
 import { getBookingModifications } from '../../services/supabaseApi';
+import supabase from '../../services/supabase';
 import { useBookings } from '../../contexts/BookingsContext';
 import { useInbox } from '../../contexts/InboxContext';
 import DateRangeModal, { formatDateShort } from '../../components/DateRangeModal';
@@ -280,6 +281,20 @@ export default function BookingDetailScreen() {
       .catch(() => {});
   }, [car?.id, editStart, editEnd]);
 
+  // The discount definition of the promo this booking used (promo_codes is admin-only, so this goes through a small RPC). Without it the
+  // new total ignored the promo and the renter was asked to pay the discount again for the same dates.
+  const [promoTerms, setPromoTerms] = useState(null);
+  useEffect(() => {
+    if (!booking?.promoCode || !booking?.id) {
+      setPromoTerms(null);
+      return;
+    }
+    supabase
+      .rpc('booking_promo_terms', { p_booking_id: booking.id })
+      .then(({ data }) => setPromoTerms(data?.[0] ?? null))
+      .catch(() => setPromoTerms(null));
+  }, [booking?.id, booking?.promoCode]);
+
   const pricing = useMemo(() => {
     if (!car || !editStart || !editEnd || !editPickupTime || !editReturnTime) return null;
     return calculateRentalPricing({
@@ -312,7 +327,7 @@ export default function BookingDetailScreen() {
   // security_deposit as its own column, same shape checkout/payment.js's
   // original booking insert already writes.
   const recomputedBreakdown = useMemo(() => {
-    const fallback = { rentalCost: 0, addonsCost: 0, deliveryFee: 0, securityDeposit: 0, withDriverCost: 0, driverDailyRate: 0, driverDays: 0, total: booking?.totalCost ?? 0 };
+    const fallback = { rentalCost: 0, addonsCost: 0, deliveryFee: 0, securityDeposit: 0, withDriverCost: 0, driverDailyRate: 0, driverDays: 0, promoDiscountAmount: 0, total: booking?.totalCost ?? 0 };
     if (!car || !pricing || !days) return fallback;
     const rentalCost = pricing.rentalCost;
     // booking.addons ({name, days}[]) is the current shape; bookings made
@@ -347,9 +362,18 @@ export default function BookingDetailScreen() {
     const securityDeposit = calculateSecurityDeposit(subtotal, car.drivenBy, driverCalc.coversAll);
     const withDriverCost = driverCalc.cost;
     const driverDays = driverCalc.driverDays;
-    const total = subtotal + deliveryFee + securityDeposit + recomputedWopeCareCost + withDriverCost;
-    return { rentalCost, addonsCost, deliveryFee, securityDeposit, withDriverCost, driverDailyRate, driverDays, total };
-  }, [car, pricing, days, booking, originalDays, recomputedWopeCareCost, editWithDriver, editDriverDays]);
+    // Promo re-priced from its own definition against the new subtotal (same base as checkout: rental + add-ons; a flat code stays flat);
+    // if the definition can't be read, the amount the booking already carries, capped at the subtotal.
+    let promoDiscountAmount = 0;
+    if (booking?.promoCode) {
+      const raw = promoTerms
+        ? (promoTerms.discount_type === 'percentage' ? subtotal * (Number(promoTerms.discount_value) / 100) : Number(promoTerms.discount_value))
+        : Number(booking.promoDiscountAmount) || 0;
+      promoDiscountAmount = Math.min(subtotal, Math.max(0, raw));
+    }
+    const total = subtotal - promoDiscountAmount + deliveryFee + securityDeposit + recomputedWopeCareCost + withDriverCost;
+    return { rentalCost, addonsCost, deliveryFee, securityDeposit, withDriverCost, driverDailyRate, driverDays, promoDiscountAmount, total };
+  }, [car, pricing, days, booking, originalDays, recomputedWopeCareCost, editWithDriver, editDriverDays, promoTerms]);
 
   const recomputedTotal = recomputedBreakdown.total;
   const difference = recomputedTotal - (booking?.totalCost ?? 0);

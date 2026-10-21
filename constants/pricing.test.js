@@ -346,3 +346,32 @@ describe('calculateRentalPricing - blanket discount', () => {
     expect(insideWindow.blanketDiscountAmount).toBe(50);
   });
 });
+
+describe('calculateRentalPricing - stored time formats', () => {
+  const base = { drivenBy: 'Self-drive', dailyRate: 300 };
+
+  it('reads the website\'s 24-hour times the same as the app\'s AM/PM slots', () => {
+    const app = calculateRentalPricing({ ...base, startDate: '2026-11-27', endDate: '2026-12-02', pickupTime: '10:00 AM', returnTime: '10:00 AM' });
+    const web = calculateRentalPricing({ ...base, startDate: '2026-11-27', endDate: '2026-12-02', pickupTime: '10:00', returnTime: '10:00' });
+    expect(app.billableDays).toBe(5);
+    expect(web.billableDays).toBe(5);
+  });
+
+  it('reads an evening 24-hour time as the evening (17:00 is 5 PM, not midnight)', () => {
+    const web = calculateRentalPricing({ ...base, startDate: '2026-10-15', endDate: '2026-10-19', pickupTime: '17:00', returnTime: '13:00' });
+    const app = calculateRentalPricing({ ...base, startDate: '2026-10-15', endDate: '2026-10-19', pickupTime: '5:00 PM', returnTime: '1:00 PM' });
+    expect(web.billableDays).toBe(app.billableDays);
+    expect(web.billableDays).toBe(4);
+  });
+
+  it('chauffeur daytime hire reads 24-hour times (07:00-19:00 for 4 days bills 4)', () => {
+    const web = calculateRentalPricing({ drivenBy: 'Chauffeur', dailyRate: 500, startDate: '2026-12-01', endDate: '2026-12-04', pickupTime: '07:00', returnTime: '19:00' });
+    expect(web.billableDays).toBe(4);
+  });
+
+  it('does not bill an extra day when a clock change falls inside the trip (wall-clock, not elapsed time)', () => {
+    // 96 wall-clock hours across the 25 Oct 2026 UK clock change is 97 elapsed hours there; it must still bill 4 days.
+    const r = calculateRentalPricing({ ...base, startDate: '2026-10-23', endDate: '2026-10-27', pickupTime: '10:00 AM', returnTime: '10:00 AM' });
+    expect(r.billableDays).toBe(4);
+  });
+});

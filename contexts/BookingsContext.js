@@ -45,6 +45,9 @@ function normalizeSupabaseBooking(row) {
       days: row.with_driver_days ?? null,
     },
     totalCost: row.total_cost,
+    // The promo used at checkout (null when none) - Modify Booking re-prices it against the new dates.
+    promoCode: row.promo_code ?? null,
+    promoDiscountAmount: Number(row.promo_discount_amount ?? 0),
     billableDays: row.billable_days ?? null,
     paystackReference: row.payment_ref,
     status: STATUS_MAP[row.status] ?? 'Pending',
