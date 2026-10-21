@@ -313,7 +313,7 @@ Deno.serve(async (req) => {
     // client: a driver the renter already has keeps their quoted daily rate, a newly added one gets today's admin rate, and either
     // way it is rate x the new number of billable days.
     let driverPatch: { with_driver: boolean; with_driver_daily_rate: number; with_driver_total_cost: number; with_driver_days: number | null } | null = null;
-    if (typeof withDriver === 'boolean' && booking.cars?.drive_type !== 'Chauffeur') {
+    if (typeof withDriver === 'boolean' && (booking.drive_type ?? booking.cars?.drive_type) !== 'Chauffeur') {
       const hadDriver = !!booking.with_driver || Number(booking.with_driver_total_cost ?? 0) > 0;
       const today = new Date().toISOString().slice(0, 10);
       if (withDriver !== hadDriver && !isAdmin && booking.start_date < today) {
@@ -347,7 +347,9 @@ Deno.serve(async (req) => {
     // simple shared rules, so they are worked out here from what the server knows; the total is rebuilt from the parts. The rental cost
     // (seasonal prices, discounts) and the WopeCare cost still come from the client but the rental is range-checked below.
     const car = booking.cars as { name: string; drive_type: string | null } | null;
-    const driveType = car?.drive_type ?? null;
+    // The drive type the booking was MADE with wins over the car's current one: a car later re-labelled Chauffeur must not flip an existing
+    // self-drive booking onto the chauffeur flat deposit and free delivery (three real bookings are in exactly that state).
+    const driveType = booking.drive_type ?? car?.drive_type ?? null;
     const { data: carRow } = await adminClient.from('cars').select('price_per_day, regional_addons').eq('id', booking.car_id).maybeSingle();
     const { data: settingRows } = await adminClient
       .from('app_settings')
@@ -358,6 +360,9 @@ Deno.serve(async (req) => {
     if (booking.promo_code) {
       const { data: promoRow } = await adminClient.from('promo_codes').select('discount_type, discount_value').ilike('code', booking.promo_code).maybeSingle();
       if (promoRow) promoInfo = { discountType: promoRow.discount_type, discountValue: Number(promoRow.discount_value) };
+      // The code was deleted after the booking used it: keep the discount the booking already has (flat, capped at the subtotal) rather
+      // than silently dropping it on a modification.
+      else if (Number(booking.promo_discount_amount ?? 0) > 0) promoInfo = { discountType: 'flat', discountValue: Number(booking.promo_discount_amount) };
     }
 
     // The driver after this change. An explicit choice (driverPatch) wins; otherwise a driver the booking already has follows the new trip
