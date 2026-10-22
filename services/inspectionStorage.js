@@ -48,7 +48,19 @@ export async function setDraft(draft) {
   // session; if the app is killed mid-wizard the user just re-signs (a few
   // seconds) rather than the whole draft failing to resume.
   const { signatures, ...persistable } = draft;
-  await writeRaw(JSON.stringify(persistable));
+  try {
+    await writeRaw(JSON.stringify(persistable));
+  } catch {
+    // The full draft (15 local photo paths + checklist + damage points) can exceed the store's size limit. If that write is simply
+    // dropped, the PREVIOUS booking's draft stays in storage and later resumes as this one (wrong serverId). Always keep at least the
+    // identity of the current inspection in sync.
+    try {
+      const { bookingId = null, type = null, serverId = null, mileage = '', fuelLevel = '', pendingSync = false } = persistable;
+      await writeRaw(JSON.stringify({ bookingId, type, serverId, mileage, fuelLevel, pendingSync }));
+    } catch {
+      await clearDraft().catch(() => {});
+    }
+  }
 }
 
 export async function clearDraft() {

@@ -55,7 +55,9 @@ export function InspectionProvider({ children }) {
   useEffect(() => {
     inspectionStorage.getDraft()
       .then((saved) => {
-        if (saved) setDraft(saved);
+        // Only resume the saved draft if no inspection has been started in the meantime - a late hydration used to overwrite the
+        // inspection the user had just started with the previous booking's stale draft (wrong server id, wrong photos).
+        if (saved) setDraft((current) => (current.bookingId ? current : saved));
       })
       .finally(() => setIsLoading(false));
   }, []);

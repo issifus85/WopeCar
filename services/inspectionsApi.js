@@ -146,6 +146,21 @@ export async function uploadInspectionSignature(inspectionId, role, uri) {
   return fetchById(inspectionId);
 }
 
+/**
+ * The server id of THIS booking's inspection. A locally cached id (the wizard's draft) is only trusted after the server confirms it belongs
+ * to this booking and type - a draft left over from another booking made signatures upload onto the wrong inspection and submit then
+ * checked that other inspection's photos ("All 15 photos are required"). Falls back to looking the inspection up by booking + type.
+ */
+export async function verifiedInspectionId(candidateId, bookingId, type) {
+  if (candidateId) {
+    const { data, error } = await supabase.from('vehicle_inspections').select('id, booking_id, type').eq('id', candidateId).maybeSingle();
+    if (error) throw error;
+    if (data && String(data.booking_id) === String(bookingId) && data.type === type) return data.id;
+  }
+  const existing = await getInspection(bookingId, type);
+  return existing?.id ?? null;
+}
+
 const REQUIRED_ANGLES = PHOTO_ANGLES.map((a) => a.key);
 
 /**

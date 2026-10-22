@@ -9,7 +9,7 @@ import { File, Directory, Paths } from 'expo-file-system';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useInspection } from '../../contexts/InspectionContext';
-import { syncInspection, uploadInspectionPhoto } from '../../services/inspectionsApi';
+import { syncInspection, uploadInspectionPhoto, verifiedInspectionId } from '../../services/inspectionsApi';
 import { PHOTO_CATEGORIES, PHOTO_ANGLES } from '../../constants/inspectionPhotos';
 import InspectionHeader from '../../components/InspectionHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
@@ -44,7 +44,21 @@ export default function InspectionPhotosScreen() {
   // that needs a synced inspection id up front, matching the best-effort
   // sync already attempted on every other step of this wizard.
   const ensureServerId = async () => {
-    if (draft.serverId) return draft.serverId;
+    const draftIsForThis = draft.bookingId === String(bookingId) && draft.type === type;
+    // Never trust a cached id on its own: confirm with the server that it is THIS booking's inspection (a draft left over from another
+    // booking sent signatures to the wrong inspection and submit then failed with "All 15 photos are required").
+    try {
+      const verified = await verifiedInspectionId(draftIsForThis ? draft.serverId : null, bookingId, type);
+      if (verified) {
+        if (draftIsForThis && draft.serverId !== verified) updateDraft({ serverId: verified });
+        return verified;
+      }
+    } catch (e) {
+      // Offline: the cached id is only usable when the draft really is this booking's.
+      if (draftIsForThis && draft.serverId) return draft.serverId;
+    }
+    // A draft left over from another booking must never be synced into this one.
+    if (!draftIsForThis) return null;
     try {
       const inspection = await syncInspection(bookingId, {
         type,
