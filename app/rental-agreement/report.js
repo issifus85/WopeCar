@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator, Image, Linking } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
@@ -19,6 +19,7 @@ export default function RentalAgreementReportScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const [agreement, setAgreement] = useState(undefined);
+  const [isOpeningPdf, setIsOpeningPdf] = useState(false);
   // Signature images (signed URLs) - null while loading or when this viewer
   // isn't allowed to read them, in which case the thumbnail shows a tick.
   const [signatureUrls, setSignatureUrls] = useState({ client: null, representative: null });
@@ -42,6 +43,16 @@ export default function RentalAgreementReportScreen() {
       .catch(() => {});
     return () => { cancelled = true; };
   }, [agreement]);
+
+  const handleOpenPdf = async () => {
+    setIsOpeningPdf(true);
+    try {
+      const url = await getRentalAgreementSignatureUrl(agreement.reportPdfPath);
+      if (url) Linking.openURL(url);
+    } finally {
+      setIsOpeningPdf(false);
+    }
+  };
 
   if (agreement === undefined) {
     return (
@@ -101,6 +112,14 @@ export default function RentalAgreementReportScreen() {
           <Text style={styles.cardTitle}>Status</Text>
           <Row label="Submitted" value={formatDate(agreement.submittedAt)} styles={styles} />
         </View>
+
+        {/* The PDF copy generated when the agreement was completed (also emailed to the renter and WopeCar). */}
+        {!!agreement.reportPdfPath && (
+          <TouchableOpacity style={styles.pdfButton} onPress={handleOpenPdf} disabled={isOpeningPdf}>
+            <Ionicons name="document-text-outline" size={18} color={colors.teal} />
+            <Text style={styles.pdfButtonText}>{isOpeningPdf ? 'Opening...' : 'Open PDF copy'}</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </View>
   );
@@ -145,6 +164,23 @@ function SignatureThumb({ label, hasSignature, url, styles, colors }) {
 
 function createStyles(colors) {
   return StyleSheet.create({
+    pdfButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 14,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.teal,
+      marginTop: 4,
+      marginBottom: 12,
+    },
+    pdfButtonText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 14,
+      color: colors.teal,
+    },
     container: {
       flex: 1,
       backgroundColor: colors.surface,

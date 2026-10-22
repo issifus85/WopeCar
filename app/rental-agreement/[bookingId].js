@@ -12,8 +12,10 @@ import * as rentalAgreementStorage from '../../services/rentalAgreementStorage';
 import {
   getRentalAgreement,
   saveRentalAgreementDraft,
+  startRentalAgreementForBooking,
   uploadRentalAgreementSignature,
   submitRentalAgreement,
+  generateRentalAgreementReport,
 } from '../../services/rentalAgreementApi';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 import SignaturePad from '../../components/SignaturePad';
@@ -72,7 +74,10 @@ function SignatureSlot({ label, value, mode, onModeChange, padRef, onOK, onEmpty
 }
 
 export default function RentalAgreementScreen() {
-  const { bookingId, localId } = useLocalSearchParams();
+  const { bookingId, localId, from } = useLocalSearchParams();
+  // Started by an admin from the admin booking details: the draft is created and prefilled on the server up front (see
+  // startRentalAgreementForBooking), so nothing below seeds from the signed-in user/bookings (those are the ADMIN's, not the renter's).
+  const isAdminMode = from === 'admin';
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -104,6 +109,8 @@ export default function RentalAgreementScreen() {
   const [representativeMode, setRepresentativeMode] = useState('draw');
   const [scrollLocked, setScrollLocked] = useState(false);
   const [isObligationsVisible, setIsObligationsVisible] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState(null);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
 
   const clientPadRef = useRef(null);
   const representativePadRef = useRef(null);
@@ -123,7 +130,8 @@ export default function RentalAgreementScreen() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const local = await rentalAgreementStorage.getDraft();
+      // Only a draft that belongs to THIS booking is used (the device keeps a single draft).
+      const local = await rentalAgreementStorage.getDraft(bookingId);
       if (local && !cancelled) {
         setFields((prev) => ({ ...prev, ...local.fields }));
         setSignatures(local.signatures ?? { client: null, representative: null });
@@ -133,8 +141,11 @@ export default function RentalAgreementScreen() {
         return;
       }
 
-      const remote = await getRentalAgreement(bookingId).catch(() => null);
+      let remote = await getRentalAgreement(bookingId).catch(() => null);
+      // An admin starting the agreement creates the draft now (prefilled from the booking) so it is saved before anything is typed.
+      if (!remote && isAdminMode) remote = await startRentalAgreementForBooking(bookingId).catch(() => null);
       if (remote && !cancelled) {
+        setLastSavedAt(remote.updatedAt ? new Date(remote.updatedAt) : null);
         setFields({
           lesseeName: remote.lesseeName,
           vehicleRegistration: remote.vehicleRegistration,
@@ -165,7 +176,7 @@ export default function RentalAgreementScreen() {
   // still empty, so it can never clobber a resumed draft or a user's edit,
   // and re-firing as more data arrives is safe/idempotent.
   useEffect(() => {
-    if (hasDraftSource || !isLoaded) return;
+    if (hasDraftSource || !isLoaded || isAdminMode) return;
     setFields((prev) => ({
       ...prev,
       lesseeName: prev.lesseeName || user?.name || '',
@@ -176,7 +187,7 @@ export default function RentalAgreementScreen() {
       returnTime: prev.returnTime || booking?.returnTime || '',
       dailyRate: prev.dailyRate || (car?.pricePerDay ? String(car.pricePerDay) : ''),
     }));
-  }, [hasDraftSource, isLoaded, user, booking, car]);
+  }, [hasDraftSource, isLoaded, isAdminMode, user, booking, car]);
 
   const scheduleSync = useCallback(
     (latestFields) => {
@@ -185,6 +196,7 @@ export default function RentalAgreementScreen() {
         try {
           const result = await saveRentalAgreementDraft(bookingId, latestFields);
           setAgreementId(result.id);
+          setLastSavedAt(new Date());
         } catch (e) {
           // Best-effort - the local draft already has the values; the next
           // field change (or Generate Agreement) retries the sync.
@@ -198,25 +210,25 @@ export default function RentalAgreementScreen() {
     (key, value) => {
       setFields((prev) => {
         const next = { ...prev, [key]: value };
-        rentalAgreementStorage.setDraft({ fields: next, signatures, agreementId });
+        rentalAgreementStorage.setDraft({ bookingId: String(bookingId), fields: next, signatures, agreementId });
         scheduleSync(next);
         return next;
       });
     },
-    [signatures, agreementId, scheduleSync]
+    [bookingId, signatures, agreementId, scheduleSync]
   );
 
   const handleClientOK = (dataUri) => {
     setSignatures((prev) => {
       const next = { ...prev, client: dataUri };
-      rentalAgreementStorage.setDraft({ fields, signatures: next, agreementId });
+      rentalAgreementStorage.setDraft({ bookingId: String(bookingId), fields, signatures: next, agreementId });
       return next;
     });
   };
   const handleRepresentativeOK = (dataUri) => {
     setSignatures((prev) => {
       const next = { ...prev, representative: dataUri };
-      rentalAgreementStorage.setDraft({ fields, signatures: next, agreementId });
+      rentalAgreementStorage.setDraft({ bookingId: String(bookingId), fields, signatures: next, agreementId });
       return next;
     });
   };
@@ -224,7 +236,7 @@ export default function RentalAgreementScreen() {
     clientPadRef.current?.clearSignature();
     setSignatures((prev) => {
       const next = { ...prev, client: null };
-      rentalAgreementStorage.setDraft({ fields, signatures: next, agreementId });
+      rentalAgreementStorage.setDraft({ bookingId: String(bookingId), fields, signatures: next, agreementId });
       return next;
     });
   };
@@ -232,9 +244,26 @@ export default function RentalAgreementScreen() {
     representativePadRef.current?.clearSignature();
     setSignatures((prev) => {
       const next = { ...prev, representative: null };
-      rentalAgreementStorage.setDraft({ fields, signatures: next, agreementId });
+      rentalAgreementStorage.setDraft({ bookingId: String(bookingId), fields, signatures: next, agreementId });
       return next;
     });
+  };
+
+  // Explicit "Save draft": writes the form to the server now (autosave also does this a moment after every change) and confirms it. The
+  // agreement stays a DRAFT - it is only submitted by "Generate Agreement" once every field and both signatures are done.
+  const handleSaveDraft = async () => {
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    setIsSavingDraft(true);
+    try {
+      const result = await saveRentalAgreementDraft(bookingId, fields);
+      setAgreementId(result.id);
+      setLastSavedAt(new Date());
+      rentalAgreementStorage.setDraft({ bookingId: String(bookingId), fields, signatures, agreementId: result.id });
+    } catch (e) {
+      Alert.alert('Could not save draft', e?.message || 'Please check your connection and try again.');
+    } finally {
+      setIsSavingDraft(false);
+    }
   };
 
   const canSubmit =
@@ -253,10 +282,14 @@ export default function RentalAgreementScreen() {
       await uploadRentalAgreementSignature(id, 'client', signatures.client);
       await uploadRentalAgreementSignature(id, 'representative', signatures.representative);
       await submitRentalAgreement(id);
+      // A PDF copy is stored and emailed to the renter and WopeCar. Best-effort: the agreement is already submitted and viewable in-app.
+      generateRentalAgreementReport(id).catch(() => {});
 
       Alert.alert(
         'Agreement Generated',
-        'The rental agreement has been saved to Documents > Trip Documents.',
+        isAdminMode
+          ? 'The rental agreement has been completed. The client can see it in their Trip Documents and has been emailed a copy.'
+          : 'The rental agreement has been saved to Documents > Trip Documents.',
         [
           { text: 'View Agreement', onPress: () => router.push({ pathname: '/rental-agreement/report', params: { bookingId } }) },
           {
@@ -267,7 +300,7 @@ export default function RentalAgreementScreen() {
               // instance that launched this screen instead of stacking a
               // duplicate on top, which breaks back-navigation afterward
               // (same fix applied to the Inspection wizard's Done button).
-              router.dismissTo(`/booking/${localId}`);
+              router.dismissTo(isAdminMode ? `/admin/booking/${bookingId}` : `/booking/${localId}`);
             },
           },
         ]
@@ -289,7 +322,10 @@ export default function RentalAgreementScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={10}>
           <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Rental Agreement</Text>
+        <View style={styles.flex}>
+          <Text style={styles.headerTitle}>Rental Agreement</Text>
+          <Text style={styles.draftStatus}>{lastSavedAt ? `Draft saved ${lastSavedAt.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}` : 'Draft - not saved yet'}</Text>
+        </View>
       </View>
 
       <KeyboardAvoidingView
@@ -449,6 +485,9 @@ export default function RentalAgreementScreen() {
         />
       </ScrollView>
 
+      <TouchableOpacity style={styles.saveDraftButton} onPress={handleSaveDraft} disabled={isSavingDraft || isSubmitting}>
+        <Text style={styles.saveDraftText}>{isSavingDraft ? 'Saving...' : 'Save Draft'}</Text>
+      </TouchableOpacity>
       <CheckoutFooterButton
         label={isSubmitting ? 'Generating...' : 'Generate Agreement'}
         onPress={handleSubmit}
@@ -493,6 +532,24 @@ function createStyles(colors) {
     scrollContent: {
       padding: 20,
       paddingBottom: 40,
+    },
+    draftStatus: {
+      fontFamily: FONTS.regular,
+      fontSize: 12,
+      color: colors.textSubtle,
+      marginTop: 2,
+    },
+    saveDraftButton: {
+      alignItems: 'center',
+      paddingVertical: 12,
+      borderTopWidth: 1,
+      borderTopColor: colors.divider,
+      backgroundColor: colors.surface,
+    },
+    saveDraftText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 14,
+      color: colors.teal,
     },
     obligationsLink: {
       flexDirection: 'row',

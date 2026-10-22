@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Image, Linking, KeyboardAvoidingView, Platform, PixelRatio } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Image, Linking, KeyboardAvoidingView, Platform, PixelRatio, Alert } from 'react-native';
 import { Image as CarImage } from 'expo-image';
 import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -19,7 +19,7 @@ import {
 import { getUserVerificationDocuments, getBookingInspections, getInspectionReportSignedUrl } from '../../../services/adminDocumentsApi';
 import { parseDateOnly } from '../../../constants/dateUtils';
 import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../../utils/imageUrl';
-import { getRentalAgreement } from '../../../services/rentalAgreementApi';
+import { getRentalAgreement, startRentalAgreementForBooking } from '../../../services/rentalAgreementApi';
 import { inspectionAvailability } from '../../../constants/inspectionAvailability';
 
 const VERIFICATION_DOC_LABELS = [
@@ -166,28 +166,64 @@ function InspectionReportsSection({ bookingId, bookingStatus, router, styles, co
 }
 
 function agreementBadgeLabel(agreement) {
-  if (!agreement) return 'Not Started';
+  if (!agreement) return 'Not Started - Start';
   if (agreement.status === 'submitted') return 'Signed';
   const signed = [agreement.hasClientSignature, agreement.hasRepresentativeSignature].filter(Boolean).length;
-  return signed > 0 ? `In Progress (${signed}/2 signatures)` : 'In Progress';
+  return signed > 0 ? `Draft saved (${signed}/2 signatures) - Continue` : 'Draft saved - Continue';
 }
 
 /**
- * Status of the booking's client rental agreement - the admin had no way to
- * see whether it was signed. Tapping opens the existing read-only agreement
- * report screen (now showing the signature images).
+ * The booking's client rental agreement. The admin can START it here (like the inspections): the draft is created and saved on the server
+ * the moment it is initiated, prefilled from the booking, and is only SUBMITTED when the agreement is completed (both signatures). It is the
+ * same record the renter sees in their Trip Documents; a PDF copy is emailed to the renter and WopeCar on submit and can be opened here.
+ * A submitted agreement opens the read-only report instead.
  */
-function RentalAgreementSection({ bookingId, router, styles, colors }) {
+function RentalAgreementSection({ bookingId, bookingStatus, router, styles, colors }) {
   const [agreement, setAgreement] = useState(undefined);
+  const [isStarting, setIsStarting] = useState(false);
+  const [isOpeningPdf, setIsOpeningPdf] = useState(false);
 
-  useEffect(() => {
+  // Re-read on every focus so coming back from the form shows the saved draft / signed state.
+  useFocusEffect(useCallback(() => {
     if (!bookingId) return;
     getRentalAgreement(bookingId)
       .then(setAgreement)
-      .catch(() => setAgreement(null));
-  }, [bookingId]);
+      .catch(() => setAgreement((prev) => prev ?? null));
+  }, [bookingId]));
 
   if (!bookingId) return null;
+
+  const isSubmitted = agreement?.status === 'submitted';
+  const cancelled = String(bookingStatus || '').toLowerCase() === 'cancelled';
+  const canOpen = isSubmitted || !cancelled;
+
+  const handlePress = async () => {
+    if (isSubmitted) {
+      router.push({ pathname: '/rental-agreement/report', params: { bookingId } });
+      return;
+    }
+    setIsStarting(true);
+    try {
+      // Saves the draft (prefilled from the booking) on the server now, before anything is typed.
+      const draft = agreement ?? (await startRentalAgreementForBooking(bookingId));
+      setAgreement(draft);
+      router.push({ pathname: '/rental-agreement/[bookingId]', params: { bookingId, localId: bookingId, from: 'admin' } });
+    } catch (e) {
+      Alert.alert('Could not start the agreement', e?.message || 'Please check your connection and try again.');
+    } finally {
+      setIsStarting(false);
+    }
+  };
+
+  const handleOpenPdf = async () => {
+    setIsOpeningPdf(true);
+    try {
+      const url = await getInspectionReportSignedUrl(agreement.reportPdfPath);
+      if (url) Linking.openURL(url);
+    } finally {
+      setIsOpeningPdf(false);
+    }
+  };
 
   return (
     <View style={styles.section}>
@@ -195,15 +231,18 @@ function RentalAgreementSection({ bookingId, router, styles, colors }) {
       {agreement === undefined ? (
         <ActivityIndicator color={colors.teal} style={{ marginVertical: 8 }} />
       ) : (
-        <TouchableOpacity
-          style={styles.row}
-          disabled={!agreement}
-          onPress={() => router.push({ pathname: '/rental-agreement/report', params: { bookingId } })}
-        >
+        <TouchableOpacity style={styles.row} disabled={!canOpen || isStarting} onPress={handlePress}>
           <Text style={styles.rowLabel}>Client agreement</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Text style={styles.rowValue}>{agreementBadgeLabel(agreement)}</Text>
-            {!!agreement && <Ionicons name="chevron-forward" size={16} color={colors.teal} />}
+            <Text style={[styles.rowValue, !canOpen && { color: colors.textSubtle }]}>
+              {isStarting ? 'Opening...' : !canOpen ? 'Booking cancelled' : agreementBadgeLabel(agreement)}
+            </Text>
+            {!!agreement?.reportPdfPath && (
+              <TouchableOpacity onPress={handleOpenPdf} disabled={isOpeningPdf}>
+                <Ionicons name="document-text-outline" size={18} color={colors.teal} />
+              </TouchableOpacity>
+            )}
+            {canOpen && <Ionicons name={isSubmitted ? 'chevron-forward' : 'play-circle-outline'} size={18} color={colors.teal} />}
           </View>
         </TouchableOpacity>
       )}
@@ -431,7 +470,7 @@ export default function AdminBookingDetailScreen() {
 
             <InspectionReportsSection bookingId={booking.id} bookingStatus={booking.status} router={router} styles={styles} colors={colors} />
 
-            <RentalAgreementSection bookingId={booking.id} router={router} styles={styles} colors={colors} />
+            <RentalAgreementSection bookingId={booking.id} bookingStatus={booking.status} router={router} styles={styles} colors={colors} />
 
             <View style={styles.section}>
               <SectionHeading>Car</SectionHeading>

@@ -23,6 +23,10 @@ function normalizeAgreement(row) {
     clientSignaturePath: row.client_signature_path ?? null,
     representativeSignaturePath: row.representative_signature_path ?? null,
     submittedAt: row.submitted_at,
+    updatedAt: row.updated_at ?? null,
+    /** Who created the draft (auth user id) - an admin when it was initiated from the admin booking details. */
+    initiatedBy: row.initiated_by ?? null,
+    reportPdfPath: row.report_pdf_path ?? null,
   };
 }
 
@@ -49,6 +53,59 @@ export async function getRentalAgreement(bookingId) {
     .maybeSingle();
   if (error) throw error;
   return normalizeAgreement(data);
+}
+
+/**
+ * ADMIN: start the Client Rental Agreement for a booking. The draft is saved on the server right away, prefilled from the booking (lessee,
+ * vehicle, rate, deposit, dates and times), so it exists for both the admin and the renter before anything is typed - it is only SUBMITTED
+ * later, when the agreement is completed. Never overwrites an existing agreement (returns it as is). The vehicle registration, colour and
+ * year are not stored on the car, so they are left for the admin to fill in.
+ */
+export async function startRentalAgreementForBooking(bookingId) {
+  const existing = await getRentalAgreement(bookingId);
+  if (existing) return existing;
+
+  const { data: booking, error: bookingError } = await supabase
+    .from('bookings')
+    .select('id, start_date, end_date, pickup_time, return_time, security_deposit, cars ( make, model, price_per_day ), renter:users!bookings_renter_id_fkey ( full_name )')
+    .eq('id', bookingId)
+    .single();
+  if (bookingError) throw bookingError;
+
+  const car = Array.isArray(booking.cars) ? booking.cars[0] : booking.cars;
+  const renter = Array.isArray(booking.renter) ? booking.renter[0] : booking.renter;
+  const row = {
+    booking_id: bookingId,
+    status: 'draft',
+    lessee_name: renter?.full_name || null,
+    vehicle_make: [car?.make, car?.model].filter(Boolean).join(' ') || null,
+    daily_rate: car?.price_per_day ?? null,
+    security_deposit: booking.security_deposit ?? null,
+    duration_start: booking.start_date ? String(booking.start_date).slice(0, 10) : null,
+    duration_end: booking.end_date ? String(booking.end_date).slice(0, 10) : null,
+    pickup_time: booking.pickup_time || null,
+    return_time: booking.return_time || null,
+    ghana_only_use: true,
+  };
+  const { data, error } = await supabase.from('rental_agreements').insert(row).select().single();
+  if (error) {
+    // Someone else (the renter, another admin) created it a moment ago - use theirs.
+    if (error.code === '23505') {
+      const raced = await getRentalAgreement(bookingId);
+      if (raced) return raced;
+    }
+    throw error;
+  }
+  return normalizeAgreement(data);
+}
+
+/**
+ * Generates the PDF copy + emails it to the renter and WopeCar once the agreement is submitted. Fire-and-forget: a failure here must never
+ * block the confirmation the user already earned.
+ */
+export async function generateRentalAgreementReport(agreementId) {
+  const { error } = await supabase.functions.invoke('generate-rental-agreement-report', { body: { agreementId } });
+  if (error) throw error;
 }
 
 /**
@@ -123,6 +180,9 @@ export async function submitRentalAgreement(agreementId) {
     .eq('id', agreementId)
     .single();
   if (fetchError) throw fetchError;
+
+  // Already submitted (a retry, or the other party - client or admin - finished it first): nothing left to do.
+  if (row.status === 'submitted') return normalizeAgreement(row);
 
   const missingField = REQUIRED_FIELDS.some((key) => row[key] === null || row[key] === '');
   if (missingField) throw new Error('Please fill in all required fields before submitting.');
