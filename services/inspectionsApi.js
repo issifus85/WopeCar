@@ -149,6 +149,23 @@ export async function uploadInspectionSignature(inspectionId, role, uri) {
 const REQUIRED_ANGLES = PHOTO_ANGLES.map((a) => a.key);
 
 /**
+ * Photos upload one by one as they are captured, and a failed upload is only remembered as pendingSync - the tile still shows as
+ * captured from the local copy. So an inspection can reach the signatures step with photos that never reached the server, and
+ * submitInspection() then refuses ("All 15 photos are required"). Before submitting, upload whatever the server does not have yet from
+ * the device's local copies (angle -> local uri, as kept in the inspection draft).
+ */
+export async function uploadMissingInspectionPhotos(inspectionId, localPhotos) {
+  const inspection = await fetchById(inspectionId);
+  const onServer = new Set((inspection?.photos ?? []).map((p) => p.angle));
+  for (const angle of REQUIRED_ANGLES) {
+    const uri = localPhotos?.[angle];
+    if (uri && !onServer.has(angle)) {
+      await uploadInspectionPhoto(inspectionId, angle, uri, { capturedAt: new Date().toISOString() });
+    }
+  }
+}
+
+/**
  * Validates the same completeness requirements Laravel enforced server-side
  * before generating its PDF (all required photos + both signatures) - a
  * later feature brought PDF generation back (see generate-inspection-report),

@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useInspection } from '../../contexts/InspectionContext';
-import { syncInspection, uploadInspectionSignature, submitInspection, generateInspectionReport } from '../../services/inspectionsApi';
+import { syncInspection, uploadInspectionSignature, uploadMissingInspectionPhotos, submitInspection, generateInspectionReport } from '../../services/inspectionsApi';
 import InspectionHeader from '../../components/InspectionHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 import SignaturePad from '../../components/SignaturePad';
@@ -117,6 +117,9 @@ export default function InspectionSignaturesScreen() {
 
       await uploadInspectionSignature(inspectionId, 'renter', draft.signatures.renter);
       await uploadInspectionSignature(inspectionId, 'agent', draft.signatures.agent);
+
+      // A photo whose upload failed earlier is still only on this device - send it now, or submit refuses with "photos required".
+      await uploadMissingInspectionPhotos(inspectionId, draft.photos);
 
       await submitInspection(inspectionId);
       updateDraft({ pendingSync: false });

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'reac
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Image, Linking, KeyboardAvoidingView, Platform, PixelRatio } from 'react-native';
 import { Image as CarImage } from 'expo-image';
 import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../../constants/theme';
 import { useAppTheme } from '../../../contexts/ThemeContext';
@@ -19,6 +20,7 @@ import { getUserVerificationDocuments, getBookingInspections, getInspectionRepor
 import { parseDateOnly } from '../../../constants/dateUtils';
 import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../../utils/imageUrl';
 import { getRentalAgreement } from '../../../services/rentalAgreementApi';
+import { inspectionAvailability } from '../../../constants/inspectionAvailability';
 
 const VERIFICATION_DOC_LABELS = [
   { type: 'license_front', label: "License - Front" },
@@ -94,16 +96,18 @@ function inspectionBadgeLabel(status) {
  * report screen (faster for triage); the document icon opens the PDF
  * artifact directly, for when the admin wants to forward/save it.
  */
-function InspectionReportsSection({ bookingId, router, styles, colors }) {
+function InspectionReportsSection({ bookingId, bookingStatus, router, styles, colors }) {
   const [inspections, setInspections] = useState(null);
   const [openingType, setOpeningType] = useState(null);
 
-  useEffect(() => {
+  // Re-read on every focus (not just on mount): coming back from the wizard must show the inspection as In Progress / Submitted, and
+  // that is also what unlocks Post-Rental once Pre-Rental has been submitted. Without it the rows stayed on the first-load state.
+  useFocusEffect(useCallback(() => {
     if (!bookingId) return;
     getBookingInspections(bookingId)
       .then(setInspections)
-      .catch(() => setInspections({ pre: EMPTY_INSPECTION_STATUS, post: EMPTY_INSPECTION_STATUS }));
-  }, [bookingId]);
+      .catch(() => setInspections((prev) => prev ?? { pre: EMPTY_INSPECTION_STATUS, post: EMPTY_INSPECTION_STATUS }));
+  }, [bookingId, bookingStatus]));
 
   if (!bookingId) return null;
 
@@ -126,6 +130,10 @@ function InspectionReportsSection({ bookingId, router, styles, colors }) {
         INSPECTION_ROWS.map(({ type, label }) => {
           const data = inspections[type] ?? EMPTY_INSPECTION_STATUS;
           const isSubmitted = data.status === 'submitted';
+          // Same sequence the renter and vendor screens use: Pre-Rental once the booking is confirmed, Post-Rental only after the
+          // Pre-Rental inspection is submitted. A submitted report can always be opened, whatever the booking's status is now.
+          const { available, reason } = inspectionAvailability({ type, bookingStatus, preStatus: inspections.pre?.status });
+          const canOpen = isSubmitted || available;
           // Admin can run the inspection with the client (same wizard the client uses, same record - the client sees it on their booking
           // and gets the report emailed). A submitted inspection opens its report instead.
           const startInspection = () =>
@@ -134,19 +142,20 @@ function InspectionReportsSection({ bookingId, router, styles, colors }) {
             <TouchableOpacity
               key={type}
               style={styles.row}
+              disabled={!canOpen}
               onPress={() => (isSubmitted ? router.push({ pathname: '/inspection/report', params: { bookingId, type } }) : startInspection())}
             >
               <Text style={styles.rowLabel}>{label}</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <Text style={styles.rowValue}>
-                  {isSubmitted ? 'Submitted' : data.status === 'draft' ? 'In Progress - Continue' : 'Not Started - Start'}
+                <Text style={[styles.rowValue, !canOpen && { color: colors.textSubtle }]}>
+                  {isSubmitted ? 'Submitted' : !available ? reason : data.status === 'draft' ? 'In Progress - Continue' : 'Not Started - Start'}
                 </Text>
                 {!!data.reportPdfPath && (
                   <TouchableOpacity onPress={() => handleOpenPdf(type, data.reportPdfPath)} disabled={openingType === type}>
                     <Ionicons name="document-text-outline" size={18} color={colors.teal} />
                   </TouchableOpacity>
                 )}
-                <Ionicons name={isSubmitted ? 'chevron-forward' : 'play-circle-outline'} size={18} color={colors.teal} />
+                {canOpen && <Ionicons name={isSubmitted ? 'chevron-forward' : 'play-circle-outline'} size={18} color={colors.teal} />}
               </View>
             </TouchableOpacity>
           );
@@ -420,7 +429,7 @@ export default function AdminBookingDetailScreen() {
 
             <VerificationDocsSection renterId={booking.renter?.id} styles={styles} colors={colors} />
 
-            <InspectionReportsSection bookingId={booking.id} router={router} styles={styles} colors={colors} />
+            <InspectionReportsSection bookingId={booking.id} bookingStatus={booking.status} router={router} styles={styles} colors={colors} />
 
             <RentalAgreementSection bookingId={booking.id} router={router} styles={styles} colors={colors} />
 

@@ -101,6 +101,7 @@ export default function InspectionPhotosScreen() {
           updateDraft({ pendingSync: false });
         } catch (e) {
           updateDraft({ pendingSync: true });
+          Alert.alert('Photo not uploaded yet', 'The photo is saved on this device and will be sent again when you submit the inspection.');
         }
       }
     } finally {
