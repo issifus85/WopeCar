@@ -15,8 +15,7 @@ import {
   getWithDriverFeePerDay,
   WOPECARE_PLANS,
   calculateWopeCareCost,
-  calculateWopeCareDailyRate,
-} from '../../constants/pricing';
+  calculateWopeCareDailyRate,  applyDriverMode } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { getDatePriceMap } from '../../services/carPricingApi';
 import { redeemPromoCode } from '../../services/promoApi';
@@ -83,7 +82,9 @@ export default function CheckoutPaymentScreen() {
   // steps) rather than the normal end of the checkout flow.
   const resumedBooking = resumedBookingId ? savedBookings.find(b => b.id === resumedBookingId) : null;
 
-  const [car, setCar] = useState(null);
+  // The car as fetched, viewed under the driver choice made on the first step (a self-drive car with a driver follows chauffeur rules).
+  const [carData, setCarData] = useState(null);
+  const car = useMemo(() => applyDriverMode(carData, !!draft.withDriver), [carData, draft.withDriver]);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -110,7 +111,7 @@ export default function CheckoutPaymentScreen() {
 
   useEffect(() => {
     fetchCarById(carId)
-      .then(setCar)
+      .then(setCarData)
       .finally(() => setIsLoading(false));
   }, [carId]);
 
@@ -230,7 +231,8 @@ export default function CheckoutPaymentScreen() {
     // Self-drive-only add-on - see checkout/summary.js's identical formula.
     const withDriverDailyRate = draft.withDriver ? getWithDriverFeePerDay() : 0;
     const withDriverCost = driverCalc.cost;
-    const withDriverDays = draft.withDriver ? driverCalc.driverDays : null;
+    // null = the driver covers every billed day (so it follows the trip if it is later extended); a number only for a partial-days legacy draft.
+    const withDriverDays = draft.withDriver && !driverCalc.coversAll ? driverCalc.driverDays : null;
     return {
       rentalCost, addonsCost, deliveryFee, securityDeposit, promoDiscountAmount,
       wopeCarePlanId, wopeCareDailyRate, wopeCareCost, wopeCareCoverage,

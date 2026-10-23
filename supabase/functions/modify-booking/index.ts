@@ -312,9 +312,23 @@ Deno.serve(async (req) => {
     // true/false) - older app builds don't, and keep the previous behaviour. The price is worked out here, not trusted from the
     // client: a driver the renter already has keeps their quoted daily rate, a newly added one gets today's admin rate, and either
     // way it is rate x the new number of billable days.
+    //
+    // A self-drive car booked WITH a driver follows the chauffeur rules (12-hour billing, flat deposit, no delivery - the booking is stored
+    // with drive_type 'Chauffeur'), so adding or removing the driver switches the whole booking between the two rule sets:
+    //   bookingType        what the booking is stored as now (the type it was MADE with - a car re-labelled later changes nothing)
+    //   baseSelfDrive      it started as a self-drive booking (self-drive, or chauffeur-rules because a driver was added): the driver is optional
+    //   legacyDriverBooking a self-drive booking with a driver from BEFORE this change keeps its self-drive rules while the driver stays
+    const bookingType: string | null = booking.drive_type ?? booking.cars?.drive_type ?? null;
+    const hadDriverBefore = !!booking.with_driver || Number(booking.with_driver_total_cost ?? 0) > 0;
+    const baseSelfDrive = bookingType === 'Self-drive' || (bookingType === 'Chauffeur' && hadDriverBefore);
+    const legacyDriverBooking = bookingType === 'Self-drive' && hadDriverBefore;
+    let newDriveType: string | null = bookingType;
+    if (baseSelfDrive && typeof withDriver === 'boolean') {
+      newDriveType = !withDriver ? 'Self-drive' : legacyDriverBooking ? 'Self-drive' : 'Chauffeur';
+    }
     let driverPatch: { with_driver: boolean; with_driver_daily_rate: number; with_driver_total_cost: number; with_driver_days: number | null } | null = null;
-    if (typeof withDriver === 'boolean' && (booking.drive_type ?? booking.cars?.drive_type) !== 'Chauffeur') {
-      const hadDriver = !!booking.with_driver || Number(booking.with_driver_total_cost ?? 0) > 0;
+    if (typeof withDriver === 'boolean' && baseSelfDrive) {
+      const hadDriver = hadDriverBefore;
       const today = new Date().toISOString().slice(0, 10);
       if (withDriver !== hadDriver && !isAdmin && booking.start_date < today) {
         return jsonResponse({ error: 'The driver option can no longer be changed because the trip has already started.' }, 400);
@@ -333,14 +347,17 @@ Deno.serve(async (req) => {
       const tripDays = Math.max(Math.round(newBillableDays), 1);
       let driverDays = 0;
       if (withDriver) {
-        const requested = withDriverDays != null ? Number(withDriverDays) : (booking.with_driver_days != null ? Number(booking.with_driver_days) : tripDays);
+        // Chauffeur rules: the driver covers the whole trip. Only a legacy driver booking may keep (or choose) partial days.
+        const storedPartial = booking.with_driver_days != null && Number(booking.with_driver_days) < Number(booking.billable_days ?? tripDays) ? Number(booking.with_driver_days) : null;
+        const requested = newDriveType === 'Chauffeur' ? tripDays : withDriverDays != null ? Number(withDriverDays) : (storedPartial ?? tripDays);
         driverDays = Math.min(Math.max(Math.round(Number.isFinite(requested) ? requested : tripDays), 1), tripDays);
       }
       const cost = withDriver ? Math.round(rate * driverDays * 100) / 100 : 0;
       if (withDriverTotalCost != null && Math.abs(Number(withDriverTotalCost) - cost) > 0.5) {
         return jsonResponse({ error: 'The driver price has changed since you opened this page. Please reload and try again.' }, 409);
       }
-      driverPatch = { with_driver: withDriver, with_driver_daily_rate: withDriver ? rate : 0, with_driver_total_cost: cost, with_driver_days: withDriver ? driverDays : null };
+      // null = the driver covers every billed day (so it follows the trip if it is extended later); a number only for a legacy partial booking.
+      driverPatch = { with_driver: withDriver, with_driver_daily_rate: withDriver ? rate : 0, with_driver_total_cost: cost, with_driver_days: withDriver && driverDays < tripDays ? driverDays : null };
     }
     // --- Server-side pricing ----------------------------------------------------------------------------------------------------
     // The client's totals are not trusted on their own. Add-on days, delivery, the security deposit, the promo and the driver cost follow
@@ -349,7 +366,7 @@ Deno.serve(async (req) => {
     const car = booking.cars as { name: string; drive_type: string | null } | null;
     // The drive type the booking was MADE with wins over the car's current one: a car later re-labelled Chauffeur must not flip an existing
     // self-drive booking onto the chauffeur flat deposit and free delivery (three real bookings are in exactly that state).
-    const driveType = booking.drive_type ?? car?.drive_type ?? null;
+    const driveType = newDriveType ?? car?.drive_type ?? null;
     const { data: carRow } = await adminClient.from('cars').select('price_per_day, regional_addons').eq('id', booking.car_id).maybeSingle();
     const { data: settingRows } = await adminClient
       .from('app_settings')
@@ -368,23 +385,26 @@ Deno.serve(async (req) => {
     // The driver after this change. An explicit choice (driverPatch) wins; otherwise a driver the booking already has follows the new trip
     // length (a driver for every day costs rate x the NEW days - it used to stay at the old amount when a trip was extended).
     let driverPatchFinal = driverPatch;
-    if (!driverPatchFinal && driveType !== 'Chauffeur') {
-      const hadDriver = !!booking.with_driver || Number(booking.with_driver_total_cost ?? 0) > 0;
+    if (!driverPatchFinal && (driveType !== 'Chauffeur' || hadDriverBefore)) {
+      const hadDriver = hadDriverBefore;
       const rate = Number(booking.with_driver_daily_rate ?? 0);
       if (hadDriver && rate > 0) {
         const tripDays = Math.max(Math.round(newBillableDays), 1);
-        const days = booking.with_driver_days != null ? Math.min(Math.max(Math.round(Number(booking.with_driver_days)), 1), tripDays) : tripDays;
+        // A driver for every day (stored null, or a day count equal to the old trip) follows the NEW trip length; only a genuinely partial legacy
+        // booking keeps its day count.
+        const partial = booking.with_driver_days != null && Number(booking.with_driver_days) < Number(booking.billable_days ?? tripDays);
+        const days = partial ? Math.min(Math.max(Math.round(Number(booking.with_driver_days)), 1), tripDays) : tripDays;
         driverPatchFinal = {
           with_driver: true,
           with_driver_daily_rate: rate,
           with_driver_total_cost: Math.round(rate * days * 100) / 100,
-          with_driver_days: booking.with_driver_days != null ? days : null,
+          with_driver_days: partial && days < tripDays ? days : null,
         };
       }
     }
     const driverNow = driverPatchFinal
       ? { active: driverPatchFinal.with_driver, cost: driverPatchFinal.with_driver_total_cost, days: driverPatchFinal.with_driver_days }
-      : { active: false, cost: driveType === 'Chauffeur' ? 0 : Math.max(0, Number(withDriverTotalCost ?? booking.with_driver_total_cost ?? 0)), days: null as number | null };
+      : { active: false, cost: driveType === 'Chauffeur' && !hadDriverBefore ? 0 : Math.max(0, Number(withDriverTotalCost ?? booking.with_driver_total_cost ?? 0)), days: null as number | null };
 
     const newRentalCost = Number(rentalCost ?? booking.rental_cost);
     if (!isAdmin && carRow?.price_per_day != null) {
@@ -450,6 +470,7 @@ Deno.serve(async (req) => {
       promo_discount_amount: priced.promoDiscount,
       total_cost: newTotalCost,
       billable_days: newBillableDays,
+      ...(newDriveType && newDriveType !== booking.drive_type ? { drive_type: newDriveType } : {}),
       vendor_payout_per_day: payoutPerDay,
       vendor_payout_total: vendorPayoutTotal,
       wopecar_margin: wopecarMargin,

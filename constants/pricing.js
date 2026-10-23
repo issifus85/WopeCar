@@ -371,6 +371,22 @@ export function calculateWithDriver(withDriver, requestedDays, billableDays, dai
   return { driverDays, coversAll: driverDays >= Math.round(billableDays), cost: Math.round(Number(dailyRate) * driverDays * 100) / 100 };
 }
 
+/**
+ * A SELF-DRIVE car booked WITH a WopeCar driver is priced and ruled exactly like a chauffeur booking: 12-hour billing cycles (daytime hires
+ * per calendar day), a 1-day minimum, no delivery fee, the flat chauffeur deposit, the chauffeur time windows and open Sundays. The driver
+ * is chosen FIRST (the first booking step) so the whole flow runs under one set of rules. The car's own daily rate does not change; the driver
+ * is +the admin driver fee per billed day on top.
+ *
+ * This returns a view of the car whose `drivenBy` is the rule set to apply ('Chauffeur' in driver mode); `ownDrivenBy` keeps the car's real
+ * type. Every screen that applies rules from `car.drivenBy` just receives the derived car. Idempotent.
+ */
+export function applyDriverMode(car, withDriver) {
+  if (!car) return car;
+  const own = car.ownDrivenBy ?? car.drivenBy;
+  if (own === 'Self-drive' && withDriver) return { ...car, ownDrivenBy: own, drivenBy: 'Chauffeur' };
+  return car.ownDrivenBy ? { ...car, drivenBy: own } : car;
+}
+
 export function calculateSecurityDeposit(subtotal, drivenBy, withDriver) {
   if (drivenBy === 'Chauffeur' || withDriver) return getChauffeurSecurityDeposit();
   return subtotal < getSecurityDepositThreshold() ? getSecurityDepositFlat() : subtotal * getSecurityDepositPercentage();

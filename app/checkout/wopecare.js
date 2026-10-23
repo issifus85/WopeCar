@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { StyleSheet, View, ActivityIndicator, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAppTheme } from '../../contexts/ThemeContext';
-import { calculateRentalPricing, calculateWopeCareDailyRate, calculateWopeCareCost, WOPECARE_PLANS } from '../../constants/pricing';
+import { calculateRentalPricing, calculateWopeCareDailyRate, calculateWopeCareCost, WOPECARE_PLANS,  applyDriverMode } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
@@ -23,7 +23,9 @@ export default function CheckoutWopeCareScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { draft, updateDraft } = useCheckout();
 
-  const [car, setCar] = useState(null);
+  // The car as fetched, viewed under the driver choice made on the first step (a self-drive car with a driver follows chauffeur rules).
+  const [carData, setCarData] = useState(null);
+  const car = useMemo(() => applyDriverMode(carData, !!draft.withDriver), [carData, draft.withDriver]);
   const [isLoading, setIsLoading] = useState(true);
   // Only fires when draft.wopeCare is still 'none' at the moment Continue
   // is pressed - a real plan (basic/plus/premium) skips this and goes
@@ -32,7 +34,7 @@ export default function CheckoutWopeCareScreen() {
 
   useEffect(() => {
     fetchCarById(carId)
-      .then(setCar)
+      .then(setCarData)
       .finally(() => setIsLoading(false));
   }, [carId]);
 

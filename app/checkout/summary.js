@@ -15,8 +15,7 @@ import {
   calculateRentalPricing,
   WOPECARE_PLANS,
   calculateWopeCareCost,
-  calculateWopeCareDailyRate,
-} from '../../constants/pricing';
+  calculateWopeCareDailyRate, applyDriverMode } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { getDatePriceMap } from '../../services/carPricingApi';
 import { validatePromoCode } from '../../services/promoApi';
@@ -42,13 +41,15 @@ export default function CheckoutSummaryScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { draft, updateDraft } = useCheckout();
 
-  const [car, setCar] = useState(null);
+  // The car as fetched, viewed under the driver choice made on the first step (a self-drive car with a driver follows chauffeur rules).
+  const [carData, setCarData] = useState(null);
+  const car = useMemo(() => applyDriverMode(carData, !!draft.withDriver), [carData, draft.withDriver]);
   const [isLoading, setIsLoading] = useState(true);
   const [datePriceMap, setDatePriceMap] = useState({});
 
   useEffect(() => {
     fetchCarById(carId)
-      .then(setCar)
+      .then(setCarData)
       .finally(() => setIsLoading(false));
   }, [carId]);
 

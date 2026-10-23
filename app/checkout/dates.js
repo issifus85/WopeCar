@@ -5,10 +5,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { getMinBookingDays, calculateRentalPricing } from '../../constants/pricing';
+import { getMinBookingDays, calculateRentalPricing, applyDriverMode, formatCurrency, useWithDriverFeePerDay } from '../../constants/pricing';
+import { useCurrency } from '../../contexts/CurrencyContext';
 import { fetchCarById, fetchCarAvailability } from '../../services/carsApi';
 import { isSundayBlockedForCar } from '../../services/vendorCalendar';
 import { useCheckout } from '../../contexts/CheckoutContext';
+import { SELF_DRIVE_SLOTS, CHAUFFEUR_PICKUP_SLOTS, CHAUFFEUR_RETURN_SLOTS } from '../../constants/bookingTimeSlots';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -23,25 +25,6 @@ const MONTH_NAMES = [
 ];
 const SHORT_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-// Self-drive handovers run 9:00 AM to 5:00 PM (was 8-6; changed Oct 2026).
-const SELF_DRIVE_SLOTS = [
-  '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
-  '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM',
-];
-
-// Chauffeur bookings keep the original 8:00 AM-6:00 PM base window - the
-// self-drive cut-down above must NOT narrow them, so they build on their own
-// list rather than on SELF_DRIVE_SLOTS.
-const CHAUFFEUR_BASE_SLOTS = [
-  '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
-  '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM',
-];
-
-// Chauffeur bookings get a wider window on both ends (a driver can start
-// earlier and finish later than a self-drive handover requires).
-const CHAUFFEUR_PICKUP_SLOTS = ['5:30 AM', '6:00 AM', '7:00 AM', ...CHAUFFEUR_BASE_SLOTS];
-const CHAUFFEUR_RETURN_SLOTS = [...CHAUFFEUR_BASE_SLOTS, '7:00 PM', '8:00 PM', '8:30 PM'];
 
 // e.g. "Mon 17 Aug" - used by the 24hr rental note below, distinct from
 // the calendar grid's 2-letter WEEKDAYS and the month-nav's full MONTH_NAMES.
@@ -192,7 +175,10 @@ export default function CheckoutDatesScreen() {
     logScreen('Checkout_Dates');
   }, []);
 
-  const [car, setCar] = useState(null);
+  // The car as fetched; `car` below is the same car viewed through the driver choice. A self-drive car booked WITH a driver is ruled like a
+  // chauffeur booking (see applyDriverMode), so everything on this screen that reads car.drivenBy - time windows, Sundays, minimum days,
+  // labels, 12-hour counting - follows the toggle automatically.
+  const [carData, setCarData] = useState(null);
   const [bookedRanges, setBookedRanges] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -218,6 +204,13 @@ export default function CheckoutDatesScreen() {
   const today = stripTime(new Date());
   const [viewMonth, setViewMonth] = useState(today);
   const draftMatchesCar = draft.carId === String(carId);
+  const withDriver = draftMatchesCar && !!draft.withDriver;
+  const car = useMemo(() => applyDriverMode(carData, withDriver), [carData, withDriver]);
+  const { activeCurrency } = useCurrency();
+  const driverFeePerDay = useWithDriverFeePerDay();
+  // Switching the driver changes the rules (billing cycle, minimum, time windows, Sundays), so a date/time already picked under the other
+  // rules is cleared - after a confirmation if something was picked.
+  const [pendingDriverChoice, setPendingDriverChoice] = useState(null);
   const [tempStart, setTempStart] = useState(draftMatchesCar && draft.startDate ? new Date(draft.startDate) : null);
   const [tempEnd, setTempEnd] = useState(draftMatchesCar && draft.endDate ? new Date(draft.endDate) : null);
 
@@ -286,8 +279,8 @@ export default function CheckoutDatesScreen() {
       // it fails, still let the user pick dates rather than blocking checkout.
       fetchCarAvailability(carId).catch(() => []),
     ])
-      .then(([carData, availability]) => {
-        setCar(carData);
+      .then(([fetchedCar, availability]) => {
+        setCarData(fetchedCar);
         setBookedRanges(availability);
       })
       .catch(() => setError('Could not load this car. Please try again.'))
@@ -328,12 +321,30 @@ export default function CheckoutDatesScreen() {
     setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + offset, 1));
   };
 
+  const applyDriverChoice = (next) => {
+    setTempStart(null);
+    setTempEnd(null);
+    setPickupTime('');
+    setReturnTime('');
+    updateDraft({ withDriver: next, withDriverDays: null, withDriverLocked: false, startDate: null, endDate: null, pickupTime: '', returnTime: '' });
+  };
+
+  const handleToggleDriver = () => {
+    const next = !withDriver;
+    const somethingPicked = !!tempStart || !!tempEnd || !!pickupTime || !!returnTime;
+    if (somethingPicked) {
+      setPendingDriverChoice(next);
+      return;
+    }
+    applyDriverChoice(next);
+  };
+
   // Shared by the normal Continue path and the self-drive-minimum notice's
   // own Continue button. forceWithDriver locks in the driver add-on on the
   // next screen (see contexts/CheckoutContext.js's withDriverLocked) -
   // false explicitly clears any lock left over from a previous, shorter
   // date selection on this same draft.
-  const proceedToAddons = (forceWithDriver) => {
+  const proceedToAddons = () => {
     updateDraft({
       startDate: tempStart.toISOString(),
       endDate: tempEnd.toISOString(),
@@ -341,7 +352,9 @@ export default function CheckoutDatesScreen() {
       returnTime,
       pickupLocation,
       returnLocation,
-      ...(forceWithDriver ? { withDriver: true, withDriverLocked: true } : { withDriverLocked: false }),
+      withDriver,
+      withDriverDays: null,
+      withDriverLocked: false,
     });
     // Rough default-rate estimate, not the final priced total - add-ons,
     // WopeCare, and discounts aren't chosen yet at this first checkout step.
@@ -391,7 +404,7 @@ export default function CheckoutDatesScreen() {
       return;
     }
 
-    proceedToAddons(false);
+    proceedToAddons();
   };
 
   if (isLoading) {
@@ -474,6 +487,26 @@ export default function CheckoutDatesScreen() {
         <Text style={styles.carName}>{car.name}</Text>
         <Text style={styles.carSubtitle}>Choose your pickup and return dates, times and location</Text>
 
+        {/* Driver first: choosing a WopeCar driver puts the whole booking under chauffeur rules (12-hour billing, 1-day minimum, no delivery
+            fee, GHS 500 flat deposit, chauffeur time windows and Sundays), so it is decided before any date or time. Self-drive cars only -
+            a chauffeur car already comes with a driver. */}
+        {carData?.drivenBy === 'Self-drive' && (
+          <TouchableOpacity style={[styles.driverCard, withDriver && styles.driverCardActive]} onPress={handleToggleDriver} activeOpacity={0.8}>
+            <View style={[styles.checkbox, withDriver && styles.checkboxChecked]}>
+              {withDriver && <Ionicons name="checkmark" size={14} color={colors.white} />}
+            </View>
+            <View style={styles.driverTextWrap}>
+              <Text style={styles.driverTitle}>Add a WopeCar driver</Text>
+              <Text style={styles.driverDesc}>
+                {withDriver
+                  ? 'Driver included: billed per 12 hours, no delivery fee, GHS 500 flat security deposit, from 1 day.'
+                  : `Prefer not to drive? Add a driver for +${formatCurrency(driverFeePerDay, activeCurrency)}/day. Without one, self-drive needs ${getMinBookingDays('Self-drive')} days or more.`}
+              </Text>
+            </View>
+            <Text style={styles.driverPrice}>+{formatCurrency(driverFeePerDay, activeCurrency)}/day</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={styles.legendRow}>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: colors.teal }]} />
@@ -554,7 +587,7 @@ export default function CheckoutDatesScreen() {
               {isBelowMinimum
                 ? (isChauffeur
                     ? `${car.drivenBy} bookings need at least ${minDays} ${minDays === 1 ? 'day' : 'days'} - you've selected ${selectedDays}.`
-                    : "Self-drive under 3 days requires a driver. We've added one for you.")
+                    : `Self-drive needs at least ${minDays} days - add a driver for a shorter trip.`)
                 : `${selectedDays} day rental selected`}
             </Text>
           </View>
@@ -646,6 +679,22 @@ export default function CheckoutDatesScreen() {
       />
 
       <ConfirmModal
+        visible={pendingDriverChoice !== null}
+        title={pendingDriverChoice ? 'Add a driver?' : 'Remove the driver?'}
+        message={pendingDriverChoice
+          ? 'A driver changes how the booking is counted and priced (12-hour billing, flat deposit, no delivery fee), so your dates and times will be cleared - please pick them again.'
+          : `Without a driver the self-drive rules apply (24-hour days, ${getMinBookingDays('Self-drive')}-day minimum, delivery fee, self-drive hours), so your dates and times will be cleared - please pick them again.`}
+        confirmLabel={pendingDriverChoice ? 'Add Driver' : 'Remove Driver'}
+        cancelLabel="Keep as is"
+        onConfirm={() => {
+          const next = pendingDriverChoice;
+          setPendingDriverChoice(null);
+          applyDriverChoice(next);
+        }}
+        onCancel={() => setPendingDriverChoice(null)}
+      />
+
+      <ConfirmModal
         visible={showSundayNotice}
         title="Sunday Booking Notice"
         message={'Sunday chauffeur bookings require at least 24 hours advance notice.\n\nPlease select a different pickup date or book for a future Sunday.'}
@@ -668,12 +717,13 @@ export default function CheckoutDatesScreen() {
       <ConfirmModal
         visible={showSelfDriveMinNotice}
         title="3-Day Minimum"
-        message={"Self-drive under 3 days requires a driver. We've added one for you."}
-        confirmLabel="Continue"
+        message={`Self-drive needs at least ${minDays} days. For a shorter trip, add a WopeCar driver (+${formatCurrency(driverFeePerDay, activeCurrency)}/day) - the booking then follows our chauffeur rules, from 1 day.`}
+        confirmLabel="Add a Driver"
         cancelLabel="Change Dates"
         onConfirm={() => {
+          // "Add a driver" - the driver is chosen up front now, so this switches the booking to driver rules and lets the user re-pick.
           setShowSelfDriveMinNotice(false);
-          proceedToAddons(true);
+          applyDriverChoice(true);
         }}
         onCancel={() => setShowSelfDriveMinNotice(false)}
       />
@@ -736,6 +786,40 @@ function createStyles(colors) {
     fontFamily: FONTS.bold,
     fontSize: 18,
     color: colors.textPrimary,
+  },
+  driverCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.divider,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+    backgroundColor: colors.background,
+  },
+  driverCardActive: {
+    borderColor: colors.teal,
+  },
+  driverTextWrap: {
+    flex: 1,
+  },
+  driverTitle: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  driverDesc: {
+    fontFamily: FONTS.regular,
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 2,
+    lineHeight: 17,
+  },
+  driverPrice: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 13,
+    color: colors.teal,
   },
   carSubtitle: {
     fontFamily: FONTS.regular,

@@ -30,6 +30,7 @@ import { getRentalAgreement } from '../../services/rentalAgreementApi';
 import { getMyReviewForBooking } from '../../services/reviewsApi';
 import { getBookingModifications } from '../../services/supabaseApi';
 import supabase from '../../services/supabase';
+import { SELF_DRIVE_SLOTS, CHAUFFEUR_PICKUP_SLOTS, CHAUFFEUR_RETURN_SLOTS } from '../../constants/bookingTimeSlots';
 import { useBookings } from '../../contexts/BookingsContext';
 import { useInbox } from '../../contexts/InboxContext';
 import DateRangeModal, { formatDateShort } from '../../components/DateRangeModal';
@@ -48,13 +49,6 @@ function getStatusColors(colors) {
     Cancelled: { bg: colors.errorBg, text: colors.error },
   };
 }
-
-const TIME_SLOTS = [
-  '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
-  '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM',
-];
-// Self-drive handovers run 9:00 AM-5:00 PM (same window as checkout/dates.js).
-const SELF_DRIVE_TIME_SLOTS = TIME_SLOTS.filter((slot) => slot !== '8:00 AM' && slot !== '6:00 PM');
 
 function formatDate(date) {
   if (!date) return '';
@@ -102,7 +96,7 @@ function toISODate(value) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function TimeSlotPicker({ label, value, onChange, styles, slots = TIME_SLOTS }) {
+function TimeSlotPicker({ label, value, onChange, styles, slots = SELF_DRIVE_SLOTS }) {
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -162,7 +156,7 @@ export default function BookingDetailScreen() {
 
   const booking = bookings.find(b => b.id === id);
 
-  const [car, setCar] = useState(null);
+  const [carData, setCarData] = useState(null);
   // 'view' | 'editing' | 'reviewing'
   const [mode, setMode] = useState('view');
   const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
@@ -189,13 +183,42 @@ export default function BookingDetailScreen() {
 
   useEffect(() => {
     if (booking?.carId) {
-      // The booking keeps the drive type it was MADE with: a car re-labelled Chauffeur later must not flip an existing self-drive booking's
-      // billing cycle, delivery fee and deposit when it is modified.
       fetchCarById(booking.carId)
-        .then((c) => setCar(c && booking.driveType ? { ...c, drivenBy: booking.driveType } : c))
-        .catch(() => setCar(null));
+        .then(setCarData)
+        .catch(() => setCarData(null));
     }
   }, [booking?.carId]);
+
+  // Which rule set applies to THIS booking while it is edited.
+  //  - ownType: what the booking started as. A booking made with a driver on a self-drive car is stored as 'Chauffeur' (it follows the
+  //    chauffeur rules) but its OWN type is still self-drive, which is what lets the driver be removed again. A car re-labelled Chauffeur
+  //    later must not change an existing self-drive booking.
+  //  - legacyDriverBooking: a self-drive booking with a driver from BEFORE drivers switched a booking to chauffeur rules - it keeps its
+  //    self-drive rules (24-hour days, partial driver days) for as long as the driver stays, exactly as it was priced.
+  //  - effectiveType: ownType + the driver choice. Self-drive with a driver (new style) = chauffeur rules; without = self-drive rules.
+  const bookingDriveType = booking?.driveType ?? null;
+  const bookingHasDriver = !!booking?.withDriver?.selected;
+  const ownType = !carData
+    ? null
+    : bookingDriveType === 'Chauffeur' && !bookingHasDriver
+      ? 'Chauffeur'
+      : bookingDriveType === 'Self-drive' || (bookingDriveType === 'Chauffeur' && bookingHasDriver)
+        ? 'Self-drive'
+        : carData.drivenBy;
+  const legacyDriverBooking = bookingDriveType === 'Self-drive' && bookingHasDriver;
+  const effectiveType = ownType === 'Chauffeur' ? 'Chauffeur' : !editWithDriver ? 'Self-drive' : legacyDriverBooking ? 'Self-drive' : 'Chauffeur';
+  const car = useMemo(() => (carData ? { ...carData, ownDrivenBy: ownType, drivenBy: effectiveType } : null), [carData, ownType, effectiveType]);
+  const canChooseDriver = ownType === 'Self-drive';
+
+  // Switching the driver changes the allowed pickup/return times; a time that is no longer offered is cleared so it must be re-picked.
+  useEffect(() => {
+    if (mode !== 'editing' || !car) return;
+    const pickupSlots = effectiveType === 'Chauffeur' ? CHAUFFEUR_PICKUP_SLOTS : SELF_DRIVE_SLOTS;
+    const returnSlots = effectiveType === 'Chauffeur' ? CHAUFFEUR_RETURN_SLOTS : SELF_DRIVE_SLOTS;
+    if (editPickupTime && !pickupSlots.includes(editPickupTime)) setEditPickupTime(null);
+    if (editReturnTime && !returnSlots.includes(editReturnTime)) setEditReturnTime(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveType, mode]);
 
   // undefined = still loading, null = not started yet. Both inspections and
   // rental agreements are Supabase-native now - keyed on booking.id
@@ -354,13 +377,14 @@ export default function BookingDetailScreen() {
     const isSelfDrive = car.drivenBy === 'Self-drive';
     // Waived when a WopeCar driver is already coming with the car - see
     // checkout/summary.js's identical formula.
-    const driverApplies = isSelfDrive && editWithDriver;
+    const driverApplies = canChooseDriver && editWithDriver;
     // A driver the renter already has keeps the daily rate they were quoted (matches modify-booking, which prices it
     // server-side the same way); one added now is quoted today's admin rate. Either way: rate × the driver days.
     const driverDailyRate = driverApplies
       ? (booking?.withDriver?.selected && Number(booking.withDriver.dailyRate) > 0 ? Number(booking.withDriver.dailyRate) : getWithDriverFeePerDay())
       : 0;
-    const driverCalc = calculateWithDriver(driverApplies, editDriverDays, days, driverDailyRate);
+    // The driver covers the WHOLE trip (billed per 12-hour cycle under the chauffeur rules); only a legacy driver booking may keep partial days.
+    const driverCalc = calculateWithDriver(driverApplies, legacyDriverBooking ? editDriverDays : null, days, driverDailyRate);
     // A driver for only some of the days leaves the renter self-driving the rest: delivery fee + normal deposit still apply.
     const deliveryFee = isSelfDrive && !driverCalc.coversAll ? getSelfDriveDeliveryFee() : 0;
     const securityDeposit = calculateSecurityDeposit(subtotal, car.drivenBy, driverCalc.coversAll);
@@ -377,7 +401,7 @@ export default function BookingDetailScreen() {
     }
     const total = subtotal - promoDiscountAmount + deliveryFee + securityDeposit + recomputedWopeCareCost + withDriverCost;
     return { rentalCost, addonsCost, deliveryFee, securityDeposit, withDriverCost, driverDailyRate, driverDays, promoDiscountAmount, total };
-  }, [car, pricing, days, booking, originalDays, recomputedWopeCareCost, editWithDriver, editDriverDays, promoTerms]);
+  }, [car, pricing, days, booking, originalDays, recomputedWopeCareCost, editWithDriver, editDriverDays, promoTerms, canChooseDriver, legacyDriverBooking]);
 
   const recomputedTotal = recomputedBreakdown.total;
   const difference = recomputedTotal - (booking?.totalCost ?? 0);
@@ -428,11 +452,12 @@ export default function BookingDetailScreen() {
     wopecareTotalCost: booking.wopeCare?.plan && booking.wopeCare.plan !== 'none'
       ? recomputedWopeCareCost
       : undefined,
-    // Only self-drive cars can have a driver added/removed; chauffeur bookings leave these untouched (undefined).
-    withDriver: car?.drivenBy === 'Self-drive' ? editWithDriver : undefined,
-    withDriverDailyRate: car?.drivenBy === 'Self-drive' && editWithDriver ? recomputedBreakdown.driverDailyRate : undefined,
-    withDriverDays: car?.drivenBy === 'Self-drive' && editWithDriver ? recomputedBreakdown.driverDays : undefined,
-    withDriverTotalCost: car?.drivenBy === 'Self-drive'
+    // Only self-drive cars can have a driver added/removed; chauffeur cars leave these untouched (undefined). The server decides which rule set
+    // the booking ends up under (driver = chauffeur rules) from this choice.
+    withDriver: canChooseDriver ? editWithDriver : undefined,
+    withDriverDailyRate: canChooseDriver && editWithDriver ? recomputedBreakdown.driverDailyRate : undefined,
+    withDriverDays: canChooseDriver && editWithDriver && legacyDriverBooking && recomputedBreakdown.driverDays < days ? recomputedBreakdown.driverDays : undefined,
+    withDriverTotalCost: canChooseDriver
       ? (editWithDriver ? recomputedBreakdown.withDriverCost : 0)
       : (booking.withDriver?.selected ? recomputedBreakdown.withDriverCost : undefined),
     ...extra,
@@ -779,8 +804,8 @@ export default function BookingDetailScreen() {
             )}
           </View>
 
-          <TimeSlotPicker label="Pickup Time" value={editPickupTime} onChange={setEditPickupTime} styles={styles} slots={isChauffeurBooking ? TIME_SLOTS : SELF_DRIVE_TIME_SLOTS} />
-          <TimeSlotPicker label="Return Time" value={editReturnTime} onChange={setEditReturnTime} styles={styles} slots={isChauffeurBooking ? TIME_SLOTS : SELF_DRIVE_TIME_SLOTS} />
+          <TimeSlotPicker label="Pickup Time" value={editPickupTime} onChange={setEditPickupTime} styles={styles} slots={isChauffeurBooking ? CHAUFFEUR_PICKUP_SLOTS : SELF_DRIVE_SLOTS} />
+          <TimeSlotPicker label="Return Time" value={editReturnTime} onChange={setEditReturnTime} styles={styles} slots={isChauffeurBooking ? CHAUFFEUR_RETURN_SLOTS : SELF_DRIVE_SLOTS} />
 
           <View style={styles.field}>
             <Text style={styles.fieldLabel}>{deliveryLocationLabel}</Text>
@@ -811,7 +836,7 @@ export default function BookingDetailScreen() {
             </View>
           )}
 
-          {car?.drivenBy === 'Self-drive' && (
+          {canChooseDriver && (
             <TouchableOpacity style={styles.checkboxRow} onPress={() => setEditWithDriver((v) => !v)}>
               <View style={[styles.checkbox, editWithDriver && styles.checkboxChecked]}>
                 {editWithDriver && <Ionicons name="checkmark" size={14} color={colors.white} />}
@@ -825,7 +850,15 @@ export default function BookingDetailScreen() {
             </TouchableOpacity>
           )}
 
-          {car?.drivenBy === 'Self-drive' && editWithDriver && days > 1 && (
+          {canChooseDriver && !!booking.withDriver?.selected !== editWithDriver && !legacyDriverBooking && (
+            <Text style={styles.noPaymentNote}>
+              {editWithDriver
+                ? 'A driver switches this booking to our chauffeur rules: billed per 12 hours, no delivery fee, GHS 500 flat security deposit, chauffeur pickup times.'
+                : 'Without a driver the self-drive rules apply again: 24-hour days, 3-day minimum, the delivery fee, the standard deposit and self-drive pickup times.'}
+            </Text>
+          )}
+
+          {canChooseDriver && legacyDriverBooking && editWithDriver && days > 1 && (
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>Days with driver (of {days})</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
@@ -893,7 +926,7 @@ export default function BookingDetailScreen() {
               <Text style={styles.rowLabel}>Original Total ({originalDays} {originalDays === 1 ? 'day' : 'days'})</Text>
               <Text style={styles.rowValue}>{formatCurrency(booking.totalCost, activeCurrency)}</Text>
             </View>
-            {!!booking.withDriver?.selected !== editWithDriver && car?.drivenBy === 'Self-drive' && (
+            {!!booking.withDriver?.selected !== editWithDriver && canChooseDriver && (
               <View style={styles.row}>
                 <Text style={styles.rowLabel}>WopeCar driver</Text>
                 <Text style={styles.rowValue}>{editWithDriver ? 'Added' : 'Removed'}</Text>
@@ -970,7 +1003,7 @@ export default function BookingDetailScreen() {
         </View>
       )}
 
-      {mode === 'view' && car?.drivenBy === 'Self-drive' && (
+      {mode === 'view' && canChooseDriver && (
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Driver</Text>
           {booking.withDriver?.selected ? (

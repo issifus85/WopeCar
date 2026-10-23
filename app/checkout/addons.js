@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { formatCurrency, useWithDriverFeePerDay, calculateRentalPricing, clampDriverDays } from '../../constants/pricing';
+import { formatCurrency, useWithDriverFeePerDay, calculateRentalPricing, applyDriverMode } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
@@ -24,7 +24,9 @@ export default function CheckoutAddonsScreen() {
     logScreen('Checkout_Addons');
   }, []);
 
-  const [car, setCar] = useState(null);
+  // The car as fetched; `car` is the same car under the driver choice made on the FIRST step (a self-drive car with a driver follows chauffeur
+  // rules - see applyDriverMode), so billable days, add-on caps and everything below follow it.
+  const [carData, setCarData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   // { [addonName]: days } - only per_day addons ever read the day count,
   // but it's harmless to store for every selected addon.
@@ -33,18 +35,14 @@ export default function CheckoutAddonsScreen() {
     (draft.addons ?? []).forEach((a) => { map[a.name] = a.days; });
     return map;
   });
-  const [withDriver, setWithDriver] = useState(!!draft.withDriver);
-  // Set by checkout/dates.js when the selected self-drive range is under
-  // the 3-day minimum - the driver add-on is the only way that range is
-  // allowed to proceed, so it's forced on and can't be unchecked here.
-  const isWithDriverLocked = !!draft.withDriverLocked;
+  // The driver is chosen on the first step (Dates, Time & Location), not here.
+  const withDriver = !!draft.withDriver;
+  const car = useMemo(() => applyDriverMode(carData, withDriver), [carData, withDriver]);
   const withDriverFeePerDay = useWithDriverFeePerDay();
-  // How many days the driver is needed for - null = every billable day. Only changeable when the driver is optional.
-  const [driverDays, setDriverDays] = useState(draft.withDriverDays ?? null);
 
   useEffect(() => {
     fetchCarById(carId)
-      .then(setCar)
+      .then(setCarData)
       .finally(() => setIsLoading(false));
   }, [carId]);
 
@@ -78,7 +76,6 @@ export default function CheckoutAddonsScreen() {
       dailyRate: car.pricePerDay,
     }).billableDays;
   }, [car, draft.startDate, draft.endDate, draft.pickupTime, draft.returnTime]);
-  const shownDriverDays = clampDriverDays(driverDays ?? billableDays, billableDays);
 
   // A per-day regional add-on can never run for more days than the rental is billed for: a self-drive 10:00-to-10:00 trip over six
   // dates is 5 billed days, so the add-on caps at 5 (not 6). Taking the smaller of calendar and billable days keeps the same-day
@@ -109,8 +106,8 @@ export default function CheckoutAddonsScreen() {
     updateDraft({
       addons: Object.entries(selected).map(([name, addonDays]) => ({ name, days: Math.min(addonDays, addonCap) })),
       withDriver,
-      // null (= every day) unless the renter deliberately picked fewer days; a forced driver is always every day.
-      withDriverDays: withDriver && !isWithDriverLocked && billableDays > 1 && shownDriverDays < billableDays ? shownDriverDays : null,
+      // The driver always covers the whole trip now (chosen up front): null = every billed day.
+      withDriverDays: null,
     });
     router.push({ pathname: '/checkout/wopecare', params: { carId } });
   };
@@ -124,68 +121,23 @@ export default function CheckoutAddonsScreen() {
   }
 
   const addons = car?.regionalAddons ?? [];
-  const isSelfDrive = car?.drivenBy === 'Self-drive';
 
   return (
     <View style={styles.container}>
       <CheckoutHeader title="Regional Add-ons" step={2} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {isSelfDrive && (
-          <>
-            <Text style={styles.sectionTitle}>Driver Option</Text>
-            <Text style={styles.sectionSubtitle}>
-              {isWithDriverLocked
-                ? 'Your selected dates are under the 3-day self-drive minimum, so a WopeCar driver is included for your whole trip.'
-                : 'Prefer not to drive yourself? Add a WopeCar driver for the whole trip, or just the days you need.'}
-            </Text>
-            <View style={[styles.addonRow, withDriver && styles.addonRowSelected]}>
-              <TouchableOpacity
-                style={styles.addonToggleRow}
-                onPress={() => setWithDriver((prev) => !prev)}
-                disabled={isWithDriverLocked}
-              >
-                <View style={[styles.checkbox, withDriver && styles.checkboxChecked, isWithDriverLocked && styles.checkboxLocked]}>
-                  {withDriver && <Ionicons name="checkmark" size={14} color={colors.white} />}
-                </View>
-                <View style={styles.addonInfo}>
-                  <Text style={styles.addonName}>Add a Driver</Text>
-                  <Text style={styles.addonType}>
-                    {isWithDriverLocked ? 'Required for bookings under 3 days' : 'WopeCar provides a driver - choose how many days below'}
-                  </Text>
-                </View>
-                <Text style={styles.addonPrice}>+{formatCurrency(withDriverFeePerDay, activeCurrency)}/day</Text>
-              </TouchableOpacity>
-
-              {withDriver && !isWithDriverLocked && billableDays > 1 && (
-                <View style={styles.daysStepperRow}>
-                  <Text style={styles.daysStepperLabel}>Days with driver (of {billableDays})</Text>
-                  <View style={styles.daysStepper}>
-                    <TouchableOpacity
-                      style={styles.stepperButton}
-                      onPress={() => setDriverDays(clampDriverDays(shownDriverDays - 1, billableDays))}
-                      disabled={shownDriverDays <= 1}
-                    >
-                      <Ionicons name="remove" size={16} color={shownDriverDays <= 1 ? colors.disabled : colors.teal} />
-                    </TouchableOpacity>
-                    <Text style={styles.stepperValue}>{shownDriverDays} {shownDriverDays === 1 ? 'day' : 'days'}</Text>
-                    <TouchableOpacity
-                      style={styles.stepperButton}
-                      onPress={() => setDriverDays(clampDriverDays(shownDriverDays + 1, billableDays))}
-                      disabled={shownDriverDays >= billableDays}
-                    >
-                      <Ionicons name="add" size={16} color={shownDriverDays >= billableDays ? colors.disabled : colors.teal} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-              {withDriver && !isWithDriverLocked && billableDays > 1 && shownDriverDays < billableDays && (
-                <Text style={styles.sectionSubtitle}>
-                  With the driver on only some days, you drive the other days yourself - so the delivery fee and the standard security deposit still apply.
-                </Text>
-              )}
+        {withDriver && (
+          <View style={[styles.addonRow, styles.addonRowSelected]}>
+            <View style={styles.addonToggleRow}>
+              <Ionicons name="person-circle-outline" size={22} color={colors.teal} />
+              <View style={styles.addonInfo}>
+                <Text style={styles.addonName}>WopeCar driver included</Text>
+                <Text style={styles.addonType}>Chosen on the first step - covers your whole trip, billed per 12 hours</Text>
+              </View>
+              <Text style={styles.addonPrice}>+{formatCurrency(withDriverFeePerDay, activeCurrency)}/day</Text>
             </View>
-          </>
+          </View>
         )}
 
         <Text style={styles.sectionTitle}>Regional Travel Add-ons</Text>

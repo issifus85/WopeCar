@@ -375,3 +375,49 @@ describe('calculateRentalPricing - stored time formats', () => {
     expect(r.billableDays).toBe(4);
   });
 });
+
+describe('driver mode - a self-drive car booked WITH a WopeCar driver follows the chauffeur rules', () => {
+  const { applyDriverMode, calculateWithDriver, calculateSecurityDeposit, getMinBookingDays } = require('./pricing');
+  const selfDriveCar = { id: 'c1', drivenBy: 'Self-drive', pricePerDay: 1050 };
+
+  it('is a view of the car: chauffeur rules with a driver, the car\'s own type kept, and a no-op without one', () => {
+    const withDriver = applyDriverMode(selfDriveCar, true);
+    expect(withDriver.drivenBy).toBe('Chauffeur');
+    expect(withDriver.ownDrivenBy).toBe('Self-drive');
+    expect(applyDriverMode(withDriver, false).drivenBy).toBe('Self-drive'); // idempotent / reversible
+    expect(applyDriverMode(selfDriveCar, false)).toBe(selfDriveCar);
+    expect(applyDriverMode({ id: 'c2', drivenBy: 'Chauffeur' }, true).drivenBy).toBe('Chauffeur'); // a chauffeur car already has a driver
+    expect(applyDriverMode(null, true)).toBeNull();
+  });
+
+  const price = (car, startDate, endDate, pickupTime, returnTime) =>
+    calculateRentalPricing({ startDate, endDate, pickupTime, returnTime, drivenBy: car.drivenBy, dailyRate: car.pricePerDay, appWideDiscount: null });
+
+  it('bills in 12-hour units at the SAME daily rate; the driver adds 300 per billed unit', () => {
+    const car = applyDriverMode(selfDriveCar, true);
+    const cases = [
+      // [label, start, end, pickup, return, units]
+      ['same-day daytime hire 7AM-7PM', '2026-12-01', '2026-12-01', '7:00 AM', '7:00 PM', 1],
+      ['3 calendar days, 7AM-7PM each', '2026-12-01', '2026-12-03', '7:00 AM', '7:00 PM', 3],
+      ['overnight, 10AM to 10AM next day (24h)', '2026-12-01', '2026-12-02', '10:00 AM', '10:00 AM', 2],
+    ];
+    for (const [label, s, e, pt, rt, units] of cases) {
+      const p = price(car, s, e, pt, rt);
+      expect({ label, units: p.billableDays }).toEqual({ label, units });
+      expect(p.rentalCost).toBe(1050 * units);
+      const driver = calculateWithDriver(true, null, p.billableDays, 300);
+      expect(driver.cost).toBe(300 * units);
+      expect(driver.coversAll).toBe(true);
+    }
+    // the same 24-hour trip WITHOUT a driver is the self-drive rule: 1 day, no 12-hour count
+    expect(price(selfDriveCar, '2026-12-01', '2026-12-02', '10:00 AM', '10:00 AM').billableDays).toBe(1);
+  });
+
+  it('driver mode: flat chauffeur deposit and a 1-day minimum; without a driver the 25% deposit and the 3-day minimum return', () => {
+    const car = applyDriverMode(selfDriveCar, true);
+    expect(calculateSecurityDeposit(8568, car.drivenBy, true)).toBe(500);
+    expect(getMinBookingDays(car.drivenBy)).toBe(1);
+    expect(getMinBookingDays(selfDriveCar.drivenBy)).toBe(3);
+    expect(calculateSecurityDeposit(8568, selfDriveCar.drivenBy, false)).toBe(8568 * 0.25);
+  });
+});

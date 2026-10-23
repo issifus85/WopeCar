@@ -57,7 +57,7 @@ async function runCancel({ pickup, total = 3000, deposit = 600, status = 'pendin
   console.log('--- modify-booking ---');
   const settings = [
     { key: 'self_drive_delivery_fee', value: 250 }, { key: 'chauffeur_security_deposit', value: 500 }, { key: 'security_deposit_threshold', value: 2000 },
-    { key: 'security_deposit_flat', value: 500 }, { key: 'security_deposit_percentage', value: 0.25 },
+    { key: 'security_deposit_flat', value: 500 }, { key: 'security_deposit_percentage', value: 0.25 }, { key: 'with_driver_fee_per_day', value: 300 },
   ];
   const DEFS = [{ name: 'Volta', type: 'per_day', price: 350 }, { name: 'Eastern', type: 'per_day', price: 350 }];
   const baseBooking = () => ({
@@ -133,6 +133,35 @@ async function runCancel({ pickup, total = 3000, deposit = 600, status = 'pendin
     const b = baseBooking(); b.with_driver = true; b.with_driver_daily_rate = 300; b.with_driver_total_cost = 600; b.with_driver_days = null; b.delivery_fee = 0; b.security_deposit = 500; b.addon_names = []; b.addon_days = []; b.addons_cost = 0; b.wopecare_total_cost = 0; b.rental_cost = 2400; b.billable_days = 2; b.total_cost = 3500;
     const r = await runModify({ booking: b, callerId: 'A', body: { ...dates('2026-12-10', '2026-12-14'), billableDays: 4, rentalCost: 4800, totalCost: 5400, amountCharged: 0 }, car: { id: 'C1', price_per_day: 1200, regional_addons: DEFS } });
     check('extending a trip with a driver for every day re-prices the driver to 4 days (1200), not the old 600', r.booking.with_driver_total_cost === 1200 && r.booking.total_cost === 4800 + 1200 + 500, JSON.stringify([r.booking.with_driver_total_cost, r.booking.total_cost]));
+  }
+  // 7b. ADD a driver to a plain self-drive booking: the whole booking switches to chauffeur rules (stored as drive_type 'Chauffeur'): driver
+  // covers every billed 12-hour unit, no delivery fee, flat GHS 500 deposit. (The client has already counted 12-hour units: 4 here.)
+  {
+    const b = baseBooking(); b.addon_names = []; b.addon_days = []; b.addons_cost = 0; b.wopecare_total_cost = 0; b.delivery_fee = 250; b.security_deposit = 1000; b.rental_cost = 4000; b.billable_days = 4; b.total_cost = 4000 + 250 + 1000;
+    const r = await runModify({ booking: b, callerId: 'A', body: { ...dates('2026-12-10', '2026-12-12'), billableDays: 5, rentalCost: 5000, wopecareTotalCost: 0, withDriver: true, withDriverTotalCost: 1500, totalCost: 7000, amountCharged: 0 }, car: { id: 'C1', price_per_day: 1000, regional_addons: DEFS } });
+    check('adding a driver switches the booking to chauffeur rules (drive_type, no delivery, GHS 500 deposit, driver = units x rate, days null)',
+      r.status === 200 && r.booking.drive_type === 'Chauffeur' && r.booking.delivery_fee === 0 && r.booking.security_deposit === 500 && r.booking.with_driver === true
+      && r.booking.with_driver_total_cost === 1500 && r.booking.with_driver_days === null && r.booking.total_cost === 5000 + 1500 + 500, JSON.stringify([r.status, r.body, r.booking.drive_type, r.booking.delivery_fee, r.booking.security_deposit, r.booking.with_driver_total_cost, r.booking.total_cost]));
+  }
+  // 7c. REMOVE the driver from a chauffeur-rules (driver) booking: back to self-drive rules - delivery fee and the 25% deposit return.
+  {
+    const b = baseBooking(); b.drive_type = 'Chauffeur'; b.cars = { name: 'x', drive_type: 'Self-drive' }; b.with_driver = true; b.with_driver_daily_rate = 300; b.with_driver_total_cost = 1200; b.with_driver_days = null; b.delivery_fee = 0; b.security_deposit = 500; b.addon_names = []; b.addon_days = []; b.addons_cost = 0; b.wopecare_total_cost = 0; b.rental_cost = 4000; b.billable_days = 4; b.total_cost = 5700;
+    const r = await runModify({ booking: b, callerId: 'A', body: { ...dates('2026-12-10', '2026-12-14'), billableDays: 4, rentalCost: 4000, wopecareTotalCost: 0, withDriver: false, withDriverTotalCost: 0, totalCost: 1, amountCharged: 0 }, car: { id: 'C1', price_per_day: 1000, regional_addons: DEFS } });
+    check('removing the driver returns the booking to self-drive rules (drive_type, delivery 250, 25% deposit, no driver cost)',
+      r.status === 200 && r.booking.drive_type === 'Self-drive' && r.booking.delivery_fee === 250 && r.booking.security_deposit === 1000 && r.booking.with_driver === false && r.booking.with_driver_total_cost === 0 && r.booking.total_cost === 4000 + 250 + 1000,
+      JSON.stringify([r.status, r.body, r.booking.drive_type, r.booking.delivery_fee, r.booking.security_deposit, r.booking.with_driver_total_cost, r.booking.total_cost]));
+  }
+  // 7d. Extending a driver-rules booking without the client restating the driver (an older app build): the driver still covers every NEW unit.
+  {
+    const b = baseBooking(); b.drive_type = 'Chauffeur'; b.cars = { name: 'x', drive_type: 'Self-drive' }; b.with_driver = true; b.with_driver_daily_rate = 300; b.with_driver_total_cost = 600; b.with_driver_days = null; b.delivery_fee = 0; b.security_deposit = 500; b.addon_names = []; b.addon_days = []; b.addons_cost = 0; b.wopecare_total_cost = 0; b.rental_cost = 2000; b.billable_days = 2; b.total_cost = 3100;
+    const r = await runModify({ booking: b, callerId: 'A', body: { ...dates('2026-12-10', '2026-12-13'), billableDays: 4, rentalCost: 4000, totalCost: 1, amountCharged: 0 }, car: { id: 'C1', price_per_day: 1000, regional_addons: DEFS } });
+    check('extending a driver-rules booking re-prices the driver over the new 4 units (1200) and keeps chauffeur rules', r.booking.with_driver_total_cost === 1200 && r.booking.drive_type === 'Chauffeur' && r.booking.delivery_fee === 0 && r.booking.total_cost === 4000 + 1200 + 500, JSON.stringify([r.booking.with_driver_total_cost, r.booking.drive_type, r.booking.total_cost]));
+  }
+  // 7e. A genuine chauffeur CAR booking is untouched by the driver switch.
+  {
+    const b = baseBooking(); b.drive_type = 'Chauffeur'; b.cars = { name: 'x', drive_type: 'Chauffeur' }; b.delivery_fee = 0; b.security_deposit = 500; b.addon_names = []; b.addon_days = []; b.addons_cost = 0; b.wopecare_total_cost = 0; b.rental_cost = 3600; b.billable_days = 2; b.total_cost = 4100;
+    const r = await runModify({ booking: b, callerId: 'A', body: { ...dates('2026-12-10', '2026-12-10'), billableDays: 3, rentalCost: 5400, withDriver: true, totalCost: 1, amountCharged: 0 }, car: { id: 'C1', price_per_day: 1800, regional_addons: DEFS } });
+    check('a chauffeur car booking stays chauffeur with no separate driver charge', r.booking.drive_type === 'Chauffeur' && r.booking.with_driver_total_cost === 0 && r.booking.total_cost === 5400 + 500, JSON.stringify([r.booking.drive_type, r.booking.with_driver_total_cost, r.booking.total_cost]));
   }
   // 8. a stranger cannot modify; a cancelled booking cannot be modified
   { const r = await runModify({ callerId: 'S', body: { ...dates('2026-12-10', '2026-12-13'), billableDays: 3, rentalCost: 4091, totalCost: 1 } }); check('a stranger cannot modify (403)', r.status === 403, JSON.stringify([r.status, r.body])); }
