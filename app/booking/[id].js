@@ -407,7 +407,8 @@ export default function BookingDetailScreen() {
   const difference = recomputedTotal - (booking?.totalCost ?? 0);
 
   const minDays = car ? getMinBookingDays(car.drivenBy) : 1;
-  const isBelowMinimum = editStart && editEnd && days < minDays;
+  // Only judged once both times are picked - with a time blank the trip counts as 0 days, which is not a real minimum-length problem.
+  const isBelowMinimum = editStart && editEnd && editPickupTime && editReturnTime && days < minDays;
 
   // Self-drive delivers/collects the VEHICLE (WopeCar drops the car off,
   // then picks it back up) - chauffeur instead picks up and drops off the
@@ -787,6 +788,59 @@ export default function BookingDetailScreen() {
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Modify Trip Details</Text>
 
+          {canChooseDriver && (
+            <TouchableOpacity style={styles.checkboxRow} onPress={() => setEditWithDriver((v) => !v)}>
+              <View style={[styles.checkbox, editWithDriver && styles.checkboxChecked]}>
+                {editWithDriver && <Ionicons name="checkmark" size={14} color={colors.white} />}
+              </View>
+              <Text style={styles.checkboxLabel}>
+                With a WopeCar driver
+                {recomputedBreakdown.driverDailyRate > 0 || !editWithDriver
+                  ? ` (+${formatCurrency(editWithDriver ? recomputedBreakdown.driverDailyRate : (booking.withDriver?.dailyRate > 0 ? booking.withDriver.dailyRate : getWithDriverFeePerDay()), activeCurrency)}/day)`
+                  : ''}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {canChooseDriver && !!booking.withDriver?.selected !== editWithDriver && !legacyDriverBooking && (
+            <Text style={[styles.noPaymentNote, { marginBottom: 14 }]}>
+              {editWithDriver
+                ? 'A driver switches this booking to our chauffeur rules: billed per 12 hours, no delivery fee, GHS 500 flat security deposit, chauffeur pickup times.'
+                : 'Without a driver the self-drive rules apply again: 24-hour days, 3-day minimum, the delivery fee, the standard deposit and self-drive pickup times.'}
+            </Text>
+          )}
+
+          {canChooseDriver && legacyDriverBooking && editWithDriver && days > 1 && (
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Days with driver (of {days})</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                <TouchableOpacity
+                  onPress={() => setEditDriverDays(clampDriverDays(recomputedBreakdown.driverDays - 1, days))}
+                  disabled={recomputedBreakdown.driverDays <= 1}
+                  hitSlop={8}
+                >
+                  <Ionicons name="remove-circle-outline" size={28} color={recomputedBreakdown.driverDays <= 1 ? colors.disabled : colors.teal} />
+                </TouchableOpacity>
+                <Text style={styles.checkboxLabel}>
+                  {recomputedBreakdown.driverDays} {recomputedBreakdown.driverDays === 1 ? 'day' : 'days'}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    const next = clampDriverDays(recomputedBreakdown.driverDays + 1, days);
+                    setEditDriverDays(next >= days ? null : next);
+                  }}
+                  disabled={recomputedBreakdown.driverDays >= days}
+                  hitSlop={8}
+                >
+                  <Ionicons name="add-circle-outline" size={28} color={recomputedBreakdown.driverDays >= days ? colors.disabled : colors.teal} />
+                </TouchableOpacity>
+              </View>
+              {recomputedBreakdown.driverDays < days && (
+                <Text style={styles.noPaymentNote}>You drive the other days yourself, so the delivery fee and standard security deposit apply.</Text>
+              )}
+            </View>
+          )}
+
           <View style={styles.field}>
             <Text style={styles.fieldLabel}>Dates</Text>
             <TouchableOpacity style={styles.dateButton} onPress={() => setIsDatePickerVisible(true)}>
@@ -836,58 +890,6 @@ export default function BookingDetailScreen() {
             </View>
           )}
 
-          {canChooseDriver && (
-            <TouchableOpacity style={styles.checkboxRow} onPress={() => setEditWithDriver((v) => !v)}>
-              <View style={[styles.checkbox, editWithDriver && styles.checkboxChecked]}>
-                {editWithDriver && <Ionicons name="checkmark" size={14} color={colors.white} />}
-              </View>
-              <Text style={styles.checkboxLabel}>
-                With a WopeCar driver
-                {recomputedBreakdown.driverDailyRate > 0 || !editWithDriver
-                  ? ` (+${formatCurrency(editWithDriver ? recomputedBreakdown.driverDailyRate : (booking.withDriver?.dailyRate > 0 ? booking.withDriver.dailyRate : getWithDriverFeePerDay()), activeCurrency)}/day)`
-                  : ''}
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          {canChooseDriver && !!booking.withDriver?.selected !== editWithDriver && !legacyDriverBooking && (
-            <Text style={styles.noPaymentNote}>
-              {editWithDriver
-                ? 'A driver switches this booking to our chauffeur rules: billed per 12 hours, no delivery fee, GHS 500 flat security deposit, chauffeur pickup times.'
-                : 'Without a driver the self-drive rules apply again: 24-hour days, 3-day minimum, the delivery fee, the standard deposit and self-drive pickup times.'}
-            </Text>
-          )}
-
-          {canChooseDriver && legacyDriverBooking && editWithDriver && days > 1 && (
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Days with driver (of {days})</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-                <TouchableOpacity
-                  onPress={() => setEditDriverDays(clampDriverDays(recomputedBreakdown.driverDays - 1, days))}
-                  disabled={recomputedBreakdown.driverDays <= 1}
-                  hitSlop={8}
-                >
-                  <Ionicons name="remove-circle-outline" size={28} color={recomputedBreakdown.driverDays <= 1 ? colors.disabled : colors.teal} />
-                </TouchableOpacity>
-                <Text style={styles.checkboxLabel}>
-                  {recomputedBreakdown.driverDays} {recomputedBreakdown.driverDays === 1 ? 'day' : 'days'}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    const next = clampDriverDays(recomputedBreakdown.driverDays + 1, days);
-                    setEditDriverDays(next >= days ? null : next);
-                  }}
-                  disabled={recomputedBreakdown.driverDays >= days}
-                  hitSlop={8}
-                >
-                  <Ionicons name="add-circle-outline" size={28} color={recomputedBreakdown.driverDays >= days ? colors.disabled : colors.teal} />
-                </TouchableOpacity>
-              </View>
-              {recomputedBreakdown.driverDays < days && (
-                <Text style={styles.noPaymentNote}>You drive the other days yourself, so the delivery fee and standard security deposit apply.</Text>
-              )}
-            </View>
-          )}
 
           {!!car && days > 0 && (
             <View style={styles.recomputedBox}>
