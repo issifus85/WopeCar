@@ -1,5 +1,5 @@
 import { Alert } from 'react-native';
-import supabase from './supabase';
+import supabase, { edgeFunctionErrorMessage } from './supabase';
 import { notifyUser } from './adminNotify';
 import { sendBookingCancelledEmail, sendBookingConfirmedEmail } from './supabaseApi';
 import { getSelfDriveDeliveryFee, loadSelfDriveDeliveryFee, calculateSecurityDeposit, calculateRentalPricing, calculateWithDriver } from '../constants/pricing';
@@ -9,7 +9,7 @@ const BOOKING_SELECT = `
   id, booking_ref, renter_id, car_id, vendor_id, start_date, end_date,
   pickup_time, return_time, pickup_location, return_location, drive_type,
   addon_names, addon_days, rental_cost, addons_cost, delivery_fee,
-  security_deposit, total_cost, status, payment_ref, payment_status,
+  security_deposit, total_cost, status, payment_ref, payment_status, balance_due,
   vendor_accepted, created_at, updated_at, booking_source, refund_amount,
   wopecare_plan, wopecare_daily_rate, wopecare_total_cost, wopecare_coverage,
   with_driver, with_driver_daily_rate, with_driver_total_cost, with_driver_days,
@@ -148,6 +148,21 @@ export async function markBookingPaid(booking) {
     title: 'Payment recorded',
     body: `Payment for booking ${data.booking_ref} has been marked as received.`,
   });
+  return data;
+}
+
+/**
+ * Records the whole BALANCE on a paid booking whose total was raised as received outside the app (cash / transfer). Partial amounts are
+ * recorded from the web admin; here it is all-or-nothing to keep the phone flow to one tap. QuickBooks + the client's receipt follow.
+ */
+export async function recordBalanceReceived(booking) {
+  const { data: result, error: fnError } = await supabase.functions.invoke('confirm-balance-payment', {
+    body: { bookingId: booking.id, manual: true, amount: Number(booking.balance_due), note: 'Recorded from the WopeCar admin app' },
+  });
+  if (fnError) throw new Error(await edgeFunctionErrorMessage(fnError));
+  if (result?.error) throw new Error(result.error);
+  const { data, error } = await supabase.from('bookings').select(BOOKING_SELECT).eq('id', booking.id).single();
+  if (error) throw error;
   return data;
 }
 
@@ -293,39 +308,43 @@ export function recomputeBookingCost(booking, { startDate, endDate, pickupTime, 
  */
 export async function modifyBooking(booking, fields) {
   const costs = recomputeBookingCost(booking, fields, await getModifyPricingContext(booking, fields));
-  const patch = {
-    start_date: fields.startDate,
-    end_date: fields.endDate,
-    pickup_time: fields.pickupTime,
-    return_time: fields.returnTime,
-    pickup_location: fields.pickupLocation,
-    return_location: fields.returnLocation,
-    rental_cost: costs.rentalCost,
-    addons_cost: costs.addonsCost,
-    delivery_fee: costs.deliveryFee,
-    security_deposit: costs.securityDeposit,
-    wopecare_total_cost: costs.wopecareTotalCost,
-    with_driver_total_cost: costs.withDriverTotalCost,
-    promo_discount_amount: costs.promoDiscountAmount,
-    total_cost: costs.totalCost,
-    status: 'pending',
-  };
 
+  // Goes through the same modify-booking Edge Function as the renter's app, the website and the web admin. That is what re-prices the
+  // booking on the server (these client numbers are only a preview), records the change in the booking's history, recomputes the vendor
+  // payout, issues the new QuickBooks invoice + receipt, and tells the renter - including, when a PAID booking's total went up, the
+  // balance they now owe and how to pay it. (This used to patch the bookings row directly, so none of that happened.) Staff take no
+  // payment here, hence amountCharged 0.
+  const { data: result, error: fnError } = await supabase.functions.invoke('modify-booking', {
+    body: {
+      bookingId: booking.id,
+      startDate: fields.startDate,
+      endDate: fields.endDate,
+      pickupTime: fields.pickupTime,
+      returnTime: fields.returnTime,
+      pickupLocation: fields.pickupLocation,
+      returnLocation: fields.returnLocation,
+      rentalCost: costs.rentalCost,
+      addonsCost: costs.addonsCost,
+      deliveryFee: costs.deliveryFee,
+      securityDeposit: costs.securityDeposit,
+      totalCost: costs.totalCost,
+      billableDays: costs.days,
+      wopecareTotalCost: costs.wopecareTotalCost,
+      withDriverTotalCost: costs.withDriverTotalCost,
+      amountCharged: 0,
+    },
+  });
+  if (fnError) throw new Error(await edgeFunctionErrorMessage(fnError));
+  if (result?.error) throw new Error(result.error);
+
+  // A changed date/location invalidates whatever confirmation already happened: back to pending for a fresh look.
   const { data, error } = await supabase
     .from('bookings')
-    .update(patch)
+    .update({ status: 'pending' })
     .eq('id', booking.id)
     .select(BOOKING_SELECT)
     .single();
   if (error) throw error;
-
-  await notifyUser({
-    userId: data.renter_id,
-    type: 'booking_modified',
-    title: 'Your booking was modified',
-    bookingId: data.id,
-    body: `Booking ${data.booking_ref} was updated by WopeCar. New dates: ${fields.startDate} to ${fields.endDate}. It is now pending reconfirmation.`,
-  });
 
   return data;
 }

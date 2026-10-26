@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import { payBookingBalance } from '../../services/balancePayment';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
@@ -125,6 +126,25 @@ export default function BookingDetailScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { bookings, modifyBooking, cancelBooking, refreshBookings } = useBookings();
   const { conversations, notifyBookingEvent } = useInbox();
+
+  // Balance due: staff raised the total of this PAID booking without taking payment (bookings.balance_due). The renter pays exactly that
+  // here; the server verifies the Paystack charge and clears the balance.
+  const [isPayingBalance, setIsPayingBalance] = useState(false);
+  const handlePayBalance = async () => {
+    if (isPayingBalance) return;
+    const target = bookings.find((b) => b.id === id);
+    if (!target || !(target.balanceDue > 0)) return;
+    setIsPayingBalance(true);
+    try {
+      const result = await payBookingBalance(target.id, target.balanceDue);
+      await refreshBookings();
+      Alert.alert(result.balanceAfter > 0 ? 'Payment received' : 'Balance paid', result.balanceAfter > 0 ? 'Thank you - part of the balance is still due.' : 'Thank you - your booking is paid in full. A receipt is on its way to your email.');
+    } catch (e) {
+      Alert.alert('Payment not completed', e?.message || 'Please try again.');
+    } finally {
+      setIsPayingBalance(false);
+    }
+  };
 
   // A custom headerLeft, not just the default native-stack back button -
   // that default dispatches a bare GO_BACK action, which React Navigation's
@@ -609,6 +629,17 @@ export default function BookingDetailScreen() {
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setDirectionsPromptDismissed(true)} hitSlop={8}>
             <Ionicons name="close" size={18} color={colors.textSubtle} />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {mode === 'view' && booking.balanceDue > 0 && booking.status !== 'Cancelled' && (
+        <View style={styles.balanceCard}>
+          <Text style={styles.balanceLabel}>Balance due</Text>
+          <Text style={styles.balanceAmount}>{formatCurrency(booking.balanceDue, activeCurrency)}</Text>
+          <Text style={styles.balanceNote}>Your booking total went up with a recent change and this amount is still unpaid. Pay it to keep your booking in good standing.</Text>
+          <TouchableOpacity style={[styles.balanceButton, isPayingBalance && { opacity: 0.6 }]} disabled={isPayingBalance} onPress={handlePayBalance}>
+            {isPayingBalance ? <ActivityIndicator color={colors.white} /> : <Text style={styles.balanceButtonText}>Pay balance</Text>}
           </TouchableOpacity>
         </View>
       )}
@@ -1298,6 +1329,18 @@ function createStyles(colors) {
     fontSize: 13,
     color: colors.white,
   },
+  balanceCard: {
+    backgroundColor: colors.warningBg ?? '#FFF3E0',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  balanceLabel: { fontFamily: FONTS.semiBold, fontSize: 13, color: '#975125' },
+  balanceAmount: { fontFamily: FONTS.bold, fontSize: 26, color: colors.textPrimary, marginVertical: 4 },
+  balanceNote: { fontFamily: FONTS.regular, fontSize: 12.5, color: colors.textSubtle, textAlign: 'center', marginBottom: 12, lineHeight: 18 },
+  balanceButton: { backgroundColor: colors.teal, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 28, minWidth: 160, alignItems: 'center' },
+  balanceButtonText: { fontFamily: FONTS.semiBold, fontSize: 14, color: colors.white },
   sectionTitle: {
     fontFamily: FONTS.bold,
     fontSize: 15,

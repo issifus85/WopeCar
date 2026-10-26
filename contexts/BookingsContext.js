@@ -51,6 +51,9 @@ function normalizeSupabaseBooking(row) {
     promoCode: row.promo_code ?? null,
     promoDiscountAmount: Number(row.promo_discount_amount ?? 0),
     billableDays: row.billable_days ?? null,
+    // Still owed on a PAID booking whose total staff raised without taking payment (0 = settled).
+    balanceDue: Number(row.balance_due ?? 0),
+    paymentStatus: row.payment_status ?? null,
     paystackReference: row.payment_ref,
     status: STATUS_MAP[row.status] ?? 'Pending',
     createdAt: row.created_at,

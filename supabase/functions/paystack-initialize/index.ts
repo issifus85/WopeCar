@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'PAYSTACK_SECRET_KEY is not configured for this project.' }, 500);
     }
 
-    const { amount, callbackUrl, bookingIds } = await req.json();
+    const { amount, callbackUrl, bookingIds, purpose } = await req.json();
     const numericAmount = Number(amount);
     if (!numericAmount || numericAmount <= 0) {
       return jsonResponse({ error: 'A positive amount is required.' }, 400);
@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
     // paystack-webhook can later check the payment against exactly these
     // bookings, and so the webhook can finish them if the client never does.
     // Older app builds don't send it and simply get no metadata.
-    let metadata: { booking_ids: string[]; user_id: string } | undefined;
+    let metadata: { booking_ids: string[]; user_id: string; purpose?: string } | undefined;
     if (Array.isArray(bookingIds) && bookingIds.length > 0) {
       const ids = Array.from(new Set(bookingIds.filter((id: unknown) => typeof id === 'string'))) as string[];
       const { data: owned } = await adminClient.from('bookings').select('id').in('id', ids).eq('renter_id', user.id);
@@ -79,6 +79,21 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: 'These bookings do not belong to this account.' }, 403);
       }
       metadata = { booking_ids: ids, user_id: user.id };
+
+      // Paying the BALANCE on a paid booking whose total staff raised (bookings.balance_due): exactly one booking, and the charge must be
+      // the balance itself - confirm-balance-payment later only accepts transactions stamped this way.
+      if (purpose === 'balance') {
+        if (ids.length !== 1) return jsonResponse({ error: 'A balance payment is for one booking.' }, 400);
+        const { data: bal } = await adminClient.from('bookings').select('balance_due').eq('id', ids[0]).maybeSingle();
+        const balance = Number(bal?.balance_due ?? 0);
+        if (balance <= 0) return jsonResponse({ error: 'This booking has no balance due.' }, 409);
+        if (Math.abs(balance - numericAmount) > 0.5) {
+          return jsonResponse({ error: `The balance due is GHS ${balance.toFixed(2)}.` }, 400);
+        }
+        metadata.purpose = 'balance';
+      }
+    } else if (purpose === 'balance') {
+      return jsonResponse({ error: 'A balance payment needs the booking id.' }, 400);
     }
 
     const { data: profile } = await adminClient.from('users').select('email').eq('id', user.id).maybeSingle();

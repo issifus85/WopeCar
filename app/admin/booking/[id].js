@@ -13,7 +13,7 @@ import ConfirmModal from '../../../components/ConfirmModal';
 import ReasonModal from '../../../components/admin/ReasonModal';
 import DateRangeModal from '../../../components/DateRangeModal';
 import {
-  getBooking, confirmBooking, cancelBooking, markBookingPaid, markBookingCompleted,
+  getBooking, confirmBooking, cancelBooking, markBookingPaid, markBookingCompleted, recordBalanceReceived,
   modifyBooking, recomputeBookingCost, getModifyPricingContext,
 } from '../../../services/adminBookingsApi';
 import { getUserVerificationDocuments, getBookingInspections, getInspectionReportSignedUrl } from '../../../services/adminDocumentsApi';
@@ -583,6 +583,9 @@ export default function AdminBookingDetailScreen() {
               <SectionHeading>Payment & Status</SectionHeading>
               <Row label="Payment Reference" value={booking.payment_ref || 'Not set'} styles={styles} />
               <Row label="Payment Status" value={booking.payment_status} styles={styles} />
+              {booking.payment_status === 'paid' && Number(booking.balance_due) > 0 && (
+                <Row label="Balance Due" value={formatCurrency(booking.balance_due)} styles={styles} />
+              )}
               <Row label="Vendor Acceptance" value={booking.vendor_accepted ? 'Accepted' : 'Not yet accepted'} styles={styles} />
               <Row label="Booking Status" value={booking.status} styles={styles} />
               <Row label="Created At" value={new Date(booking.created_at).toLocaleString()} styles={styles} />
@@ -605,6 +608,12 @@ export default function AdminBookingDetailScreen() {
                 <TouchableOpacity style={styles.secondaryButton} disabled={isSaving} onPress={() => setPendingAction('markPaid')}>
                   <Ionicons name="cash-outline" size={16} color={colors.teal} />
                   <Text style={styles.secondaryButtonText}>Mark as Paid</Text>
+                </TouchableOpacity>
+              )}
+              {booking.payment_status === 'paid' && Number(booking.balance_due) > 0 && (
+                <TouchableOpacity style={styles.secondaryButton} disabled={isSaving} onPress={() => setPendingAction('recordBalance')}>
+                  <Ionicons name="cash-outline" size={16} color={colors.teal} />
+                  <Text style={styles.secondaryButtonText}>Record Balance Received</Text>
                 </TouchableOpacity>
               )}
               {(booking.status === 'pending' || booking.status === 'confirmed') && (
@@ -661,7 +670,22 @@ export default function AdminBookingDetailScreen() {
               <View style={styles.previewCard}>
                 <Row label="New Total Days" value={previewCosts.days} styles={styles} />
                 <Row label="New Total Cost" value={formatCurrency(previewCosts.totalCost)} styles={styles} />
-                <Text style={styles.previewNote}>Booking will revert to pending until reconfirmed.</Text>
+                {booking.payment_status === 'paid' && Math.abs(previewCosts.totalCost - Number(booking.total_cost)) > 0.005 && (
+                  <Row
+                    label={previewCosts.totalCost > Number(booking.total_cost) ? 'Client will owe' : 'Total goes down by'}
+                    value={formatCurrency(
+                      previewCosts.totalCost > Number(booking.total_cost)
+                        ? Math.max(0, previewCosts.totalCost - Number(booking.total_cost) + Number(booking.balance_due ?? 0))
+                        : Number(booking.total_cost) - previewCosts.totalCost
+                    )}
+                    styles={styles}
+                  />
+                )}
+                <Text style={styles.previewNote}>
+                  {booking.payment_status === 'paid' && previewCosts.totalCost > Number(booking.total_cost)
+                    ? 'The booking is already paid, so the client is emailed and notified to pay this balance. It will revert to pending until reconfirmed.'
+                    : 'Booking will revert to pending until reconfirmed.'}
+                </Text>
               </View>
             )}
 
@@ -708,6 +732,14 @@ export default function AdminBookingDetailScreen() {
         onCancel={() => setPendingAction(null)}
       />
       <ConfirmModal
+        visible={pendingAction === 'recordBalance'}
+        title="Record balance received?"
+        message={`${formatCurrency(booking.balance_due)} collected outside the app (cash or transfer) will be recorded against ${booking.booking_ref}, and the client is emailed a receipt.`}
+        confirmLabel="Record Payment"
+        onConfirm={() => runAction(() => recordBalanceReceived(booking))}
+        onCancel={() => setPendingAction(null)}
+      />
+      <ConfirmModal
         visible={pendingAction === 'markCompleted'}
         title="Mark as completed?"
         message={`${booking.booking_ref} will be marked as completed.`}
@@ -718,7 +750,7 @@ export default function AdminBookingDetailScreen() {
       <ConfirmModal
         visible={pendingAction === 'saveModify'}
         title="Save these changes?"
-        message="The renter will be notified, and the booking will revert to pending until reconfirmed."
+        message="The renter will be notified (and asked to pay any balance if the booking is already paid), and the booking will revert to pending until reconfirmed."
         confirmLabel="Save Changes"
         onConfirm={handleSaveModify}
         onCancel={() => setPendingAction(null)}

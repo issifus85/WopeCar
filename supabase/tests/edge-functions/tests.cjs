@@ -169,6 +169,71 @@ async function runCancel({ pickup, total = 3000, deposit = 600, status = 'pendin
   // 9. staff (admin) can lower/raise without payment
   { const r = await runModify({ callerId: 'A', body: { ...dates('2026-12-10', '2026-12-17'), billableDays: 7, rentalCost: 9545, wopecareTotalCost: 756, totalCost: 1, amountCharged: 0 } }); check('admin can raise a paid booking without a Paystack charge (balance collected separately)', r.status === 200, JSON.stringify([r.status, r.body])); }
 
+  // 10. balance due: staff raise a paid booking with no payment -> the shortfall becomes bookings.balance_due and the renter is told
+  {
+    const r = await runModify({ callerId: 'A', body: { ...dates('2026-12-10', '2026-12-17'), billableDays: 7, rentalCost: 9545, wopecareTotalCost: 756, totalCost: 1, amountCharged: 0 } });
+    const serverTotal = 9545 + 1750 + 250 + 2823.75 + 756; const diff = Math.round((serverTotal - 11500) * 100) / 100;
+    check('staff raising a paid booking records the difference as balance_due', r.status === 200 && r.booking.balance_due === diff && r.body.balanceDue === diff, JSON.stringify([r.status, r.booking.balance_due, diff]));
+    const note = r.tables.notifications.find((n) => n.type === 'booking_modified');
+    check('the renter notification says a balance is due, with the amount', !!note && note.title.includes('balance due') && note.body.includes('Balance due'), JSON.stringify(note));
+  }
+  {
+    const r = await runModify({ callerId: 'A', body: { ...dates('2026-12-10', '2026-12-13'), billableDays: 3, rentalCost: 4091, wopecareTotalCost: 324, totalCost: 1, amountCharged: 0 } });
+    check('staff lowering a paid booking leaves no balance due', r.status === 200 && !(r.booking.balance_due > 0), JSON.stringify([r.status, r.booking.balance_due]));
+  }
+  {
+    // an existing balance is reduced by a later reduction, never below zero
+    const b = baseBooking(); b.balance_due = 400;
+    const r = await runModify({ booking: b, callerId: 'A', body: { ...dates('2026-12-10', '2026-12-13'), billableDays: 3, rentalCost: 4091, wopecareTotalCost: 324, totalCost: 1, amountCharged: 0 } });
+    check('a later reduction takes an existing balance back down (never below 0)', r.booking.balance_due === 0, String(r.booking.balance_due));
+  }
+  {
+    // a booking that is not paid yet never gets a balance (they pay the full new total when they pay)
+    const b = baseBooking(); b.payment_status = 'unpaid'; b.status = 'pending';
+    const r = await runModify({ booking: b, callerId: 'A', body: { ...dates('2026-12-10', '2026-12-17'), billableDays: 7, rentalCost: 9545, wopecareTotalCost: 756, totalCost: 1, amountCharged: 0 } });
+    check('an unpaid booking never gets a balance due', r.status === 200 && !(r.booking.balance_due > 0), JSON.stringify([r.status, r.booking.balance_due]));
+  }
+
+  // ============================== confirm-balance-payment ==============================
+  console.log('--- confirm-balance-payment ---');
+  async function runBalance({ balance = 300, callerId = 'R', body, tx = null, payments = [], mods }) {
+    const tables = {
+      users: [{ id: 'R', role: 'renter', email: 'r@example.com' }, { id: 'A', role: 'admin', email: 'a@example.com' }, { id: 'X', role: 'renter', email: 'x@example.com' }],
+      bookings: [{ id: 'B1', booking_ref: 'WC-T-9', renter_id: 'R', payment_status: 'paid', payment_ref: 'ps_main', total_cost: 3300, balance_due: balance }],
+      booking_balance_payments: payments, internal_secrets: [], notifications: [],
+      booking_modifications: mods ?? [{ id: 'M1', booking_id: 'B1', old_total_cost: 3000, amount_charged: 0, payment_ref: null, created_at: '2026-10-20' }],
+    };
+    const { client, log } = makeDb(tables);
+    const fetchStub = async (url) => ({ ok: true, json: async () => (String(url).includes('/transaction/verify/') ? tx ?? { status: false, message: 'Transaction reference not found' } : {}) });
+    const handler = loadFunction('confirm-balance-payment/index.ts', { createClient: (u, k, o) => client(o?.global ? callerId : null), env: { SUPABASE_URL: 'u', SUPABASE_ANON_KEY: 'a', SUPABASE_SERVICE_ROLE_KEY: 's', PAYSTACK_SECRET_KEY: 'k' }, fetch: fetchStub });
+    const res = await handler(req({ bookingId: 'B1', ...body }));
+    return { status: res.status, body: await res.json(), tables, log };
+  }
+  const goodTx = (over = {}) => ({ status: true, data: { status: 'success', amount: 30000, currency: 'GHS', reference: 'ps_bal', customer: { email: 'r@example.com' }, metadata: { booking_ids: ['B1'], user_id: 'R', purpose: 'balance' }, ...over } });
+  {
+    const r = await runBalance({ body: { reference: 'ps_bal' }, tx: goodTx() });
+    check('a Paystack payment of the balance clears it', r.status === 200 && r.body.status === 'applied' && r.tables.bookings[0].balance_due === 0, JSON.stringify([r.status, r.body, r.tables.bookings[0].balance_due]));
+    check('the payment is recorded and booked onto the modification (so a cancel refunds against what was paid)', r.tables.booking_balance_payments.length === 1 && r.tables.booking_modifications[0].amount_charged === 300 && r.tables.booking_modifications[0].payment_ref === 'ps_bal', JSON.stringify([r.tables.booking_balance_payments, r.tables.booking_modifications]));
+    check('QuickBooks is told about the payment', r.log.invokes.some((i) => i.name === 'quickbooks-record-balance-payment'));
+  }
+  {
+    const r = await runBalance({ balance: 0, body: { reference: 'ps_bal' }, tx: goodTx(), payments: [{ id: 'P0', booking_id: 'B1', amount: 300, reference: 'ps_bal' }] });
+    check('confirming the same payment twice changes nothing (idempotent)', r.status === 200 && r.body.status === 'already_applied' && r.tables.booking_balance_payments.length === 1, JSON.stringify([r.status, r.body]));
+  }
+  { const r = await runBalance({ body: { reference: 'ps_bal' }, tx: goodTx({ metadata: { booking_ids: ['B1'], user_id: 'R' } }) }); check('a payment not started as a balance payment is rejected (403)', r.status === 403 && r.tables.bookings[0].balance_due === 300, JSON.stringify([r.status, r.body])); }
+  { const r = await runBalance({ body: { reference: 'ps_main' }, tx: goodTx({ reference: 'ps_main' }) }); check('the booking’s own original payment reference can not be replayed as a balance payment (409)', r.status === 409, JSON.stringify([r.status, r.body])); }
+  { const r = await runBalance({ callerId: 'X', body: { reference: 'ps_bal' }, tx: goodTx() }); check('another account cannot clear someone else’s balance (403)', r.status === 403 && r.tables.bookings[0].balance_due === 300, JSON.stringify([r.status, r.body])); }
+  { const r = await runBalance({ body: { reference: 'ps_bal' }, tx: goodTx({ status: 'failed' }) }); check('a failed Paystack payment does not clear anything', r.body.status === 'not_paid' && r.tables.bookings[0].balance_due === 300, JSON.stringify([r.status, r.body])); }
+  { const r = await runBalance({ body: { reference: 'ps_bal' }, tx: goodTx({ amount: 12000 }) }); check('a part payment through Paystack leaves the rest due (60%)', r.status === 200 && r.tables.bookings[0].balance_due === 180, JSON.stringify([r.status, r.body, r.tables.bookings[0].balance_due])); }
+  {
+    const r = await runBalance({ callerId: 'A', body: { manual: true, amount: 100, note: 'cash at office' } });
+    check('staff can record money collected outside the app (partial)', r.status === 200 && r.body.balanceAfter === 200 && r.tables.booking_balance_payments[0].method === 'manual', JSON.stringify([r.status, r.body]));
+    const r2 = await runBalance({ callerId: 'A', body: { manual: true, amount: 500 } });
+    check('staff cannot record more than the balance owed (400)', r2.status === 400 && r2.tables.bookings[0].balance_due === 300, JSON.stringify([r2.status, r2.body]));
+    const r3 = await runBalance({ callerId: 'R', body: { manual: true, amount: 100 } });
+    check('a renter cannot record a manual payment for themselves (403)', r3.status === 403 && r3.tables.bookings[0].balance_due === 300, JSON.stringify([r3.status, r3.body]));
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

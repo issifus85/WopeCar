@@ -1,4 +1,4 @@
-import supabase from './supabase';
+import supabase, { edgeFunctionErrorMessage } from './supabase';
 
 // Paystack's hosted checkout needs a real http(s) callback_url (it doesn't
 // reliably honor the app's custom-scheme deep link - exp:// in Expo Go,
@@ -30,11 +30,12 @@ export function buildPaystackCallbackUrl(appRedirectUrl) {
  * nothing has written since auth moved to Supabase - every real booking's
  * payment step was silently 401ing before this.
  */
-export async function initializePayment({ amount, callbackUrl, bookingIds }) {
+export async function initializePayment({ amount, callbackUrl, bookingIds, purpose }) {
   const { data, error } = await supabase.functions.invoke('paystack-initialize', {
-    body: { amount, callbackUrl, bookingIds },
+    body: { amount, callbackUrl, bookingIds, ...(purpose ? { purpose } : {}) },
   });
-  if (error) throw error;
+  // A balance payment is refused with a plain-language reason (nothing due / the amount changed) - surface it as is.
+  if (error) throw purpose === 'balance' ? new Error(await edgeFunctionErrorMessage(error)) : error;
   return data;
 }
 

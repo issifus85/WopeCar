@@ -36,6 +36,7 @@ function makeDb(tables) {
     };
     const b = {
       select() { return b; },
+      limit() { return b; },
       order() { return b; },
       or() { return b; },
       eq(col, val) { state.filters.push({ type: 'eq', col, val }); return b; },
@@ -70,6 +71,7 @@ function loadFunction(rel, deps) {
     if (spec.endsWith('_shared/modifyPricing.ts')) return loadShared('_shared/modifyPricing.ts');
     if (spec.endsWith('_shared/time.ts')) return loadShared('_shared/time.ts');
     if (spec.endsWith('_shared/cronAuth.ts')) return { getInternalSecret: async () => null };
+    if (spec.endsWith('_shared/balancePayment.ts') || spec.endsWith('_shared/confirmPayment.ts')) return loadWithFetch(spec.split('/').pop(), deps);
     return {};
   };
   let handler;
@@ -85,6 +87,16 @@ function loadShared(rel) {
   const m = { exports: {} };
   new Function('module', 'exports', js)(m, m.exports);
   return (sharedCache[rel] = m.exports);
+}
+
+// Shared modules that call Paystack (confirmPayment.ts, balancePayment.ts): loaded fresh per test so they see that test's fake fetch.
+function loadWithFetch(file, deps) {
+  const src = fs.readFileSync(path.join(FN, '_shared', file), 'utf8');
+  const js = ts.transpileModule(src, { compilerOptions: { module: 'CommonJS', target: 'ES2022' } }).outputText;
+  const m = { exports: {} };
+  const req = (spec) => (spec.endsWith('confirmPayment.ts') ? loadWithFetch('confirmPayment.ts', deps) : {});
+  new Function('module', 'exports', 'require', 'fetch', js)(m, m.exports, req, deps.fetch);
+  return m.exports;
 }
 
 module.exports = { makeDb, loadFunction };

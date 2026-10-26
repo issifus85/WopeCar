@@ -21,6 +21,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { confirmBookingsForReference, fetchPaystackTransaction, PaymentRejected } from '../_shared/confirmPayment.ts';
+import { confirmBalanceFromPaystack, triggerBalanceQuickbooks } from '../_shared/balancePayment.ts';
 
 async function hmacSha512Hex(key: string, message: string) {
   const cryptoKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(key), { name: 'HMAC', hash: 'SHA-512' }, false, ['sign']);
@@ -60,6 +61,13 @@ Deno.serve(async (req) => {
     if (!Array.isArray(bookingIds) || bookingIds.length === 0 || !payerId) return new Response('no bookings on this transaction');
 
     const adminClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+    if ((tx.metadata as { purpose?: string } | null)?.purpose === 'balance') {
+      // A balance payment (confirm-balance-payment is the client-side twin; whichever runs second is a no-op).
+      const result = await confirmBalanceFromPaystack(adminClient, { bookingId: bookingIds[0], reference, tx, payerId });
+      if (result.status === 'applied') await triggerBalanceQuickbooks(adminClient, result.paymentId);
+      console.log(`paystack-webhook ${reference}: balance ${result.status}`);
+      return new Response('ok');
+    }
     const outcomes = await confirmBookingsForReference(adminClient, { reference, bookingIds, tx, payerId });
     console.log(`paystack-webhook ${reference}: ${JSON.stringify(outcomes)}`);
     return new Response('ok');

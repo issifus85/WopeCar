@@ -156,12 +156,21 @@ function costBreakdownHtml(mod: any) {
 }
 
 // deno-lint-ignore no-explicit-any
-function buildClientEmailHtml({ booking, car, mod }: any) {
+function buildClientEmailHtml({ booking, car, mod, balanceDue, payUrl }: any) {
   const amountLine = mod.amount_charged > 0
     ? `<div style="background:#EAF7F0;border-radius:12px;padding:14px 16px;font-size:13px;color:#1F7A4D;margin-bottom:16px;"><strong>${formatCurrency(mod.amount_charged)}</strong> was charged to cover this change.</div>`
     : mod.amount_charged < 0
       ? `<div style="background:#FDF3E7;border-radius:12px;padding:14px 16px;font-size:13px;color:#975125;margin-bottom:16px;">This change lowers your total by <strong>${formatCurrency(Math.abs(mod.amount_charged))}</strong> - our team will follow up about a refund for the difference.</div>`
       : '';
+  const balanceBlock = balanceDue > 0
+    ? `<div style="background:#FDF3E7;border-radius:12px;padding:16px;margin-bottom:16px;text-align:center;">
+        <div style="font-size:13px;color:#975125;">Balance due</div>
+        <div style="font-size:26px;font-weight:bold;color:#154B59;margin:4px 0 8px;">${formatCurrency(balanceDue)}</div>
+        <div style="font-size:13px;color:#5b6b6c;margin-bottom:14px;">Your booking total went up with this change, and this amount has not been paid yet. Please pay it to keep your booking in good standing.</div>
+        <a href="${escapeHtml(payUrl)}" style="display:inline-block;background:#154B59;color:#ffffff;text-decoration:none;font-weight:bold;font-size:14px;padding:12px 28px;border-radius:10px;">Pay ${formatCurrency(balanceDue)} now</a>
+        <div style="font-size:12px;color:#999999;margin-top:12px;">You can also pay it in the WopeCar app: open the booking and tap Pay balance.</div>
+      </div>`
+    : '';
   const body = `
       <div style="padding:28px 24px;">
         <div style="text-align:center;margin-bottom:24px;">
@@ -173,6 +182,7 @@ function buildClientEmailHtml({ booking, car, mod }: any) {
         <div style="font-size:13px;font-weight:bold;color:#154B59;margin-bottom:6px;">Cost breakdown</div>
         ${costBreakdownHtml(mod)}
         ${amountLine}
+        ${balanceBlock}
       </div>
       <div style="background:#f5f5f5;padding:16px 24px;text-align:center;">
         <p style="font-size:12px;color:#999999;margin:0;">Questions about this change? Reply to this email or message support in the app.</p>
@@ -181,7 +191,7 @@ function buildClientEmailHtml({ booking, car, mod }: any) {
 }
 
 // deno-lint-ignore no-explicit-any
-function buildAdminEmailHtml({ booking, car, renter, mod, modifiedBy }: any) {
+function buildAdminEmailHtml({ booking, car, renter, mod, modifiedBy, balanceDue }: any) {
   const body = `
       <div style="padding:28px 24px;">
         <div style="text-align:center;margin-bottom:20px;">
@@ -197,6 +207,7 @@ function buildAdminEmailHtml({ booking, car, renter, mod, modifiedBy }: any) {
         ${costBreakdownHtml(mod)}
         <table style="width:100%;border-collapse:collapse;font-size:14px;border-top:1px solid #e5e5e5;padding-top:8px;">
           <tr><td style="padding:6px 0;color:#5b6b6c;">Amount ${mod.amount_charged >= 0 ? 'charged' : 'credited'}</td><td style="padding:6px 0;text-align:right;color:#154B59;">${formatCurrency(Math.abs(mod.amount_charged))}</td></tr>
+          ${balanceDue > 0 ? `<tr><td style="padding:6px 0;color:#975125;"><strong>Balance due from the client</strong></td><td style="padding:6px 0;text-align:right;color:#975125;"><strong>${formatCurrency(balanceDue)}</strong> (they were emailed and notified to pay it)</td></tr>` : ''}
         </table>
       </div>`;
   return emailShell(body);
@@ -456,6 +467,15 @@ Deno.serve(async (req) => {
     const vendorPayoutTotal = Math.round(payoutPerDay * Math.max(newBillableDays, 0) * 100) / 100;
     const wopecarMargin = Math.round((newTotalCost - vendorPayoutTotal) * 100) / 100;
 
+    // Balance due on a PAID booking: what the new total adds beyond what was collected with this change. Staff changes collect nothing
+    // (amountCharged 0), so a raise becomes a balance the renter is asked to pay; a later reduction (or a payment) takes it back down. A
+    // renter's own raise is paid on Paystack first (see the 409 above), so for them the difference is already covered and nothing is added.
+    const collectedNow = Math.max(0, Number(amountCharged ?? (newTotalCost - oldTotal)));
+    const previousBalance = Number(booking.balance_due ?? 0);
+    const balanceDue = booking.payment_status === 'paid'
+      ? Math.max(0, Math.round((previousBalance + (newTotalCost - oldTotal) - collectedNow) * 100) / 100)
+      : 0;
+
     const updatePatch: Record<string, unknown> = {
       start_date: startDate,
       end_date: endDate,
@@ -474,6 +494,7 @@ Deno.serve(async (req) => {
       vendor_payout_per_day: payoutPerDay,
       vendor_payout_total: vendorPayoutTotal,
       wopecar_margin: wopecarMargin,
+      ...(booking.payment_status === 'paid' && balanceDue !== previousBalance ? { balance_due: balanceDue } : {}),
     };
     if (priced.addonDays) updatePatch.addon_days = priced.addonDays;
     if (wopecareTotalCost != null) {
@@ -556,6 +577,7 @@ Deno.serve(async (req) => {
     const breakdownBody = `Booking ${booking.booking_ref}: `
       + `${formatDate(mod.old_start_date)} → ${formatDate(mod.old_end_date)} is now ${formatDate(mod.new_start_date)} → ${formatDate(mod.new_end_date)}. `
       + `Total ${formatCurrency(mod.old_total_cost)} → ${formatCurrency(mod.new_total_cost)}.`
+      + (balanceDue > 0 ? ` Balance due: ${formatCurrency(balanceDue)} - open the booking to pay it.` : '')
       + (driverPatch && driverPatch.with_driver !== (!!booking.with_driver || Number(booking.with_driver_total_cost ?? 0) > 0)
         ? ` A WopeCar driver was ${driverPatch.with_driver ? 'added to' : 'removed from'} the booking.`
         : '');
@@ -563,12 +585,12 @@ Deno.serve(async (req) => {
     await adminClient.from('notifications').insert({
       user_id: booking.renter_id,
       type: 'booking_modified',
-      title: 'Booking updated',
+      title: balanceDue > 0 ? 'Booking updated - balance due' : 'Booking updated',
       body: breakdownBody,
       booking_id: booking.id,
     });
 
-    const pushNotifications = [{ userId: booking.renter_id, title: 'Booking updated', body: breakdownBody }];
+    const pushNotifications = [{ userId: booking.renter_id, title: balanceDue > 0 ? 'Booking updated - balance due' : 'Booking updated', body: breakdownBody }];
 
     if (pushNotifications.length) {
       await adminClient.functions.invoke('send-push-notification', { body: { notifications: pushNotifications } }).catch(() => {});
@@ -586,7 +608,7 @@ Deno.serve(async (req) => {
           from: 'WopeCar <bookings@wopecar.com>',
           to: [booking.renter.email],
           subject: `Booking Updated - ${booking.cars?.name ?? 'Your Car'}`,
-          html: buildClientEmailHtml({ booking, car: booking.cars, mod }),
+          html: buildClientEmailHtml({ booking, car: booking.cars, mod, balanceDue, payUrl: `${(Deno.env.get('WEBSITE_URL') ?? 'https://wopecar.com').replace(/\/$/, '')}/account?pay=${booking.id}` }),
         }));
       }
       if (supportEmail) {
@@ -594,13 +616,13 @@ Deno.serve(async (req) => {
           from: 'WopeCar <bookings@wopecar.com>',
           to: [supportEmail],
           subject: `Booking Modified - ${booking.booking_ref}`,
-          html: buildAdminEmailHtml({ booking, car: booking.cars, renter: booking.renter, mod, modifiedBy }),
+          html: buildAdminEmailHtml({ booking, car: booking.cars, renter: booking.renter, mod, modifiedBy, balanceDue }),
         }));
       }
       await Promise.allSettled(sends);
     }
 
-    return jsonResponse({ success: true, modification: mod });
+    return jsonResponse({ success: true, modification: mod, balanceDue, collectedNow });
   } catch (e) {
     return jsonResponse({ error: e instanceof Error ? e.message : 'Unexpected error.' }, 500);
   }
