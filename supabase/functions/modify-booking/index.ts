@@ -168,7 +168,7 @@ function buildClientEmailHtml({ booking, car, mod, balanceDue, payUrl }: any) {
         <div style="font-size:26px;font-weight:bold;color:#154B59;margin:4px 0 8px;">${formatCurrency(balanceDue)}</div>
         <div style="font-size:13px;color:#5b6b6c;margin-bottom:14px;">Your booking total went up with this change, and this amount has not been paid yet. Please pay it to keep your booking in good standing.</div>
         <a href="${escapeHtml(payUrl)}" style="display:inline-block;background:#154B59;color:#ffffff;text-decoration:none;font-weight:bold;font-size:14px;padding:12px 28px;border-radius:10px;">Pay ${formatCurrency(balanceDue)} now</a>
-        <div style="font-size:12px;color:#999999;margin-top:12px;">You can also pay it in the WopeCar app: open the booking and tap Pay balance.</div>
+        <div style="font-size:12px;color:#999999;margin-top:12px;">The button lets you choose: pay on the website, or open the WopeCar app on your phone. In the app, open the booking and tap Pay balance.</div>
       </div>`
     : '';
   const body = `
@@ -608,7 +608,7 @@ Deno.serve(async (req) => {
           from: 'WopeCar <bookings@wopecar.com>',
           to: [booking.renter.email],
           subject: `Booking Updated - ${booking.cars?.name ?? 'Your Car'}`,
-          html: buildClientEmailHtml({ booking, car: booking.cars, mod, balanceDue, payUrl: `${(Deno.env.get('WEBSITE_URL') ?? 'https://wopecar.com').replace(/\/$/, '')}/account?pay=${booking.id}` }),
+          html: buildClientEmailHtml({ booking, car: booking.cars, mod, balanceDue, payUrl: `${(Deno.env.get('WEBSITE_URL') ?? 'https://wopecar.com').replace(/\/$/, '')}/pay-balance?booking=${booking.id}` }),
         }));
       }
       if (supportEmail) {

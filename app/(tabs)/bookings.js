@@ -70,6 +70,11 @@ function BookingCard({ booking, onPress, styles, colors, currency }) {
         </Text>
         <Text style={styles.location} numberOfLines={1}>📍 {booking.pickupLocation}</Text>
         <Text style={styles.total}>{formatCurrency(booking.totalCost, currency)}</Text>
+        {booking.balanceDue > 0 && booking.status !== 'Cancelled' && (
+          <View style={styles.balanceStrip}>
+            <Text style={styles.balanceStripText}>Balance due {formatCurrency(booking.balanceDue, currency)} · Tap to pay</Text>
+          </View>
+        )}
       </View>
       <Ionicons name="chevron-forward" size={18} color={colors.disabled} style={styles.chevron} />
     </TouchableOpacity>
@@ -304,6 +309,19 @@ function createStyles(colors) {
       fontSize: 15,
       color: colors.textPrimary,
       marginTop: 2,
+    },
+    balanceStrip: {
+      alignSelf: 'flex-start',
+      backgroundColor: colors.warningBg,
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      marginTop: 6,
+    },
+    balanceStripText: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 12,
+      color: colors.warning,
     },
     chevron: {
       marginRight: 10,
