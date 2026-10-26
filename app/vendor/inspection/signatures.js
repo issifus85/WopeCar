@@ -107,6 +107,7 @@ export default function VendorInspectionSignaturesScreen() {
       const inspection = await syncInspection(bookingId, {
         type,
         mileage: draft.mileage,
+        mileageUnit: draft.mileageUnit,
         fuelLevel: draft.fuelLevel,
         checklist: draft.checklist,
         damagePoints: draft.damagePoints,

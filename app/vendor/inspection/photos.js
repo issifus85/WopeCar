@@ -60,6 +60,7 @@ export default function VendorInspectionPhotosScreen() {
       const inspection = await syncInspection(bookingId, {
         type,
         mileage: draft.mileage,
+        mileageUnit: draft.mileageUnit,
         fuelLevel: draft.fuelLevel,
         checklist: draft.checklist,
         damagePoints: draft.damagePoints,

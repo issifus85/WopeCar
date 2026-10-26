@@ -243,7 +243,7 @@ async function buildReportPdf(inspection: any, booking: any, adminClient: Return
   y -= 10;
 
   text('Trip Info', { size: 13, bold: true, color: BRAND, lineHeight: 20 });
-  text(`Mileage: ${inspection.mileage != null ? `${inspection.mileage} km` : '—'}`);
+  text(`Mileage: ${inspection.mileage != null ? `${inspection.mileage} ${inspection.mileage_unit === 'mi' ? 'miles' : 'km'}` : '—'}`);
   text(`Fuel Level: ${inspection.fuel_level || '—'}`);
   y -= 10;
 

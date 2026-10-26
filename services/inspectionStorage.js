@@ -55,8 +55,8 @@ export async function setDraft(draft) {
     // dropped, the PREVIOUS booking's draft stays in storage and later resumes as this one (wrong serverId). Always keep at least the
     // identity of the current inspection in sync.
     try {
-      const { bookingId = null, type = null, serverId = null, mileage = '', fuelLevel = '', pendingSync = false } = persistable;
-      await writeRaw(JSON.stringify({ bookingId, type, serverId, mileage, fuelLevel, pendingSync }));
+      const { bookingId = null, type = null, serverId = null, mileage = '', mileageUnit = 'km', fuelLevel = '', pendingSync = false } = persistable;
+      await writeRaw(JSON.stringify({ bookingId, type, serverId, mileage, mileageUnit, fuelLevel, pendingSync }));
     } catch {
       await clearDraft().catch(() => {});
     }

@@ -13,6 +13,7 @@ const EMPTY_DRAFT = {
   type: null, // 'pre' | 'post'
   serverId: null,
   mileage: '',
+  mileageUnit: 'km', // 'km' | 'mi' - which unit the car's odometer reads in
   fuelLevel: '',
   damagePoints: [],
   photos: Object.fromEntries(PHOTO_ANGLES.map((a) => [a.key, null])),

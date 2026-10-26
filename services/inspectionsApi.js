@@ -14,6 +14,7 @@ function normalizeInspection(row) {
     type: row.type,
     status: row.status,
     mileage: row.mileage,
+    mileageUnit: row.mileage_unit ?? 'km',
     fuelLevel: row.fuel_level,
     checklist: row.checklist ?? null,
     hasRenterSignature: !!row.renter_signature_path,
@@ -83,7 +84,7 @@ export async function getInspection(bookingId, type) {
  * damagePoints fully replaces the server's existing set rather than
  * diffing, same contract as the Laravel version.
  */
-export async function syncInspection(bookingId, { type, mileage, fuelLevel, checklist, damagePoints }) {
+export async function syncInspection(bookingId, { type, mileage, mileageUnit, fuelLevel, checklist, damagePoints }) {
   const { data: inspection, error } = await supabase
     .from('vehicle_inspections')
     .upsert(
@@ -91,6 +92,7 @@ export async function syncInspection(bookingId, { type, mileage, fuelLevel, chec
         booking_id: bookingId,
         type,
         mileage: mileage === '' || mileage == null ? null : Number(mileage),
+        mileage_unit: mileageUnit === 'mi' ? 'mi' : 'km',
         fuel_level: fuelLevel || null,
         checklist: checklist ?? {},
       },

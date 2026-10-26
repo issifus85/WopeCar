@@ -104,7 +104,7 @@ export default function InspectionReportScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Trip Info</Text>
-          <Row label="Mileage" value={inspection.mileage != null ? `${inspection.mileage} km` : '—'} styles={styles} />
+          <Row label="Mileage" value={inspection.mileage != null ? `${inspection.mileage} ${inspection.mileageUnit === 'mi' ? 'miles' : 'km'}` : '—'} styles={styles} />
           <Row label="Fuel Level" value={inspection.fuelLevel || '—'} styles={styles} />
           <Row label="Submitted" value={formatDate(inspection.submittedAt)} styles={styles} />
         </View>

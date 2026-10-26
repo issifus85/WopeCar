@@ -7,6 +7,7 @@ import { useAppTheme } from '../../contexts/ThemeContext';
 import { useInspection } from '../../contexts/InspectionContext';
 import { syncInspection } from '../../services/inspectionsApi';
 import InspectionHeader from '../../components/InspectionHeader';
+import MileageUnitCheck from '../../components/MileageUnitCheck';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 
 const FUEL_LEVELS = ['Empty', '1/4', 'Half', '3/4', 'Full'];
@@ -23,6 +24,7 @@ export default function InspectionMileageScreen() {
   }, [bookingId, type]);
 
   const [mileage, setMileage] = useState(draft.bookingId === String(bookingId) ? String(draft.mileage || '') : '');
+  const [mileageUnit, setMileageUnit] = useState(draft.bookingId === String(bookingId) ? draft.mileageUnit || 'km' : 'km');
   const [fuelLevel, setFuelLevel] = useState(draft.bookingId === String(bookingId) ? draft.fuelLevel : '');
 
   // Draft only finishes resolving (resumed from storage, or freshly reset by
@@ -32,13 +34,14 @@ export default function InspectionMileageScreen() {
     if (draft.bookingId === String(bookingId) && draft.type === type) {
       setMileage(String(draft.mileage || ''));
       setFuelLevel(draft.fuelLevel || '');
+      setMileageUnit(draft.mileageUnit || 'km');
     }
   }, [draft.bookingId, draft.type]);
 
   const isValid = mileage.trim().length > 0 && !isNaN(Number(mileage)) && !!fuelLevel;
 
   const handleContinue = async () => {
-    updateDraft({ mileage: Number(mileage), fuelLevel });
+    updateDraft({ mileage: Number(mileage), mileageUnit, fuelLevel });
 
     // Best-effort - the local draft (via InspectionContext + inspectionStorage)
     // is already the source of truth, so a sync failure here must never
@@ -47,6 +50,7 @@ export default function InspectionMileageScreen() {
       const inspection = await syncInspection(bookingId, {
         type,
         mileage: Number(mileage),
+        mileageUnit,
         fuelLevel,
         checklist: draft.checklist,
         damagePoints: draft.damagePoints,
@@ -84,15 +88,18 @@ export default function InspectionMileageScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.sectionTitle}>Mileage</Text>
         <View style={styles.field}>
-          <Text style={styles.label}>Odometer Reading (km)</Text>
-          <TextInput
-            style={styles.input}
-            value={mileage}
-            onChangeText={setMileage}
-            placeholder="e.g. 45210"
-            placeholderTextColor={colors.textSubtle}
-            keyboardType="numeric"
-          />
+          <Text style={styles.label}>Odometer Reading ({mileageUnit === 'mi' ? 'miles' : 'km'})</Text>
+          <View style={styles.mileageRow}>
+            <TextInput
+              style={[styles.input, styles.mileageInput]}
+              value={mileage}
+              onChangeText={setMileage}
+              placeholder="e.g. 45210"
+              placeholderTextColor={colors.textSubtle}
+              keyboardType="numeric"
+            />
+            <MileageUnitCheck value={mileageUnit} onChange={setMileageUnit} />
+          </View>
         </View>
 
         <Text style={styles.sectionTitle}>Fuel / Battery Level</Text>
@@ -144,6 +151,8 @@ function createStyles(colors) {
       color: colors.textPrimary,
       marginBottom: 8,
     },
+    mileageRow: { flexDirection: 'row', alignItems: 'center' },
+    mileageInput: { flex: 1 },
     input: {
       fontFamily: FONTS.regular,
       backgroundColor: colors.background,
