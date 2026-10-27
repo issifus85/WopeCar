@@ -129,6 +129,14 @@ export default function VendorHistoryScreen() {
               ) : (
                 <Text style={styles.earnings}>Payout: {formatCurrency(item.earnings, activeCurrency)}</Text>
               )}
+              {/* A vendor can list several cars of the same make/model, so the name alone doesn't say WHICH one was booked. */}
+              {!!item.carId && (
+                <TouchableOpacity style={styles.viewCarButton} onPress={() => router.push(`/vendor/car/${item.carId}`)} hitSlop={6}>
+                  <Ionicons name="car-sport-outline" size={15} color={colors.teal} />
+                  <Text style={styles.viewCarText}>View Car</Text>
+                  <Ionicons name="chevron-forward" size={14} color={colors.teal} />
+                </TouchableOpacity>
+              )}
             </View>
           )}
         />
@@ -156,6 +164,19 @@ export default function VendorHistoryScreen() {
 
 function createStyles(colors) {
   return StyleSheet.create({
+    viewCarButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: 6,
+      marginTop: 12,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.teal,
+    },
+    viewCarText: { fontFamily: FONTS.semiBold, fontSize: 13, color: colors.teal },
     container: {
       flex: 1,
       backgroundColor: colors.background,
