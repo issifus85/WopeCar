@@ -1,4 +1,4 @@
-import { buildCancellationPolicyText } from './cancellationPolicy';
+import { buildCancellationPolicyText } from '../constants/cancellationPolicyText';
 
 describe('buildCancellationPolicyText', () => {
   it('uses the standard 48h / 24h / 50% wording by default and ends with the in-trip rule', () => {
