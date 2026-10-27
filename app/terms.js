@@ -54,6 +54,25 @@ All electronic payments to Wopecar shall be made through the Paystack Payment Sy
 Any default in payment is calculated as rent on the Vehicle on a daily basis, plus 10% per hour if the default exceeds two or more hours — for example, where a Client fails to return the Vehicle within the paid or rental time.`,
   },
   {
+    heading: 'Cancellation and Refund Policy for Renters',
+    body: `5.1 Pre-Trip or Booking Cancellations
+
+Renters may cancel a confirmed booking prior to the scheduled pickup time subject to the following refund tiers:
+
+• Cancellation 48 Hours or More Prior to Pickup: If a cancellation is requested at least 48 hours before the scheduled pickup time, the Renter will receive a 100% full refund of the rental charges.
+• Cancellation Between 24 and 48 Hours Prior to Pickup: If a cancellation is requested between 24 and 48 hours before the scheduled pickup time, the Renter will receive a 50% refund of the rental charges.
+• Cancellation Within 24 Hours of Pickup: No refund of the rental charges will be issued for cancellations made less than 24 hours prior to the scheduled pickup time.
+• Refundable Security Deposit: Regardless of the cancellation timeframe, any refundable security deposit collected at the time of booking will always be returned in full to the Renter if the booking is cancelled prior to the start of the trip.
+
+5.2 In-Trip Modifications and Early Returns
+
+Once a trip has commenced (the vehicle has been picked up or the scheduled start time has passed):
+
+• Any changes, early returns, or cancellations made during an active trip are strictly non-refundable.
+• Unused rental days or hours will not be credited or refunded.
+• The return of the security deposit remains subject to the vehicle being inspected and returned in accordance with our vehicle condition, fuel, and cleanliness guidelines.`,
+  },
+  {
     heading: 'Your Commitments',
     body: `You agree that you will always use your Wopecar Account and the Services in compliance with these Terms, applicable law, and any other policies and standards provided to you.
 
@@ -202,8 +221,9 @@ export default function TermsScreen() {
         The following are WopeCar's Terms of Service, as published on wopecar.com. By using the app, you agree to these terms. Tap a heading to expand it.
       </Text>
 
-      {SECTIONS.map((section) => (
-        <AccordionSection key={section.heading} heading={section.heading} body={section.body} styles={styles} colors={colors} />
+      {/* Sections are numbered by their position, so inserting one renumbers the rest automatically (and matches the numbering on wopecar.com/terms). */}
+      {SECTIONS.map((section, index) => (
+        <AccordionSection key={section.heading} heading={`${index + 1}. ${section.heading}`} body={section.body} styles={styles} colors={colors} />
       ))}
     </ScrollView>
   );
