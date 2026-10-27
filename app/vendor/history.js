@@ -11,6 +11,7 @@ import VendorHeader from '../../components/VendorHeader';
 import VendorStatusBadge from '../../components/VendorStatusBadge';
 import OptionPickerModal from '../../components/OptionPickerModal';
 import { parseDateOnly } from '../../constants/dateUtils';
+import { buildCarLabels } from '../../utils/vendorCarLabel';
 
 const ALL_TIME = 'All Time';
 const ALL_CARS = 'All Cars';
@@ -39,7 +40,7 @@ export default function VendorHistoryScreen() {
   useEffect(() => {
     if (!carIdParam || isLoading) return;
     const car = cars.find((c) => c.id === carIdParam);
-    if (car) setCarFilter(car.name);
+    if (car) setCarFilter(car.id);
   }, [carIdParam, isLoading, cars]);
 
   // Defaults to the current month the first time real data exists, so
@@ -58,12 +59,19 @@ export default function VendorHistoryScreen() {
     return [ALL_TIME, ...months];
   }, [bookingHistory]);
 
-  const carOptions = useMemo(() => [ALL_CARS, ...cars.map((c) => c.name)], [cars]);
+  // Filtering is by the individual car (not its name, which two cars can share); the picker shows year-model labels that are unique.
+  const carLabels = useMemo(() => buildCarLabels(cars), [cars]);
+  const carOptions = useMemo(() => [ALL_CARS, ...cars.map((c) => carLabels[c.id])], [cars, carLabels]);
+  const carFilterLabel = carFilter === ALL_CARS ? ALL_CARS : carLabels[carFilter] ?? ALL_CARS;
+  const handleCarSelect = (label) => {
+    const match = cars.find((c) => carLabels[c.id] === label);
+    setCarFilter(match ? match.id : ALL_CARS);
+  };
 
   const filtered = useMemo(() => {
     return bookingHistory
       .filter((b) => monthFilter === ALL_TIME || monthLabel(b.startDate) === monthFilter)
-      .filter((b) => carFilter === ALL_CARS || b.carName === carFilter)
+      .filter((b) => carFilter === ALL_CARS || b.carId === carFilter)
       .sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
   }, [bookingHistory, monthFilter, carFilter]);
 
@@ -87,7 +95,7 @@ export default function VendorHistoryScreen() {
 
       <View style={styles.totalCard}>
         <Text style={styles.totalLabel}>
-          Total Earnings - {monthFilter}{carFilter !== ALL_CARS ? ` - ${carFilter}` : ''}
+          Total Earnings - {monthFilter}{carFilter !== ALL_CARS ? ` - ${carFilterLabel}` : ''}
         </Text>
         <Text style={styles.totalValue}>{formatCurrency(totalEarnings, activeCurrency)}</Text>
       </View>
@@ -100,7 +108,7 @@ export default function VendorHistoryScreen() {
         </TouchableOpacity>
         <TouchableOpacity style={styles.filterPill} onPress={() => setPickerOpen('car')}>
           <Ionicons name="car-outline" size={14} color={colors.teal} />
-          <Text style={styles.filterPillText} numberOfLines={1}>{carFilter}</Text>
+          <Text style={styles.filterPillText} numberOfLines={1}>{carFilterLabel}</Text>
           <Ionicons name="chevron-down" size={14} color={colors.textSubtle} />
         </TouchableOpacity>
       </View>
@@ -119,7 +127,7 @@ export default function VendorHistoryScreen() {
           renderItem={({ item }) => (
             <View style={styles.card}>
               <View style={styles.topRow}>
-                <Text style={styles.carName} numberOfLines={1}>{item.carName}</Text>
+                <Text style={styles.carName} numberOfLines={1}>{carLabels[item.carId] ?? item.carName}</Text>
                 <VendorStatusBadge status={item.status} />
               </View>
               <Text style={styles.reference}>{item.reference}</Text>
@@ -154,8 +162,8 @@ export default function VendorHistoryScreen() {
         visible={pickerOpen === 'car'}
         title="Filter by Car"
         options={carOptions}
-        value={carFilter}
-        onSelect={setCarFilter}
+        value={carFilterLabel}
+        onSelect={handleCarSelect}
         onClose={() => setPickerOpen(null)}
       />
     </View>

@@ -12,6 +12,8 @@ import VendorHeader from '../../../components/VendorHeader';
 import ConfirmModal from '../../../components/ConfirmModal';
 import DeclineReasonModal from '../../../components/DeclineReasonModal';
 import { parseDateOnly } from '../../../constants/dateUtils';
+import { buildCarLabels } from '../../../utils/vendorCarLabel';
+import { useRouter } from 'expo-router';
 
 function formatDate(iso) {
   if (!iso) return '';
@@ -22,7 +24,10 @@ export default function VendorBookingsScreen() {
   const { colors } = useAppTheme();
   const { activeCurrency } = useCurrency();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { bookingRequests, respondToBookingRequest, refreshBookings, isLoading } = useVendor();
+  const router = useRouter();
+  const { bookingRequests, respondToBookingRequest, refreshBookings, isLoading, cars } = useVendor();
+  // Year-model labels so two cars of the same model can be told apart ("Hyundai Elantra 2019" vs "... 2021").
+  const carLabels = useMemo(() => buildCarLabels(cars), [cars]);
   const [acceptTarget, setAcceptTarget] = useState(null);
   const [declineTarget, setDeclineTarget] = useState(null);
 
@@ -99,7 +104,7 @@ export default function VendorBookingsScreen() {
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
             <View style={styles.card}>
-              <Text style={styles.carName}>{item.carName}</Text>
+              <Text style={styles.carName}>{carLabels[item.carId] ?? item.carName}</Text>
               <Text style={styles.reference}>{item.reference}</Text>
 
               <View style={styles.detailRow}>
@@ -123,6 +128,14 @@ export default function VendorBookingsScreen() {
                 </View>
               )}
 
+              {!!item.carId && (
+                <TouchableOpacity style={styles.viewCarButton} onPress={() => router.push(`/vendor/car/${item.carId}`)} hitSlop={6}>
+                  <Ionicons name="car-sport-outline" size={15} color={colors.teal} />
+                  <Text style={styles.viewCarText}>View Car</Text>
+                  <Ionicons name="chevron-forward" size={14} color={colors.teal} />
+                </TouchableOpacity>
+              )}
+
               <View style={styles.actionsRow}>
                 <TouchableOpacity style={styles.declineButton} onPress={() => setDeclineTarget(item)}>
                   <Text style={styles.declineButtonText}>Decline</Text>
@@ -139,7 +152,7 @@ export default function VendorBookingsScreen() {
       <ConfirmModal
         visible={!!acceptTarget}
         title="Accept Booking"
-        message={acceptTarget ? `Accept this booking for ${acceptTarget.carName}? Admin/support will be notified.` : ''}
+        message={acceptTarget ? `Accept this booking for ${carLabels[acceptTarget.carId] ?? acceptTarget.carName}? Admin/support will be notified.` : ''}
         confirmLabel="Accept"
         onConfirm={handleAcceptConfirm}
         onCancel={() => setAcceptTarget(null)}
@@ -156,6 +169,19 @@ export default function VendorBookingsScreen() {
 
 function createStyles(colors) {
   return StyleSheet.create({
+    viewCarButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: 6,
+      marginTop: 10,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.teal,
+    },
+    viewCarText: { fontFamily: FONTS.semiBold, fontSize: 13, color: colors.teal },
     container: {
       flex: 1,
       backgroundColor: colors.background,
