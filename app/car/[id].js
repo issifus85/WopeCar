@@ -480,14 +480,20 @@ export default function CarDetailScreen() {
             <RentalTermsSection drivenBy={car.drivenBy} items={rentalTermsSummary} />
           </View>
 
-          {!!car.cancellationPolicy && (
-            <View style={styles.section}>
-              <SectionHeading>Cancellation Policy</SectionHeading>
+          <View style={styles.section}>
+            <SectionHeading>Cancellation Policy</SectionHeading>
+            {!!car.cancellationPolicy && (
               <View style={styles.cancellationRow}>
                 <Text style={styles.cancellationText}>{car.cancellationPolicy}</Text>
               </View>
+            )}
+            {/* Terms of Service 5.2 - applies to every booking, whatever this listing's own cancellation text says. */}
+            <View style={[styles.cancellationRow, !!car.cancellationPolicy && { marginTop: 10 }]}>
+              <Text style={styles.cancellationText}>
+                Once a trip has started, cancellations, early returns and changes that shorten the trip are non-refundable, and unused days are not credited.
+              </Text>
             </View>
-          )}
+          </View>
 
           {!!car.features?.length && (
             <View style={styles.section}>
