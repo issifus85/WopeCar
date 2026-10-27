@@ -115,11 +115,11 @@ Missing vehicles. If your vehicle goes missing, is not returned, or is stolen du
 
 Limitation of liability of WOPECAR. Wopecar's liability is limited to the Services it provides: an online platform enabling the rental of vehicles between private individuals. Wopecar does not guarantee that information given by members at registration is error-free; is under no obligation to supervise a vehicle or its Members; and is not liable for theft or damage to a vehicle during a lease, for errors or unavailability of the Site, or for any direct or indirect damage arising from use of the Site. Riders and Partners remain responsible for driving only on lanes intended for vehicular traffic, not modifying the vehicle, using required safety equipment, reporting defects and incidents promptly, not subletting the vehicle, not using it for illicit purposes or while impaired, parking legally, covering fuel and any traffic violations incurred, and returning the vehicle on the agreed date and time.
 
-Confidentiality. Technical information shared between Partners, Riders, and Wopecar (via BIS Digimedia) will be used only for performance of the Service and will not be disclosed to third parties without written consent, except information that is already public or independently obtained.
+Confidentiality. Technical information shared between Partners, Riders, and WopeCar will be used only for performance of the Service and will not be disclosed to third parties without written consent, except information that is already public or independently obtained.
 
 Applicable law and dispute resolution. This Agreement is governed by the laws of the Republic of Ghana. The Parties agree to submit to the exclusive jurisdiction of the courts of Ghana for any dispute that cannot be settled amicably through direct discussion.
 
-Termination. Wopecar (via BIS Digimedia) may terminate this Agreement at any time and for any reason, with five days' notice. Outstanding debts owed by either Party remain payable upon termination.
+Termination. WopeCar may terminate this Agreement at any time and for any reason, with five days' notice. Outstanding debts owed by either Party remain payable upon termination.
 
 Force majeure. Neither Party is liable for delay or failure to perform obligations caused by a Force Majeure Event, provided prompt notice is given and reasonable efforts are made to mitigate its effects. Wopecar has no obligation to make payments for work a Party is unable to perform because of such an event.
 
