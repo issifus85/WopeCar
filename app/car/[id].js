@@ -30,6 +30,7 @@ import { useInbox } from '../../contexts/InboxContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { getAvailabilityBadge } from '../../utils/carAvailability';
 import { logScreen, logViewCar } from '../../services/analytics';
+import { useCancellationPolicyText } from '../../services/cancellationPolicy';
 
 const DESCRIPTION_TRUNCATE_LENGTH = 220;
 
@@ -39,6 +40,7 @@ export default function CarDetailScreen() {
   const { colors } = useAppTheme();
   const { activeCurrency } = useCurrency();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const cancellationPolicyText = useCancellationPolicyText();
   const { isFavorite, toggleFavorite } = useFavorites();
   const { addToCart } = useCart();
   const { startInquiry } = useInbox();
@@ -482,16 +484,8 @@ export default function CarDetailScreen() {
 
           <View style={styles.section}>
             <SectionHeading>Cancellation Policy</SectionHeading>
-            {!!car.cancellationPolicy && (
-              <View style={styles.cancellationRow}>
-                <Text style={styles.cancellationText}>{car.cancellationPolicy}</Text>
-              </View>
-            )}
-            {/* Terms of Service 5.2 - applies to every booking, whatever this listing's own cancellation text says. */}
-            <View style={[styles.cancellationRow, !!car.cancellationPolicy && { marginTop: 10 }]}>
-              <Text style={styles.cancellationText}>
-                Once a trip has started, cancellations, early returns and changes that shorten the trip are non-refundable, and unused days are not credited.
-              </Text>
+            <View style={styles.cancellationRow}>
+              <Text style={styles.cancellationText}>{cancellationPolicyText}</Text>
             </View>
           </View>
 
