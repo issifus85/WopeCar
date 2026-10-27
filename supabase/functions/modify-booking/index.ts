@@ -42,6 +42,7 @@
 
 import { computeModifyPricing } from '../_shared/modifyPricing.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { combineDateAndTime } from '../_shared/time.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -156,12 +157,15 @@ function costBreakdownHtml(mod: any) {
 }
 
 // deno-lint-ignore no-explicit-any
-function buildClientEmailHtml({ booking, car, mod, balanceDue, payUrl }: any) {
+function buildClientEmailHtml({ booking, car, mod, balanceDue, payUrl, held }: any) {
   const amountLine = mod.amount_charged > 0
     ? `<div style="background:#EAF7F0;border-radius:12px;padding:14px 16px;font-size:13px;color:#1F7A4D;margin-bottom:16px;"><strong>${formatCurrency(mod.amount_charged)}</strong> was charged to cover this change.</div>`
     : mod.amount_charged < 0
       ? `<div style="background:#FDF3E7;border-radius:12px;padding:14px 16px;font-size:13px;color:#975125;margin-bottom:16px;">This change lowers your total by <strong>${formatCurrency(Math.abs(mod.amount_charged))}</strong> - our team will follow up about a refund for the difference.</div>`
       : '';
+  const heldBlock = held
+    ? `<div style="background:#FDF3E7;border-radius:12px;padding:14px 16px;font-size:13px;color:#975125;margin-bottom:16px;"><strong>No refund for unused days.</strong> Your trip had already started, so shortening it does not change what you paid. Unused rental days are not refunded or credited, as set out in our Terms of Service (section 5.2). Your security deposit is returned after the vehicle has been inspected.</div>`
+    : '';
   const balanceBlock = balanceDue > 0
     ? `<div style="background:#FDF3E7;border-radius:12px;padding:16px;margin-bottom:16px;text-align:center;">
         <div style="font-size:13px;color:#975125;">Balance due</div>
@@ -182,6 +186,7 @@ function buildClientEmailHtml({ booking, car, mod, balanceDue, payUrl }: any) {
         <div style="font-size:13px;font-weight:bold;color:#154B59;margin-bottom:6px;">Cost breakdown</div>
         ${costBreakdownHtml(mod)}
         ${amountLine}
+        ${heldBlock}
         ${balanceBlock}
       </div>
       <div style="background:#f5f5f5;padding:16px 24px;text-align:center;">
@@ -427,7 +432,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    const priced = computeModifyPricing({
+    const pricedRaw = computeModifyPricing({
       driveType,
       billableDays: newBillableDays,
       rentalCost: newRentalCost,
@@ -441,6 +446,24 @@ Deno.serve(async (req) => {
       promo: promoInfo,
       settings: settingsMap,
     });
+    // Terms of Service 5.2: once a trip has STARTED (the scheduled pickup time has passed) nothing is refunded and unused days are not credited. So
+    // when a renter shortens a trip that is already under way, the dates change but the CHARGES stay exactly as they were paid: no lower total, no
+    // credit, nothing for anyone to refund. (Raising the total, e.g. extending, is unaffected; staff can still adjust a booking on purpose.)
+    const tripStarted = combineDateAndTime(booking.start_date, booking.pickup_time, '10:00').getTime() <= Date.now();
+    const held = tripStarted && !isAdmin && pricedRaw.totalCost < Number(booking.total_cost) - 0.005;
+    const priced = held
+      ? {
+        ...pricedRaw,
+        totalCost: Number(booking.total_cost),
+        addonsCost: Number(booking.addons_cost ?? 0),
+        deliveryFee: Number(booking.delivery_fee ?? 0),
+        securityDeposit: Number(booking.security_deposit ?? 0),
+        promoDiscount: Number(booking.promo_discount_amount ?? 0),
+        addonDays: null,
+      }
+      : pricedRaw;
+    const effRentalCost = held ? Number(booking.rental_cost) : newRentalCost;
+    const effBillableDays = held ? Number(booking.billable_days ?? newBillableDays) : newBillableDays;
     const newTotalCost = priced.totalCost;
     const clientTotal = Number(totalCost);
     const oldTotal = Number(booking.total_cost);
@@ -453,7 +476,7 @@ Deno.serve(async (req) => {
       });
       return jsonResponse({ error: 'The price for this change has been updated. Please reload the booking and try again.' }, 409);
     }
-    if (Math.abs(clientTotal - newTotalCost) > 0.5) {
+    if (!held && Math.abs(clientTotal - newTotalCost) > 0.5) {
       // The client and the server disagree (an old app build, or a tampered request). The server's number is the one saved.
       await adminClient.rpc('log_booking_price_audit', {
         p_booking_id: booking.id, p_ref: booking.booking_ref, p_renter: caller.id, p_flags: ['modify_total_mismatch'],
@@ -464,7 +487,7 @@ Deno.serve(async (req) => {
     // The payout rate lives in the admin-only car_payouts table (not on cars, which is publicly readable).
     const { data: payoutRow } = await adminClient.from('car_payouts').select('payout_per_day').eq('car_id', booking.car_id).maybeSingle();
     const payoutPerDay = Number(payoutRow?.payout_per_day ?? 0);
-    const vendorPayoutTotal = Math.round(payoutPerDay * Math.max(newBillableDays, 0) * 100) / 100;
+    const vendorPayoutTotal = Math.round(payoutPerDay * Math.max(effBillableDays, 0) * 100) / 100;
     const wopecarMargin = Math.round((newTotalCost - vendorPayoutTotal) * 100) / 100;
 
     // Balance due on a PAID booking: what the new total adds beyond what was collected with this change. Staff changes collect nothing
@@ -483,24 +506,24 @@ Deno.serve(async (req) => {
       return_time: returnTime ?? null,
       pickup_location: pickupLocation ?? null,
       return_location: returnLocation ?? null,
-      rental_cost: newRentalCost,
+      rental_cost: effRentalCost,
       addons_cost: priced.addonsCost,
       delivery_fee: priced.deliveryFee,
       security_deposit: priced.securityDeposit,
       promo_discount_amount: priced.promoDiscount,
       total_cost: newTotalCost,
-      billable_days: newBillableDays,
-      ...(newDriveType && newDriveType !== booking.drive_type ? { drive_type: newDriveType } : {}),
+      billable_days: effBillableDays,
+      ...(!held && newDriveType && newDriveType !== booking.drive_type ? { drive_type: newDriveType } : {}),
       vendor_payout_per_day: payoutPerDay,
       vendor_payout_total: vendorPayoutTotal,
       wopecar_margin: wopecarMargin,
       ...(booking.payment_status === 'paid' && balanceDue !== previousBalance ? { balance_due: balanceDue } : {}),
     };
     if (priced.addonDays) updatePatch.addon_days = priced.addonDays;
-    if (wopecareTotalCost != null) {
+    if (!held && wopecareTotalCost != null) {
       updatePatch.wopecare_total_cost = Number(wopecareTotalCost);
     }
-    if (driverPatchFinal) {
+    if (!held && driverPatchFinal) {
       Object.assign(updatePatch, driverPatchFinal);
     }
 
@@ -531,12 +554,12 @@ Deno.serve(async (req) => {
       new_return_time: returnTime ?? null,
       new_pickup_location: pickupLocation ?? null,
       new_return_location: returnLocation ?? null,
-      new_rental_cost: newRentalCost,
+      new_rental_cost: effRentalCost,
       new_addons_cost: priced.addonsCost,
       new_delivery_fee: priced.deliveryFee,
       new_security_deposit: priced.securityDeposit,
-      new_wopecare_total_cost: wopecareTotalCost != null ? Number(wopecareTotalCost) : (booking.wopecare_total_cost ?? 0),
-      new_with_driver_total_cost: driverPatchFinal ? driverPatchFinal.with_driver_total_cost : (booking.with_driver_total_cost ?? 0),
+      new_wopecare_total_cost: !held && wopecareTotalCost != null ? Number(wopecareTotalCost) : (booking.wopecare_total_cost ?? 0),
+      new_with_driver_total_cost: !held && driverPatchFinal ? driverPatchFinal.with_driver_total_cost : (booking.with_driver_total_cost ?? 0),
       new_total_cost: newTotalCost,
       amount_charged: Number(amountCharged ?? (newTotalCost - oldTotal)),
       payment_ref: paystackReference ?? null,
@@ -578,6 +601,7 @@ Deno.serve(async (req) => {
       + `${formatDate(mod.old_start_date)} → ${formatDate(mod.old_end_date)} is now ${formatDate(mod.new_start_date)} → ${formatDate(mod.new_end_date)}. `
       + `Total ${formatCurrency(mod.old_total_cost)} → ${formatCurrency(mod.new_total_cost)}.`
       + (balanceDue > 0 ? ` Balance due: ${formatCurrency(balanceDue)} - open the booking to pay it.` : '')
+      + (held ? ' Your trip had already started, so shortening it does not change what you paid: unused days are not refunded or credited (Terms of Service, section 5.2).' : '')
       + (driverPatch && driverPatch.with_driver !== (!!booking.with_driver || Number(booking.with_driver_total_cost ?? 0) > 0)
         ? ` A WopeCar driver was ${driverPatch.with_driver ? 'added to' : 'removed from'} the booking.`
         : '');
@@ -608,7 +632,7 @@ Deno.serve(async (req) => {
           from: 'WopeCar <bookings@wopecar.com>',
           to: [booking.renter.email],
           subject: `Booking Updated - ${booking.cars?.name ?? 'Your Car'}`,
-          html: buildClientEmailHtml({ booking, car: booking.cars, mod, balanceDue, payUrl: `${(Deno.env.get('WEBSITE_URL') ?? 'https://wopecar.com').replace(/\/$/, '')}/pay-balance?booking=${booking.id}` }),
+          html: buildClientEmailHtml({ booking, car: booking.cars, mod, balanceDue, held, payUrl: `${(Deno.env.get('WEBSITE_URL') ?? 'https://wopecar.com').replace(/\/$/, '')}/pay-balance?booking=${booking.id}` }),
         }));
       }
       if (supportEmail) {
@@ -622,7 +646,7 @@ Deno.serve(async (req) => {
       await Promise.allSettled(sends);
     }
 
-    return jsonResponse({ success: true, modification: mod, balanceDue, collectedNow });
+    return jsonResponse({ success: true, modification: mod, balanceDue, collectedNow, chargesHeld: held });
   } catch (e) {
     return jsonResponse({ error: e instanceof Error ? e.message : 'Unexpected error.' }, 500);
   }

@@ -20,6 +20,7 @@ import {
   getMinBookingDays,
   WOPECARE_PLANS,
   calculateWopeCareCost,
+  hasTripStarted,
 } from '../../constants/pricing';
 import { fetchCarById } from '../../services/carsApi';
 import { logBookingCancelled } from '../../services/analytics';
@@ -423,7 +424,11 @@ export default function BookingDetailScreen() {
     return { rentalCost, addonsCost, deliveryFee, securityDeposit, withDriverCost, driverDailyRate, driverDays, promoDiscountAmount, total };
   }, [car, pricing, days, booking, originalDays, recomputedWopeCareCost, editWithDriver, editDriverDays, promoTerms, canChooseDriver, legacyDriverBooking]);
 
-  const recomputedTotal = recomputedBreakdown.total;
+  // Terms of Service 5.2: once the trip has started, shortening it does not reduce what was paid and nothing is refunded. The server enforces the
+  // same rule; this keeps the screen honest (the total stays as paid instead of showing a credit that will never come).
+  const rawTotal = recomputedBreakdown.total;
+  const chargesHeld = !!booking && hasTripStarted(booking.startDate, booking.pickupTime) && rawTotal < (booking.totalCost ?? 0) - 0.005;
+  const recomputedTotal = chargesHeld ? booking.totalCost : rawTotal;
   const difference = recomputedTotal - (booking?.totalCost ?? 0);
 
   const minDays = car ? getMinBookingDays(car.drivenBy) : 1;
@@ -981,9 +986,11 @@ export default function BookingDetailScreen() {
 
             {difference <= 0 && (
               <Text style={styles.noPaymentNote}>
-                {difference < 0
-                  ? 'This change lowers your total. No additional payment is required - please contact support about a refund for the difference.'
-                  : 'No additional payment is required for this change.'}
+                {chargesHeld
+                  ? 'Your trip has already started, so shortening it does not change what you paid. Unused days are not refunded or credited (Terms of Service, section 5.2).'
+                  : difference < 0
+                    ? 'This change lowers your total. No additional payment is required - please contact support about a refund for the difference.'
+                    : 'No additional payment is required for this change.'}
               </Text>
             )}
 
@@ -1165,7 +1172,9 @@ export default function BookingDetailScreen() {
       <ConfirmModal
         visible={isCancelModalVisible}
         title="Cancel Booking"
-        message="Are you sure you want to cancel this booking? This cannot be undone."
+        message={booking && hasTripStarted(booking.startDate, booking.pickupTime)
+          ? 'Are you sure you want to cancel this booking? Your trip has already started, so no refund applies for unused days (Terms of Service, section 5.2). This cannot be undone.'
+          : 'Are you sure you want to cancel this booking? This cannot be undone.'}
         confirmLabel="Cancel Booking"
         cancelLabel="Keep Booking"
         destructive

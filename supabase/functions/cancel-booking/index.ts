@@ -127,6 +127,7 @@ Deno.serve(async (req) => {
     let refundAmount = 0;
     let refundPercentage = 0;
     let refundProcessed = false;
+    let inTrip = false; // the scheduled pickup time has passed: Terms of Service 5.2 - nothing is refunded automatically
     let refundedSoFar = 0; // what Paystack actually accepted (can be less than refundAmount if one of several refunds failed)
     let refundError: string | null = null;
 
@@ -145,6 +146,7 @@ Deno.serve(async (req) => {
       const pickupAt = combineDateAndTime(booking.start_date, booking.pickup_time, '10:00');
       const hoursUntilPickup = (pickupAt.getTime() - Date.now()) / 3600000;
 
+      inTrip = hoursUntilPickup < 0;
       if (hoursUntilPickup >= fullHours) refundPercentage = 1;
       else if (hoursUntilPickup >= partialHours) refundPercentage = partialPct;
       else refundPercentage = 0;
@@ -179,6 +181,12 @@ Deno.serve(async (req) => {
         Math.max(0, mods && mods.length > 0 ? Number(mods[0].old_security_deposit ?? booking.security_deposit) : Number(booking.security_deposit))
       );
       refundAmount = Math.round((depositPaid + (paidBase - depositPaid) * refundPercentage) * 100) / 100;
+      // Once the trip has started (Terms of Service 5.2) a cancellation is strictly non-refundable: no Paystack refund is triggered for unused days.
+      // The security deposit is NOT refunded here either - it is returned by the team after the vehicle has been inspected.
+      if (inTrip) {
+        refundAmount = 0;
+        refundPercentage = 0;
+      }
 
       let processedTotal = 0;
       let remaining = refundAmount;
@@ -244,6 +252,8 @@ Deno.serve(async (req) => {
       renterBody += ` GH₵${Math.round(refundAmount)} has been refunded.`;
     } else if (refundAmount > 0) {
       renterBody += ` A refund of GH₵${Math.round(refundAmount)} is due but could not be processed automatically — our team will follow up.`;
+    } else if (booking.payment_status === 'paid' && inTrip) {
+      renterBody += ' The trip had already started, so no refund applies for unused days (Terms of Service, section 5.2). Your security deposit is returned after the vehicle has been inspected.';
     } else if (booking.payment_status === 'paid') {
       renterBody += ' This cancellation falls outside our refund window, so no refund applies.';
     }
@@ -282,7 +292,7 @@ Deno.serve(async (req) => {
     // now (previously email-only for this event, same as every other
     // booking event in this app). "cancelledBy" mirrors send-booking-
     // cancelled's own wording for the admin email.
-    const adminBody = `Booking ${booking.booking_ref} was cancelled by ${cancelledByLabel}.${reason ? ` Reason: ${reason}` : ''}`;
+    const adminBody = `Booking ${booking.booking_ref} was cancelled by ${cancelledByLabel}.${reason ? ` Reason: ${reason}` : ''}${inTrip ? ' Trip already started: no automatic refund was made; the security deposit is returned after the inspection.' : ''}`;
     const { data: adminUsers } = await adminClient.from('users').select('id').or('role.eq.admin,is_support.eq.true');
     for (const adminUser of adminUsers ?? []) {
       // Skip anyone already told above, and the staff member who just did
@@ -321,7 +331,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    return jsonResponse({ success: true, refunded: refundProcessed, refundAmount, refundPercentage, refundError });
+    return jsonResponse({ success: true, refunded: refundProcessed, refundAmount, refundPercentage, refundError, inTrip });
   } catch (e) {
     return jsonResponse({ error: e instanceof Error ? e.message : 'Unexpected error.' }, 500);
   }

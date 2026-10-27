@@ -453,6 +453,15 @@ function toISODate(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+/**
+ * True once the booking's scheduled pickup time has passed - the trip has STARTED. From then on (Terms of Service 5.2) nothing is refunded:
+ * shortening or cancelling does not credit unused days. Mirrors the server's check (cancel-booking / modify-booking).
+ */
+export function hasTripStarted(startDate, pickupTime, now = new Date()) {
+  if (!startDate) return false;
+  return combineDateAndTime(startDate, pickupTime || '10:00 AM').getTime() <= now.getTime();
+}
+
 // Combines a date-only value (Date, ISO date string, or datetime string)
 // with a 12-hour time-slot string (e.g. "8:00 AM", as produced by
 // checkout's TimeSlotPicker) into a single Date. Falls back to the date's

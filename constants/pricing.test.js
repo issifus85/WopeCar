@@ -421,3 +421,18 @@ describe('driver mode - a self-drive car booked WITH a WopeCar driver follows th
     expect(calculateSecurityDeposit(8568, selfDriveCar.drivenBy, false)).toBe(8568 * 0.25);
   });
 });
+
+describe('hasTripStarted (Terms 5.2 - no refunds once the trip has started)', () => {
+  const { hasTripStarted } = require('./pricing');
+  const now = new Date('2026-10-27T12:00:00');
+  it('is false before the scheduled pickup time and true after it', () => {
+    expect(hasTripStarted('2026-10-27', '1:00 PM', now)).toBe(false);
+    expect(hasTripStarted('2026-10-27', '11:00 AM', now)).toBe(true);
+    expect(hasTripStarted('2026-10-27', '13:00', now)).toBe(false);
+    expect(hasTripStarted('2026-10-26', '9:00 AM', now)).toBe(true);
+    expect(hasTripStarted('2026-10-28', '9:00 AM', now)).toBe(false);
+  });
+  it('is false when there is no start date', () => {
+    expect(hasTripStarted(null, '9:00 AM', now)).toBe(false);
+  });
+});

@@ -49,6 +49,18 @@ async function runCancel({ pickup, total = 3000, deposit = 600, status = 'pendin
     const r = await runCancel({ pickup: { date: w.date, time: w.t12 }, total: 5000, deposit: 700, mods: [{ booking_id: 'B1', old_total_cost: 3000, old_security_deposit: 600, amount_charged: 2000, payment_ref: 'ps_mod', created_at: '2026-10-01' }] });
     check('cancel after a paid modification, no-refund window -> only the deposit actually paid (600) returned', r.body.refundAmount === 600, JSON.stringify(r.body));
   }
+  // Terms 5.2: once the scheduled pickup time has passed, a cancellation refunds NOTHING automatically (not even the deposit)
+  {
+    const w = when(-5);
+    const r = await runCancel({ pickup: { date: w.date, time: w.t12 }, status: 'confirmed', callerId: 'A' });
+    check('cancelling AFTER the trip started triggers no Paystack refund (0, no refund call)', r.body.success && r.body.refundAmount === 0 && r.refunds.length === 0 && r.body.inTrip === true, JSON.stringify([r.body, r.refunds]));
+    const w2 = when(-400);
+    const r2 = await runCancel({ pickup: { date: w2.date, time: w2.t24 }, status: 'confirmed', callerId: 'A', total: 5000, deposit: 700 });
+    check('cancelling mid-way through a long trip (website 24h time) also refunds nothing', r2.refunds.length === 0 && r2.body.refundAmount === 0, JSON.stringify([r2.body, r2.refunds]));
+    const w3 = when(1);
+    const r3 = await runCancel({ pickup: { date: w3.date, time: w3.t12 }, status: 'pending' });
+    check('cancelling 1 hour BEFORE pickup is still the no-rental-refund tier but returns the deposit (not in-trip)', r3.body.inTrip === false && r3.body.refundAmount === 600, JSON.stringify([r3.body]));
+  }
   // renter cannot cancel a confirmed booking; other user cannot cancel
   { const w = when(100); const r = await runCancel({ pickup: { date: w.date, time: w.t12 }, status: 'confirmed' }); check('renter cannot cancel a confirmed booking (403)', r.status === 403, JSON.stringify(r.body)); }
   { const w = when(100); const r = await runCancel({ pickup: { date: w.date, time: w.t12 }, callerId: 'STRANGER' }); check('a stranger cannot cancel (403)', r.status === 403, JSON.stringify(r.body)); }
@@ -162,6 +174,19 @@ async function runCancel({ pickup, total = 3000, deposit = 600, status = 'pendin
     const b = baseBooking(); b.drive_type = 'Chauffeur'; b.cars = { name: 'x', drive_type: 'Chauffeur' }; b.delivery_fee = 0; b.security_deposit = 500; b.addon_names = []; b.addon_days = []; b.addons_cost = 0; b.wopecare_total_cost = 0; b.rental_cost = 3600; b.billable_days = 2; b.total_cost = 4100;
     const r = await runModify({ booking: b, callerId: 'A', body: { ...dates('2026-12-10', '2026-12-10'), billableDays: 3, rentalCost: 5400, withDriver: true, totalCost: 1, amountCharged: 0 }, car: { id: 'C1', price_per_day: 1800, regional_addons: DEFS } });
     check('a chauffeur car booking stays chauffeur with no separate driver charge', r.booking.drive_type === 'Chauffeur' && r.booking.with_driver_total_cost === 0 && r.booking.total_cost === 5400 + 500, JSON.stringify([r.booking.drive_type, r.booking.with_driver_total_cost, r.booking.total_cost]));
+  }
+  // 11. Terms 5.2: a renter shortening a trip that has ALREADY STARTED keeps the charges - dates change, total/billable days/payout do not
+  {
+    const started = () => { const b = baseBooking(); b.start_date = '2026-10-01'; b.end_date = '2026-10-06'; return b; };
+    const shorten = { ...dates('2026-10-01', '2026-10-04'), billableDays: 3, rentalCost: 4091, addonsCost: 1750, deliveryFee: 250, securityDeposit: 2142, wopecareTotalCost: 324, totalCost: 7000, amountCharged: 0 };
+    const r = await runModify({ booking: started(), body: shorten });
+    check('renter shortens a trip already under way: dates change but the total stays what was paid (11500)', r.status === 200 && r.booking.end_date === '2026-10-04' && r.booking.total_cost === 11500 && r.body.chargesHeld === true, JSON.stringify([r.status, r.booking.end_date, r.booking.total_cost, r.body.chargesHeld]));
+    check('...and nothing else is re-priced: rental and billable days are unchanged, no balance', r.booking.rental_cost === 6818 && r.booking.billable_days === 5 && !(r.booking.balance_due > 0), JSON.stringify([r.booking.rental_cost, r.booking.billable_days]));
+    check('...the renter notification says no refund applies for unused days', (r.tables.notifications.find((n) => n.type === 'booking_modified')?.body ?? '').includes('not refunded or credited'), JSON.stringify(r.tables.notifications));
+    const a = await runModify({ booking: started(), body: shorten, callerId: 'A' });
+    check('staff can still deliberately reduce a booking that has started (admin override)', a.status === 200 && a.booking.total_cost < 11500 && !a.body.chargesHeld, JSON.stringify([a.status, a.booking.total_cost]));
+    const before = await runModify({ booking: baseBooking(), body: { ...dates('2026-12-10', '2026-12-13'), billableDays: 3, rentalCost: 4091, wopecareTotalCost: 324, totalCost: 1, amountCharged: 0 } });
+    check('shortening BEFORE the trip starts still re-prices normally', before.status === 200 && before.booking.total_cost < 11500 && !before.body.chargesHeld, JSON.stringify([before.status, before.booking.total_cost]));
   }
   // 8. a stranger cannot modify; a cancelled booking cannot be modified
   { const r = await runModify({ callerId: 'S', body: { ...dates('2026-12-10', '2026-12-13'), billableDays: 3, rentalCost: 4091, totalCost: 1 } }); check('a stranger cannot modify (403)', r.status === 403, JSON.stringify([r.status, r.body])); }
