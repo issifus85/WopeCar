@@ -74,7 +74,10 @@ Deno.serve(async (req) => {
         title,
         body,
       }));
-      await adminClient.from('notifications').insert(notificationRows).catch(() => {});
+      // Best-effort (a failure must not stop the push). NOT `.catch()` - a Supabase query builder is a thenable, not a Promise, so it has no
+      // .catch(); chaining one threw and crashed this whole function before any notification was sent.
+      const { error: insertError } = await adminClient.from('notifications').insert(notificationRows);
+      if (insertError) console.error('send-app-update-notification: in-app insert failed:', insertError.message);
 
       await adminClient.functions
         .invoke('send-push-notification', {
