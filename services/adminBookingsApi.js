@@ -84,9 +84,14 @@ async function notifyBoth(booking, { type, title, body }) {
  * themselves via acceptBookingRequest.
  */
 export async function confirmBooking(booking) {
+  // Confirming no longer marks the booking paid (that let an unpaid booking become "paid" with no proof of payment). Payment is recorded with
+  // markBookingPaid(), which asks for the method and reference.
+  if (booking.payment_status !== 'paid') {
+    throw new Error('This booking has not been paid. Use "Mark as Paid" first (with the payment details), then confirm it.');
+  }
   const { data, error } = await supabase
     .from('bookings')
-    .update({ status: 'confirmed', payment_status: 'paid' })
+    .update({ status: 'confirmed' })
     .eq('id', booking.id)
     .select(BOOKING_SELECT)
     .single();
@@ -133,21 +138,21 @@ export async function cancelBooking(booking, reason) {
   return getBooking(booking.id);
 }
 
-/** Independent of status, per "any status -> paid (admin only)". */
-export async function markBookingPaid(booking) {
-  const { data, error } = await supabase
-    .from('bookings')
-    .update({ payment_status: 'paid' })
-    .eq('id', booking.id)
-    .select(BOOKING_SELECT)
-    .single();
-  if (error) throw error;
-
-  await notifyBoth(data, {
-    type: 'booking_paid',
-    title: 'Payment recorded',
-    body: `Payment for booking ${data.booking_ref} has been marked as received.`,
+/**
+ * Records money received that the app did not capture itself. Goes through the admin_mark_booking_paid() database function (migration 0166):
+ * it needs a method plus a reference or note, refuses cancelled / already-paid bookings, records who did it, sets the status and notifies the
+ * renter and vendor. A database trigger blocks every other way of flipping a booking to paid from a signed-in session.
+ */
+export async function markBookingPaid(booking, { method, reference, note }) {
+  const { error } = await supabase.rpc('admin_mark_booking_paid', {
+    p_booking_id: booking.id,
+    p_method: method,
+    p_reference: reference?.trim() || null,
+    p_note: note?.trim() || null,
   });
+  if (error) throw new Error(error.message);
+  const { data, error: readError } = await supabase.from('bookings').select(BOOKING_SELECT).eq('id', booking.id).single();
+  if (readError) throw readError;
   return data;
 }
 

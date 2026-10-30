@@ -11,6 +11,7 @@ import SectionHeading from '../../../components/SectionHeading';
 import BadgeStatus from '../../../components/admin/BadgeStatus';
 import ConfirmModal from '../../../components/ConfirmModal';
 import ReasonModal from '../../../components/admin/ReasonModal';
+import MarkPaidModal from '../../../components/admin/MarkPaidModal';
 import DateRangeModal from '../../../components/DateRangeModal';
 import {
   getBooking, confirmBooking, cancelBooking, markBookingPaid, markBookingCompleted, recordBalanceReceived,
@@ -592,7 +593,7 @@ export default function AdminBookingDetailScreen() {
             </View>
 
             <View style={styles.actions}>
-              {booking.status === 'pending' && (
+              {booking.status === 'pending' && booking.payment_status === 'paid' && (
                 <TouchableOpacity style={styles.primaryButton} disabled={isSaving} onPress={() => setPendingAction('confirm')}>
                   <Ionicons name="checkmark-circle-outline" size={16} color={colors.white} />
                   <Text style={styles.primaryButtonText}>Confirm Booking</Text>
@@ -604,7 +605,7 @@ export default function AdminBookingDetailScreen() {
                   <Text style={styles.primaryButtonText}>Mark as Completed</Text>
                 </TouchableOpacity>
               )}
-              {booking.payment_status !== 'paid' && (
+              {booking.payment_status === 'unpaid' && booking.status !== 'cancelled' && (
                 <TouchableOpacity style={styles.secondaryButton} disabled={isSaving} onPress={() => setPendingAction('markPaid')}>
                   <Ionicons name="cash-outline" size={16} color={colors.teal} />
                   <Text style={styles.secondaryButtonText}>Mark as Paid</Text>
@@ -718,17 +719,16 @@ export default function AdminBookingDetailScreen() {
       <ConfirmModal
         visible={pendingAction === 'confirm'}
         title="Confirm this booking?"
-        message={`${booking.booking_ref} will be confirmed and marked as paid. The renter and vendor will be notified.`}
+        message={`${booking.booking_ref} will be confirmed. The renter and vendor will be notified.`}
         confirmLabel="Confirm"
         onConfirm={() => runAction(() => confirmBooking(booking))}
         onCancel={() => setPendingAction(null)}
       />
-      <ConfirmModal
+      <MarkPaidModal
         visible={pendingAction === 'markPaid'}
-        title="Mark as paid?"
-        message={`${booking.booking_ref} will be marked as paid, independent of its current status.`}
-        confirmLabel="Mark as Paid"
-        onConfirm={() => runAction(() => markBookingPaid(booking))}
+        bookingRef={booking.booking_ref}
+        amount={booking.total_cost}
+        onSubmit={(input) => runAction(() => markBookingPaid(booking, input))}
         onCancel={() => setPendingAction(null)}
       />
       <ConfirmModal
