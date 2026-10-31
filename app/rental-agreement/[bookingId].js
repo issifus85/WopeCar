@@ -448,7 +448,7 @@ export default function RentalAgreementScreen() {
         </View>
 
         <View style={styles.toggleRow}>
-          <Text style={styles.toggleLabel}>Vehicle only used within Ghana</Text>
+          <Text style={styles.toggleLabel}>Vehicle only used within paid, selected destinations in Ghana</Text>
           <Switch
             value={fields.ghanaOnlyUse}
             onValueChange={(v) => updateField('ghanaOnlyUse', v)}

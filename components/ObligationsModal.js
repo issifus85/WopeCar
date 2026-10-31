@@ -24,7 +24,7 @@ const LESSEE_OBLIGATIONS_BASE = [
 
 const LESSEE_OBLIGATIONS_REST = [
   'To return the vehicle to the Lessor in good mechanical condition on expiration of the contract, in the same condition as was given - the Lessee must first contact the Lessor before making any changes to the car;',
-  'The rate per day will increase if the Lessee decides to reduce the number of days instead of the initial duration agreed upon, or goes beyond destinations stated in this contract;',
+  'The rate per day will increase if the Lessee decides to reduce the number of days instead of the initial duration agreed upon, or goes beyond the paid, selected destinations within Ghana stated in this contract;',
   'The vehicle will be repaired by the Lessee in case of any damage caused by the Lessee.',
 ];
 
@@ -41,7 +41,7 @@ export default function ObligationsModal({ visible, onClose, ghanaOnlyUse = true
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  const ghanaClause = `To ensure that the motor vehicle is only used within Ghana ${ghanaOnlyUse ? '(agreed)' : '(not agreed - see note below)'};`;
+  const ghanaClause = `To ensure that the motor vehicle is only used within the paid, selected destinations within Ghana ${ghanaOnlyUse ? '(agreed)' : '(not agreed - see note below)'};`;
   const lesseeObligations = [
     ...LESSEE_OBLIGATIONS_BASE,
     ghanaClause,
