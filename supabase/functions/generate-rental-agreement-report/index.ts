@@ -42,7 +42,7 @@ const LESSEE_BASE = [
 ];
 const LESSEE_REST = [
   'To return the vehicle to the Lessor in good mechanical condition on expiration of the contract, in the same condition as was given - the Lessee must first contact the Lessor before making any changes to the car;',
-  'The rate per day will increase if the Lessee decides to reduce the number of days instead of the initial duration agreed upon, or goes beyond destinations stated in this contract;',
+  'The rate per day will increase if the Lessee decides to reduce the number of days instead of the initial duration agreed upon, or goes beyond the paid, selected destinations within Ghana stated in this contract;',
   'The vehicle will be repaired by the Lessee in case of any damage caused by the Lessee.',
 ];
 
@@ -114,11 +114,15 @@ async function buildPdf(agreement: any, booking: any, adminClient: any): Promise
     page.drawLine({ start: { x: M, y }, end: { x: W - M, y }, thickness: 0.6, color: rgb(0.85, 0.89, 0.9) });
     y -= 8;
   };
+  // Long values (e.g. the destinations list) wrap within the value column instead of running off the page.
   const row = (label: string, value: string) => {
-    ensure(18);
+    const lines = wrap(String(value || '—'), bold, 10.5, W - 2 * M - 170);
+    ensure(18 + (lines.length - 1) * 14);
     page.drawText(label, { x: M, y: y - 11, size: 10.5, font, color: grey });
-    page.drawText(String(value || '—'), { x: M + 170, y: y - 11, size: 10.5, font: bold, color: rgb(0.1, 0.14, 0.16) });
-    y -= 18;
+    lines.forEach((line, i) => {
+      page.drawText(line, { x: M + 170, y: y - 11 - i * 14, size: 10.5, font: bold, color: rgb(0.1, 0.14, 0.16) });
+    });
+    y -= 18 + (lines.length - 1) * 14;
   };
 
   page.drawText('WopeCar', { x: M, y: y - 20, size: 22, font: bold, color: navy });
@@ -142,7 +146,10 @@ async function buildPdf(agreement: any, booking: any, adminClient: any): Promise
   row('Return', `${formatDate(agreement.duration_end)}  ${agreement.return_time ?? ''}`.trim());
   row('Daily rate', money(agreement.daily_rate));
   row('Security deposit', money(agreement.security_deposit));
-  row('Used only within Ghana', agreement.ghana_only_use === false ? 'Not agreed' : 'Agreed');
+  // The paid destination add-ons the renter selected at checkout (bookings.addon_names - the car's regional_addons).
+  const destinations = (booking.addon_names ?? []).filter(Boolean) as string[];
+  row('Paid destinations', destinations.length > 0 ? destinations.join(', ') : 'None selected');
+  row('Used only within paid destinations', agreement.ghana_only_use === false ? 'Not agreed' : 'Agreed');
 
   heading("The Lessor's obligations");
   paragraph('The Lessor hereby agrees:', { gap: 2 });
@@ -150,7 +157,8 @@ async function buildPdf(agreement: any, booking: any, adminClient: any): Promise
 
   heading("The Lessee's obligations");
   paragraph('The Lessee hereby agrees:', { gap: 2 });
-  const ghana = `To ensure that the motor vehicle is only used within Ghana ${agreement.ghana_only_use === false ? '(not agreed)' : '(agreed)'};`;
+  const destinationList = destinations.length > 0 ? ` (${destinations.join(', ')})` : '';
+  const ghana = `To ensure that the motor vehicle is only used within the paid, selected destinations within Ghana${destinationList} ${agreement.ghana_only_use === false ? '(not agreed)' : '(agreed)'};`;
   [...LESSEE_BASE, ghana, ...LESSEE_REST].forEach((t, i) => paragraph(`${i + 1}.  ${t}`, { indent: 10, gap: 2 }));
 
   heading('Signatures');
@@ -232,7 +240,7 @@ Deno.serve(async (req) => {
 
     const { data: booking, error: bookingError } = await adminClient
       .from('bookings')
-      .select('id, booking_ref, renter_id, cars(name), renter:renter_id(full_name, email)')
+      .select('id, booking_ref, renter_id, addon_names, cars(name), renter:renter_id(full_name, email)')
       .eq('id', agreement.booking_id)
       .single();
     if (bookingError || !booking) return jsonResponse({ error: 'Booking not found.' }, 404);
