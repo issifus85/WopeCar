@@ -17,6 +17,13 @@
 // convention, even though the request body here only ever originates from
 // our own trigger (not a public form) and so is inherently trusted.
 //
+// The trigger fires the instant auth.users gets its row, which is before the
+// app has saved anything else: Sign in with Apple, for one, only writes the
+// user's name to public.users a moment after sign-in (see loginWithApple in
+// services/supabaseAuthApi.js). So the email is sent in the background after
+// a short wait, and reads the saved name and the sign-in method back from the
+// database instead of trusting the trigger's snapshot.
+//
 // Deploy with: supabase functions deploy send-signup-notification --no-verify-jwt
 // Reuses the same RESEND_API_KEY secret as every other email function here.
 
@@ -56,7 +63,23 @@ function emailShell(bodyHtml: string) {
   </div>`;
 }
 
-function buildEmailHtml({ email, fullName, createdAt }: { email: string; fullName: string | null; createdAt: string | null }) {
+const SEND_DELAY_MS = 20_000;
+
+const PROVIDER_LABELS: Record<string, string> = {
+  email: 'Email & password',
+  apple: 'Apple',
+  google: 'Google',
+  facebook: 'Facebook',
+};
+
+function describeSignInMethod(provider: string | null, email: string) {
+  if (!provider) return 'Unknown';
+  const label = PROVIDER_LABELS[provider] ?? provider.charAt(0).toUpperCase() + provider.slice(1);
+  if (provider === 'apple' && email.toLowerCase().endsWith('@privaterelay.appleid.com')) return `${label} (email hidden)`;
+  return label;
+}
+
+function buildEmailHtml({ email, fullName, signInMethod, createdAt }: { email: string; fullName: string | null; signInMethod: string; createdAt: string | null }) {
   const body = `
       <div style="padding:28px 24px;">
         <div style="text-align:center;margin-bottom:20px;">
@@ -67,6 +90,7 @@ function buildEmailHtml({ email, fullName, createdAt }: { email: string; fullNam
         <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px;">
           <tr><td style="padding:6px 0;color:#5b6b6c;">Name</td><td style="padding:6px 0;text-align:right;color:#154B59;">${escapeHtml(fullName || 'Not provided')}</td></tr>
           <tr><td style="padding:6px 0;color:#5b6b6c;">Email</td><td style="padding:6px 0;text-align:right;color:#154B59;">${escapeHtml(email)}</td></tr>
+          <tr><td style="padding:6px 0;color:#5b6b6c;">Signed in with</td><td style="padding:6px 0;text-align:right;color:#154B59;">${escapeHtml(signInMethod)}</td></tr>
           <tr><td style="padding:6px 0;color:#5b6b6c;">Signed up</td><td style="padding:6px 0;text-align:right;color:#154B59;">${escapeHtml(formatDateTime(createdAt))}</td></tr>
         </table>
 
@@ -92,6 +116,35 @@ async function sendResendEmail(resendApiKey: string, payload: Record<string, unk
   }
 }
 
+async function sendSignupEmail(
+  resendApiKey: string,
+  { email, fullName, createdAt }: { email: string; fullName: string | null; createdAt: string | null },
+) {
+  await new Promise((resolve) => setTimeout(resolve, SEND_DELAY_MS));
+
+  const adminClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+
+  // Saved profile (name the app wrote after sign-in) and the auth record (how they signed in). Either lookup
+  // failing just falls back to what the trigger sent - the email must still go out.
+  const { data: profile } = await adminClient.from('users').select('id, full_name').eq('email', email).maybeSingle();
+  let provider: string | null = null;
+  if (profile?.id) {
+    const { data: authUser } = await adminClient.auth.admin.getUserById(profile.id);
+    provider = (authUser?.user?.app_metadata?.provider as string | undefined) ?? null;
+  }
+  const savedName = (profile?.full_name ?? '').trim() || (fullName ?? '').trim() || null;
+
+  const { data: supportSetting } = await adminClient.from('app_settings').select('value').eq('key', 'support_email').maybeSingle();
+  const supportEmail = typeof supportSetting?.value === 'string' && supportSetting.value ? supportSetting.value : 'support@wopecar.com';
+
+  await sendResendEmail(resendApiKey, {
+    from: 'WopeCar <bookings@wopecar.com>',
+    to: [supportEmail],
+    subject: `New Signup - ${email}`,
+    html: buildEmailHtml({ email, fullName: savedName, signInMethod: describeSignInMethod(provider, email), createdAt }),
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -106,26 +159,21 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'email is required.' }, 400);
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const resendApiKey = Deno.env.get('RESEND_API_KEY');
-
     if (!resendApiKey) {
       return jsonResponse({ error: 'RESEND_API_KEY is not configured for this project.' }, 500);
     }
 
-    const adminClient = createClient(supabaseUrl, serviceRoleKey);
-    const { data: supportSetting } = await adminClient.from('app_settings').select('value').eq('key', 'support_email').maybeSingle();
-    const supportEmail = typeof supportSetting?.value === 'string' && supportSetting.value ? supportSetting.value : 'support@wopecar.com';
+    // Answer the trigger straight away (pg_net doesn't wait long) and send the email in the background.
+    const job = sendSignupEmail(resendApiKey, { email, fullName: fullName ?? null, createdAt: createdAt ?? null }).catch((e) =>
+      console.error('send-signup-notification failed:', e instanceof Error ? e.message : e),
+    );
+    // deno-lint-ignore no-explicit-any
+    const edgeRuntime = (globalThis as any).EdgeRuntime;
+    if (edgeRuntime?.waitUntil) edgeRuntime.waitUntil(job);
+    else await job;
 
-    await sendResendEmail(resendApiKey, {
-      from: 'WopeCar <bookings@wopecar.com>',
-      to: [supportEmail],
-      subject: `New Signup - ${email}`,
-      html: buildEmailHtml({ email, fullName: fullName ?? null, createdAt: createdAt ?? null }),
-    });
-
-    return jsonResponse({ success: true });
+    return jsonResponse({ success: true, queued: true });
   } catch (e) {
     return jsonResponse({ error: e instanceof Error ? e.message : 'Unexpected error.' }, 500);
   }
