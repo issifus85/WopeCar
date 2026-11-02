@@ -261,6 +261,10 @@ function formatDate(d) {
   if (!d) return '—';
   return parseDateOnly(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
+// The calendar's own (local) date as YYYY-MM-DD. toISOString() converts to UTC first, which shifts the day east of UTC.
+function toLocalISODate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 function daysBetween(start, end) {
   if (!start || !end) return 0;
   return Math.max(1, Math.round((new Date(end) - new Date(start)) / (1000 * 60 * 60 * 24)));
@@ -351,8 +355,9 @@ export default function AdminBookingDetailScreen() {
   }, [load]);
 
   const startEditing = () => {
-    setEditStart(booking.start_date ? new Date(booking.start_date) : null);
-    setEditEnd(booking.end_date ? new Date(booking.end_date) : null);
+    // parseDateOnly, not new Date(): a plain 'YYYY-MM-DD' parsed as UTC lands on the previous day west of UTC.
+    setEditStart(booking.start_date ? parseDateOnly(booking.start_date) : null);
+    setEditEnd(booking.end_date ? parseDateOnly(booking.end_date) : null);
     setEditPickupTime(booking.pickup_time);
     setEditReturnTime(booking.return_time);
     setEditPickupLocation(booking.pickup_location ?? '');
@@ -372,8 +377,8 @@ export default function AdminBookingDetailScreen() {
     let cancelled = false;
     setModifyCtx(null);
     getModifyPricingContext(booking, {
-      startDate: editStart.toISOString().slice(0, 10),
-      endDate: editEnd.toISOString().slice(0, 10),
+      startDate: toLocalISODate(editStart),
+      endDate: toLocalISODate(editEnd),
     }).then((ctx) => { if (!cancelled) setModifyCtx(ctx); }).catch(() => {});
     return () => { cancelled = true; };
   }, [isEditing, booking, editStart, editEnd]);
@@ -381,8 +386,8 @@ export default function AdminBookingDetailScreen() {
   const previewCosts = useMemo(() => {
     if (!isEditing || !booking || !editStart || !editEnd || !modifyCtx) return null;
     return recomputeBookingCost(booking, {
-      startDate: editStart.toISOString().slice(0, 10),
-      endDate: editEnd.toISOString().slice(0, 10),
+      startDate: toLocalISODate(editStart),
+      endDate: toLocalISODate(editEnd),
       pickupTime: editPickupTime,
       returnTime: editReturnTime,
     }, modifyCtx);
@@ -413,8 +418,8 @@ export default function AdminBookingDetailScreen() {
   const handleSaveModify = () => {
     runAction(() =>
       modifyBooking(booking, {
-        startDate: editStart.toISOString().slice(0, 10),
-        endDate: editEnd.toISOString().slice(0, 10),
+        startDate: toLocalISODate(editStart),
+        endDate: toLocalISODate(editEnd),
         pickupTime: editPickupTime,
         returnTime: editReturnTime,
         pickupLocation: editPickupLocation.trim(),
@@ -443,6 +448,7 @@ export default function AdminBookingDetailScreen() {
   }
 
   const days = daysBetween(booking.start_date, booking.end_date);
+  const originalStartDate = booking.start_date ? parseDateOnly(booking.start_date) : null;
 
   return (
     <View style={styles.container}>
@@ -670,6 +676,13 @@ export default function AdminBookingDetailScreen() {
             {!!previewCosts && (
               <View style={styles.previewCard}>
                 <Row label="New Total Days" value={previewCosts.days} styles={styles} />
+                <Row label="Rental" value={`${formatCurrency(booking.rental_cost)} → ${formatCurrency(previewCosts.rentalCost)}`} styles={styles} />
+                {Math.abs(previewCosts.securityDeposit - Number(booking.security_deposit ?? 0)) > 0.005 && (
+                  <Row label="Security deposit (refundable)" value={`${formatCurrency(booking.security_deposit)} → ${formatCurrency(previewCosts.securityDeposit)}`} styles={styles} />
+                )}
+                {Math.abs(previewCosts.deliveryFee - Number(booking.delivery_fee ?? 0)) > 0.005 && (
+                  <Row label="Delivery fee" value={`${formatCurrency(booking.delivery_fee)} → ${formatCurrency(previewCosts.deliveryFee)}`} styles={styles} />
+                )}
                 <Row label="New Total Cost" value={formatCurrency(previewCosts.totalCost)} styles={styles} />
                 {booking.payment_status === 'paid' && Math.abs(previewCosts.totalCost - Number(booking.total_cost)) > 0.005 && (
                   <Row
@@ -713,6 +726,10 @@ export default function AdminBookingDetailScreen() {
         onClose={() => setIsDatePickerVisible(false)}
         startDate={editStart}
         endDate={editEnd}
+        // Staff can go back as far as the booking's original pickup date (even in an earlier month) to extend or correct a trip that
+        // is already under way; anything before that stays blocked. The original pickup date is selectable even if it is a Sunday.
+        minDate={originalStartDate && originalStartDate < new Date() ? originalStartDate : undefined}
+        allowedDates={originalStartDate ? [originalStartDate] : undefined}
         onApply={(s, e) => { setEditStart(s); setEditEnd(e); }}
       />
 

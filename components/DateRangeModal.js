@@ -43,10 +43,23 @@ export function formatDateShort(date) {
   return `${MONTH_NAMES[date.getMonth()].slice(0, 3)} ${date.getDate()}`;
 }
 
-export default function DateRangeModal({ visible, onClose, startDate, endDate, onApply }) {
+/**
+ * minDate: the earliest selectable day (default today). Days before it are greyed out and the
+ * previous-month arrow stops at its month.
+ * allowedDates: days that stay selectable even if they fall before minDate or on a Sunday - used by
+ * Modify Booking so a trip that has already started (possibly in an earlier month) can keep its
+ * ORIGINAL pickup date while the return date is moved, without opening up every other past day.
+ */
+export default function DateRangeModal({ visible, onClose, startDate, endDate, onApply, minDate, allowedDates }) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const today = stripTime(new Date());
+  const minDay = minDate ? stripTime(minDate) : today;
+  const allowed = (allowedDates ?? []).filter(Boolean).map(stripTime);
+  const isAllowed = (day) => allowed.some((d) => isSameDay(d, day));
+  const isDayDisabled = (day) => !isAllowed(day) && (day < minDay || day.getDay() === 0);
+  // The calendar can go back as far as the earliest day that can actually be picked.
+  const earliest = allowed.reduce((min, d) => (d < min ? d : min), minDay);
   const [viewMonth, setViewMonth] = useState(startDate ? stripTime(startDate) : today);
   const [tempStart, setTempStart] = useState(startDate ?? null);
   const [tempEnd, setTempEnd] = useState(endDate ?? null);
@@ -64,11 +77,11 @@ export default function DateRangeModal({ visible, onClose, startDate, endDate, o
   };
 
   const canGoPrev =
-    viewMonth.getFullYear() > today.getFullYear() ||
-    (viewMonth.getFullYear() === today.getFullYear() && viewMonth.getMonth() > today.getMonth());
+    viewMonth.getFullYear() > earliest.getFullYear() ||
+    (viewMonth.getFullYear() === earliest.getFullYear() && viewMonth.getMonth() > earliest.getMonth());
 
   const handleDayPress = (day) => {
-    if (day < today || day.getDay() === 0) return;
+    if (isDayDisabled(day)) return;
     if (!tempStart || (tempStart && tempEnd)) {
       setTempStart(day);
       setTempEnd(null);
@@ -136,9 +149,7 @@ export default function DateRangeModal({ visible, onClose, startDate, endDate, o
               if (!day) {
                 return <View key={`empty-${index}`} style={styles.dayCell} />;
               }
-              const isPast = day < today;
-              const isSunday = day.getDay() === 0;
-              const isDisabled = isPast || isSunday;
+              const isDisabled = isDayDisabled(day);
               const isStart = isSameDay(day, tempStart);
               const isEnd = isSameDay(day, tempEnd);
               const isInRange = tempStart && tempEnd && day > tempStart && day < tempEnd;

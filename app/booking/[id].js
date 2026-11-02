@@ -297,8 +297,9 @@ export default function BookingDetailScreen() {
   };
 
   const startEditing = () => {
-    setEditStart(booking.startDate ? new Date(booking.startDate) : null);
-    setEditEnd(booking.endDate ? new Date(booking.endDate) : null);
+    // parseDateOnly, not new Date(): a plain 'YYYY-MM-DD' parsed as UTC lands on the previous day west of UTC.
+    setEditStart(booking.startDate ? parseDateOnly(booking.startDate) : null);
+    setEditEnd(booking.endDate ? parseDateOnly(booking.endDate) : null);
     setEditPickupTime(booking.pickupTime);
     setEditReturnTime(booking.returnTime);
     setEditPickupLocation(booking.pickupLocation ?? '');
@@ -974,6 +975,17 @@ export default function BookingDetailScreen() {
               <Text style={styles.rowLabel}>New Total ({days} {days === 1 ? 'day' : 'days'})</Text>
               <Text style={styles.rowValue}>{formatCurrency(recomputedTotal, activeCurrency)}</Text>
             </View>
+            {/* The self-drive deposit is a share of the rental (see calculateSecurityDeposit), so a longer trip raises it too. Shown on
+                its own so the change doesn't read as more than the extra days - the deposit part is refunded after the trip. */}
+            {!chargesHeld && booking.securityDeposit != null
+              && Math.abs(recomputedBreakdown.securityDeposit - booking.securityDeposit) > 0.005 && (
+              <View style={styles.row}>
+                <Text style={styles.rowLabel}>Includes refundable deposit change</Text>
+                <Text style={styles.rowValue}>
+                  {formatCurrency(booking.securityDeposit, activeCurrency)} → {formatCurrency(recomputedBreakdown.securityDeposit, activeCurrency)}
+                </Text>
+              </View>
+            )}
 
             <View style={styles.divider} />
 
@@ -1163,6 +1175,9 @@ export default function BookingDetailScreen() {
         onClose={() => setIsDatePickerVisible(false)}
         startDate={editStart}
         endDate={editEnd}
+        // The booked pickup date stays selectable even once it is in the past (a trip already under way, maybe from last month), so
+        // the renter can keep it and only move the return date. Every other past day stays blocked.
+        allowedDates={booking?.startDate ? [parseDateOnly(booking.startDate)] : undefined}
         onApply={(start, end) => {
           setEditStart(start);
           setEditEnd(end);

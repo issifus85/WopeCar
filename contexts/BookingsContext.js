@@ -47,6 +47,8 @@ function normalizeSupabaseBooking(row) {
       days: row.with_driver_days ?? null,
     },
     totalCost: row.total_cost,
+    // Refundable deposit inside totalCost - Modify Booking shows how much of a price change is the deposit moving with the rental.
+    securityDeposit: row.security_deposit != null ? Number(row.security_deposit) : null,
     // The promo used at checkout (null when none) - Modify Booking re-prices it against the new dates.
     promoCode: row.promo_code ?? null,
     promoDiscountAmount: Number(row.promo_discount_amount ?? 0),
