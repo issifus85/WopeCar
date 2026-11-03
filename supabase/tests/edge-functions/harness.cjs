@@ -18,12 +18,14 @@ function makeDb(tables) {
         if (f.type === 'in') rows = rows.filter((r) => f.vals.includes(r[f.col]));
         if (f.type === 'gte') rows = rows.filter((r) => r[f.col] >= f.val);
         if (f.type === 'lte') rows = rows.filter((r) => r[f.col] <= f.val);
+        if (f.type === 'or') rows = rows.filter((r) => f.parts.some((p) => (p.op === 'is' && p.val === 'null' ? (r[p.col] ?? null) === null : p.op === 'lt' ? r[p.col] != null && r[p.col] < p.val : p.op === 'eq' ? String(r[p.col]) === p.val : false)));
+        if (f.type === 'is') rows = rows.filter((r) => (r[f.col] ?? null) === f.val);
       }
       if (state.mode === 'update') {
         const ids = rows.map((r) => r.id);
         log.updates.push({ table, patch: state.patch, ids });
         rows.forEach((r) => Object.assign(r, state.patch));
-        return { data: null, error: null };
+        return { data: rows, error: null };
       }
       if (state.mode === 'insert') {
         log.inserts.push({ table, row: state.row });
@@ -38,12 +40,18 @@ function makeDb(tables) {
       select() { return b; },
       limit() { return b; },
       order() { return b; },
-      or() { return b; },
+      or(expr) {
+        // Supports the PostgREST forms used here: col.is.null and col.lt.value, comma = OR.
+        const parts = String(expr).split(',').map((x) => { const [col, op, ...rest] = x.split('.'); return { col, op, val: rest.join('.') }; });
+        state.filters.push({ type: 'or', parts });
+        return b;
+      },
       eq(col, val) { state.filters.push({ type: 'eq', col, val }); return b; },
       ilike(col, val) { state.filters.push({ type: 'ilike', col, val }); return b; },
       in(col, vals) { state.filters.push({ type: 'in', col, vals }); return b; },
       gte(col, val) { state.filters.push({ type: 'gte', col, val }); return b; },
       lte(col, val) { state.filters.push({ type: 'lte', col, val }); return b; },
+      is(col, val) { state.filters.push({ type: 'is', col, val }); return b; },
       update(patch) { state.mode = 'update'; state.patch = patch; return b; },
       insert(row) { state.mode = 'insert'; state.row = row; return b; },
       single() { const r = run(); const row = Array.isArray(r.data) ? r.data[0] : r.data; return Promise.resolve(row ? { data: row, error: null } : { data: null, error: { message: 'no rows' } }); },
@@ -70,7 +78,7 @@ function loadFunction(rel, deps) {
     if (spec.includes('supabase-js')) return { createClient: deps.createClient };
     if (spec.endsWith('_shared/modifyPricing.ts')) return loadShared('_shared/modifyPricing.ts');
     if (spec.endsWith('_shared/time.ts')) return loadShared('_shared/time.ts');
-    if (spec.endsWith('_shared/cronAuth.ts')) return { getInternalSecret: async () => null };
+    if (spec.endsWith('_shared/cronAuth.ts')) return { getInternalSecret: async () => 'internal-secret', isTrustedInternalCaller: async (r) => r.headers.get('x-cron-secret') === 'internal-secret' };
     if (spec.endsWith('_shared/balancePayment.ts') || spec.endsWith('_shared/confirmPayment.ts')) return loadWithFetch(spec.split('/').pop(), deps);
     return {};
   };

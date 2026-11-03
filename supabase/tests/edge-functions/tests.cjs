@@ -121,6 +121,46 @@ async function runCancel({ pickup, total = 3000, deposit = 600, status = 'pendin
     const r2 = await runModify({ body: { ...body, totalCost: serverTotal, amountCharged: 100 }, paystack: { status: true, data: { status: 'success', amount: 10000 } } });
     check('paid increase where Paystack confirmed less than the difference is rejected (409)', r2.status === 409, JSON.stringify([r2.status, r2.body]));
   }
+  // 3c. Paid website change saved by paystack-initialize (pending_booking_modifications) and applied by reference only - the renter's
+  //     browser lost it (paid on another device / closed the tab), or paystack-webhook applies it on their behalf. Booking 8392 case.
+  {
+    const ext = { ...dates('2026-12-10', '2026-12-17'), billableDays: 7, rentalCost: 9545, wopecareTotalCost: 756 };
+    const serverTotal = 9545 + 1750 + 250 + 2823.75 + 756; const diff = Math.round((serverTotal - 11500) * 100) / 100;
+    const paid = { status: true, data: { status: 'success', amount: Math.round(diff * 100) } };
+    async function runPending({ body, headers = {}, callerId = 'R', pending = {}, mods = [], paystack = paid }) {
+      const booking = baseBooking();
+      const tables = {
+        users: [{ id: 'R', role: 'renter' }, { id: 'A', role: 'admin' }, { id: 'X', role: 'renter' }], bookings: [booking], cars: [{ id: 'C1', price_per_day: 1550, regional_addons: DEFS }],
+        app_settings: settings, promo_codes: [], car_payouts: [{ car_id: 'C1', payout_per_day: 1000 }], car_date_prices: [], booking_modifications: mods, notifications: [], internal_secrets: [],
+        pending_booking_modifications: [{ reference: 'ps_mod', booking_id: 'B1', renter_id: 'R', payload: { ...ext, bookingId: 'B1', totalCost: serverTotal }, amount: diff, claimed_at: null, applied_at: null, ...pending }],
+      };
+      const { client, log } = makeDb(tables);
+      const fetchStub = async (url) => (String(url).includes('/transaction/verify/') ? { ok: true, json: async () => paystack } : { ok: true, json: async () => ({}) });
+      const handler = loadFunction('modify-booking/index.ts', { createClient: (u, k, o) => client(o?.global ? callerId : null), env: { SUPABASE_URL: 'u', SUPABASE_ANON_KEY: 'a', SUPABASE_SERVICE_ROLE_KEY: 's', PAYSTACK_SECRET_KEY: 'k', RESEND_API_KEY: '' }, fetch: fetchStub });
+      const request = new Request('https://x/fn', { method: 'POST', headers: { Authorization: 'Bearer x', 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
+      const res = await handler(request);
+      return { status: res.status, body: await res.json(), tables, log };
+    }
+    const r = await runPending({ body: { pendingReference: 'ps_mod' } });
+    const p0 = r.tables.pending_booking_modifications[0];
+    check('a paid change saved on the server is applied from its payment reference alone', r.status === 200 && r.tables.bookings[0].end_date === '2026-12-17' && r.tables.bookings[0].total_cost === serverTotal, JSON.stringify([r.status, r.body]));
+    check('...the change is recorded with that payment and marked applied', r.tables.booking_modifications.some((m) => m.payment_ref === 'ps_mod' && m.amount_charged === diff) && !!p0.applied_at && !p0.last_error, JSON.stringify([r.tables.booking_modifications, p0]));
+    const again = await runPending({ body: { pendingReference: 'ps_mod' }, mods: [{ id: 'M1', booking_id: 'B1', payment_ref: 'ps_mod' }] });
+    check('the same payment can not apply the change twice (callback + webhook)', again.status === 200 && again.body.alreadyApplied && !again.log.updates.some((u) => u.table === 'bookings'), JSON.stringify([again.status, again.body]));
+    const browser = await runPending({ body: { bookingId: 'B1', ...ext, totalCost: serverTotal, paystackReference: 'ps_mod', amountCharged: diff } });
+    check('the website callback (change still in the browser) claims and applies the saved change once', browser.status === 200 && !!browser.tables.pending_booking_modifications[0].applied_at, JSON.stringify([browser.status, browser.body]));
+    const busy = await runPending({ body: { pendingReference: 'ps_mod' }, pending: { claimed_at: new Date().toISOString() } });
+    check('a change another caller is applying right now is not applied a second time', busy.status === 200 && busy.body.inProgress && !busy.log.updates.some((u) => u.table === 'bookings'), JSON.stringify([busy.status, busy.body]));
+    const hook = await runPending({ body: { pendingReference: 'ps_mod', actAsUserId: 'R' }, headers: { 'x-cron-secret': 'internal-secret' }, callerId: null });
+    check('paystack-webhook (internal secret) applies it for the renter who never came back', hook.status === 200 && hook.tables.bookings[0].end_date === '2026-12-17' && hook.tables.booking_modifications[0]?.modified_by === 'R', JSON.stringify([hook.status, hook.body]));
+    const forged = await runPending({ body: { pendingReference: 'ps_mod', actAsUserId: 'R' }, headers: { 'x-cron-secret': 'wrong' }, callerId: 'X' });
+    check('acting for a renter without the internal secret is refused (401)', forged.status === 401 && !forged.log.updates.some((u) => u.table === 'bookings'), JSON.stringify([forged.status, forged.body]));
+    const stranger = await runPending({ body: { pendingReference: 'ps_mod' }, callerId: 'X' });
+    check('another account can not apply someone else\'s saved change (403), and it is released', stranger.status === 403 && !stranger.tables.pending_booking_modifications[0].claimed_at && !stranger.log.updates.some((u) => u.table === 'bookings'), JSON.stringify([stranger.status, stranger.body]));
+    const short = await runPending({ body: { pendingReference: 'ps_mod' }, paystack: { status: true, data: { status: 'success', amount: 100 } } });
+    const ps = short.tables.pending_booking_modifications[0];
+    check('a saved change whose payment does not verify is not applied; the reason is kept for staff', short.status === 402 && !ps.applied_at && !ps.claimed_at && /402/.test(ps.last_error ?? ''), JSON.stringify([short.status, short.body, ps]));
+  }
   // 4. client claims a tiny rental on a paid booking (tamper) -> rejected by the rental floor
   {
     const r = await runModify({ body: { ...dates('2026-12-10', '2026-12-13'), billableDays: 3, rentalCost: 100, wopecareTotalCost: 324, totalCost: 100, amountCharged: 0 } });

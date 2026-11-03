@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'PAYSTACK_SECRET_KEY is not configured for this project.' }, 500);
     }
 
-    const { amount, callbackUrl, bookingIds, purpose } = await req.json();
+    const { amount, callbackUrl, bookingIds, purpose, modification } = await req.json();
     const numericAmount = Number(amount);
     if (!numericAmount || numericAmount <= 0) {
       return jsonResponse({ error: 'A positive amount is required.' }, 400);
@@ -92,8 +92,26 @@ Deno.serve(async (req) => {
         }
         metadata.purpose = 'balance';
       }
-    } else if (purpose === 'balance') {
-      return jsonResponse({ error: 'A balance payment needs the booking id.' }, 400);
+
+      // Paying the price difference for a change to the booking (website Modify Booking). The requested change is saved on the
+      // server below, against this transaction's reference, so it is applied even if the renter never comes back from Paystack
+      // (modify-booking applies it from the website callback or from paystack-webhook, whichever is first). modify-booking still
+      // re-prices and re-verifies everything when it applies it.
+      if (purpose === 'modify') {
+        if (ids.length !== 1) return jsonResponse({ error: 'A booking change is for one booking.' }, 400);
+        if (!modification || typeof modification !== 'object' || Array.isArray(modification)) {
+          return jsonResponse({ error: 'The requested change is missing.' }, 400);
+        }
+        if (modification.bookingId && modification.bookingId !== ids[0]) {
+          return jsonResponse({ error: 'The requested change is for a different booking.' }, 400);
+        }
+        if (Math.abs(Number(modification.amountCharged ?? numericAmount) - numericAmount) > 0.5) {
+          return jsonResponse({ error: 'The amount does not match the requested change.' }, 400);
+        }
+        metadata.purpose = 'modify';
+      }
+    } else if (purpose === 'balance' || purpose === 'modify') {
+      return jsonResponse({ error: 'This payment needs the booking id.' }, 400);
     }
 
     const { data: profile } = await adminClient.from('users').select('email').eq('id', user.id).maybeSingle();
@@ -122,6 +140,22 @@ Deno.serve(async (req) => {
 
     if (!paystackRes.ok || !paystackJson.status) {
       return jsonResponse({ error: paystackJson.message || 'Could not initialize payment with Paystack.' }, 502);
+    }
+
+    if (metadata?.purpose === 'modify') {
+      // Saved before the renter is sent to pay; if it can't be saved, they aren't sent (nothing has been charged yet).
+      // Strip fields the server decides itself (reference/amount come from the transaction, never from the client).
+      const { paystackReference: _ref, amountCharged: _amt, pendingReference: _p, actAsUserId: _a, ...payload } = modification as Record<string, unknown>;
+      const { error: pendingError } = await adminClient.from('pending_booking_modifications').insert({
+        reference: paystackJson.data.reference,
+        booking_id: metadata.booking_ids[0],
+        renter_id: user.id,
+        payload: { ...payload, bookingId: metadata.booking_ids[0] },
+        amount: numericAmount,
+      });
+      if (pendingError) {
+        return jsonResponse({ error: 'Could not start this payment. Please try again.' }, 500);
+      }
     }
 
     return jsonResponse({

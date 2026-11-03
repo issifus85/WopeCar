@@ -43,6 +43,7 @@
 import { computeModifyPricing } from '../_shared/modifyPricing.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { combineDateAndTime } from '../_shared/time.ts';
+import { isTrustedInternalCaller } from '../_shared/cronAuth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -230,14 +231,13 @@ async function sendResendEmail(resendApiKey: string, payload: Record<string, unk
   }
 }
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+// deno-lint-ignore no-explicit-any
+type ModifyBody = Record<string, any>;
 
+async function handleModify(req: Request, body: ModifyBody, internalActAs: string | null): Promise<Response> {
   try {
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
+    if (!authHeader && !internalActAs) {
       return jsonResponse({ error: 'Missing Authorization header.' }, 401);
     }
 
@@ -245,7 +245,7 @@ Deno.serve(async (req) => {
       bookingId, startDate, endDate, pickupTime, returnTime, pickupLocation, returnLocation,
       rentalCost, addonsCost, deliveryFee, securityDeposit, totalCost, billableDays,
       wopecareTotalCost, withDriverTotalCost, withDriver, withDriverDays, paystackReference, amountCharged,
-    } = await req.json();
+    } = body;
 
     if (!bookingId || !startDate || !endDate || totalCost == null) {
       return jsonResponse({ error: 'bookingId, startDate, endDate, and totalCost are required.' }, 400);
@@ -257,10 +257,18 @@ Deno.serve(async (req) => {
     const paystackSecretKey = Deno.env.get('PAYSTACK_SECRET_KEY');
     const resendApiKey = Deno.env.get('RESEND_API_KEY');
 
-    const callerClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
-    const { data: { user: caller }, error: getUserError } = await callerClient.auth.getUser();
-    if (getUserError || !caller) {
-      return jsonResponse({ error: 'Invalid or expired session.' }, 401);
+    // paystack-webhook applies a paid change on the renter's behalf (they paid but never came back to the site): it proves itself
+    // with the internal secret and names the renter, who then goes through exactly the same checks as if they had called.
+    let caller: { id: string };
+    if (internalActAs) {
+      caller = { id: internalActAs };
+    } else {
+      const callerClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader! } } });
+      const { data: { user }, error: getUserError } = await callerClient.auth.getUser();
+      if (getUserError || !user) {
+        return jsonResponse({ error: 'Invalid or expired session.' }, 401);
+      }
+      caller = user;
     }
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
@@ -650,4 +658,77 @@ Deno.serve(async (req) => {
   } catch (e) {
     return jsonResponse({ error: e instanceof Error ? e.message : 'Unexpected error.' }, 500);
   }
+}
+
+// A paid change is applied at most once per Paystack reference, from whichever arrives first: the client (app / website callback)
+// or paystack-webhook. A change the website started is waiting in pending_booking_modifications (see migration 0168): it is claimed
+// before applying, so two callers can't apply it twice, and released with the error if it can't be applied.
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  let body: ModifyBody;
+  try {
+    body = await req.json();
+  } catch {
+    return jsonResponse({ error: 'Invalid request body.' }, 400);
+  }
+
+  const internalActAs = typeof body.actAsUserId === 'string' && (await isTrustedInternalCaller(req)) ? body.actAsUserId as string : null;
+  if (body.actAsUserId && !internalActAs) return jsonResponse({ error: 'Unauthorized.' }, 401);
+
+  const reference: string | null = typeof body.pendingReference === 'string' ? body.pendingReference
+    : typeof body.paystackReference === 'string' ? body.paystackReference : null;
+  if (!reference) return handleModify(req, body, internalActAs);
+
+  const adminClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+
+  // Already applied with this payment (e.g. the webhook got there first): report success, change nothing.
+  const { data: doneMod } = await adminClient.from('booking_modifications').select('id').eq('payment_ref', reference).limit(1).maybeSingle();
+  if (doneMod) return jsonResponse({ success: true, alreadyApplied: true });
+
+  const { data: pending } = await adminClient.from('pending_booking_modifications').select('*').eq('reference', reference).maybeSingle();
+  if (!pending) {
+    if (body.pendingReference && !body.bookingId) return jsonResponse({ error: 'We could not find this change. Please contact support with your payment reference.' }, 404);
+    return handleModify(req, body, internalActAs); // app flow: no pending row, same as before
+  }
+  if (pending.applied_at) return jsonResponse({ success: true, alreadyApplied: true });
+
+  // Claim it (a stale claim older than 2 minutes is treated as abandoned).
+  const staleBefore = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+  const { data: claimed } = await adminClient
+    .from('pending_booking_modifications')
+    .update({ claimed_at: new Date().toISOString() })
+    .eq('reference', reference)
+    .is('applied_at', null)
+    .or(`claimed_at.is.null,claimed_at.lt.${staleBefore}`)
+    .select('reference')
+    .maybeSingle();
+  if (!claimed) return jsonResponse({ success: true, inProgress: true });
+
+  // The saved request is the source of truth for what was paid for; the payment reference and amount come from it too.
+  const merged: ModifyBody = {
+    ...(pending.payload as ModifyBody),
+    bookingId: pending.booking_id,
+    paystackReference: reference,
+    amountCharged: Number(pending.amount),
+  };
+  const res = await handleModify(req, merged, internalActAs);
+  let resBody: ModifyBody = {};
+  try {
+    resBody = await res.clone().json();
+  } catch {
+    // keep {}
+  }
+  if (res.ok && resBody.success) {
+    await adminClient.from('pending_booking_modifications')
+      .update({ applied_at: new Date().toISOString(), modification_id: resBody.modification?.id ?? null, last_error: null })
+      .eq('reference', reference);
+  } else {
+    await adminClient.from('pending_booking_modifications')
+      .update({ claimed_at: null, last_error: `${res.status}: ${resBody.error ?? 'unknown error'}` })
+      .eq('reference', reference);
+  }
+  return res;
 });
