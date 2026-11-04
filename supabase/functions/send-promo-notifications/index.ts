@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
 
         await adminClient.functions
           .invoke('send-push-notification', {
-            body: { notifications: users.map((u) => ({ userId: u.id, title: campaign.title, body: campaign.body })) },
+            body: { notifications: users.map((u) => ({ userId: u.id, title: campaign.title, body: campaign.body, interruptionLevel: 'active' })) },
           })
           .catch((e) => console.error(`promo campaign ${campaign.id}: push send failed`, e));
 

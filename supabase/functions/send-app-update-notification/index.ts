@@ -87,6 +87,7 @@ Deno.serve(async (req) => {
               title,
               body,
               data: storeUrl ? { url: storeUrl } : undefined,
+              interruptionLevel: 'active',
             })),
           },
         })

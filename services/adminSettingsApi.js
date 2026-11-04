@@ -82,7 +82,7 @@ export async function broadcastNotification({ title, body, target }) {
   // "All Users").
   supabase.functions
     .invoke('send-push-notification', {
-      body: { notifications: users.map((u) => ({ userId: u.id, title, body })) },
+      body: { notifications: users.map((u) => ({ userId: u.id, title, body, interruptionLevel: 'active' })) },
     })
     .catch(() => {});
 

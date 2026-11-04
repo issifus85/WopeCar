@@ -41,7 +41,22 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-type NotificationInput = { userId: string; title: string; body?: string; data?: Record<string, unknown> };
+// iOS interruption level. 'time-sensitive' is the default because almost every push this app sends is about a live
+// booking or a chat reply. Without it, iOS holds the push silently (no sound, no banner) whenever the phone has a Focus
+// on (Work, Personal, Do Not Disturb) or Scheduled Summary turned on - which for most people is their working day, and
+// the likely reason users got sounds/badges at night but not during the day (Nov 2026 reports). Needs the
+// com.apple.developer.usernotifications.time-sensitive entitlement (app.json); builds without it treat this as 'active'.
+// Marketing-style sends (promos, app updates, cart reminders, admin broadcasts) pass 'active' so they still respect Focus.
+type InterruptionLevel = 'passive' | 'active' | 'time-sensitive';
+const INTERRUPTION_LEVELS: InterruptionLevel[] = ['passive', 'active', 'time-sensitive'];
+
+type NotificationInput = {
+  userId: string;
+  title: string;
+  body?: string;
+  data?: Record<string, unknown>;
+  interruptionLevel?: InterruptionLevel;
+};
 
 // Expo caps a single push request at 100 messages - chunk defensively even
 // though this app's real broadcast sizes are nowhere near that yet.
@@ -105,19 +120,27 @@ Deno.serve(async (req) => {
       tokensByUser.set(row.user_id, list);
     });
 
-    // The number shown on the app icon. Every caller writes the in-app
-    // `notifications` row before it calls this, so the unread count already
-    // includes the one being sent (min 1 as a floor). The app corrects it to
-    // its own full unread count (messages + notifications) when it opens.
+    // The number shown on the app icon: the same total the app shows (unread messages + unread notifications), via
+    // push_badge_counts (migration 0169). Every caller writes its in-app row before calling this, so the count already
+    // includes the one being sent (min 1 as a floor). The app corrects it to its own count when it opens.
+    const recipientIds = [...tokensByUser.keys()];
     const unreadByUser = new Map<string, number>();
-    await Promise.all([...tokensByUser.keys()].map(async (id) => {
-      const { count } = await adminClient
-        .from('notifications')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', id)
-        .eq('is_read', false);
-      unreadByUser.set(id, Math.max(1, count ?? 0));
-    }));
+    const { data: badgeRows, error: badgeError } = recipientIds.length
+      ? await adminClient.rpc('push_badge_counts', { p_user_ids: recipientIds })
+      : { data: [], error: null };
+    if (!badgeError) {
+      (badgeRows ?? []).forEach((row: { user_id: string; badge: number }) => unreadByUser.set(row.user_id, Math.max(1, row.badge ?? 0)));
+    } else {
+      // 0169 not applied yet: fall back to unread notifications only.
+      await Promise.all(recipientIds.map(async (id) => {
+        const { count } = await adminClient
+          .from('notifications')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', id)
+          .eq('is_read', false);
+        unreadByUser.set(id, Math.max(1, count ?? 0));
+      }));
+    }
 
     const messages = notifications.flatMap((n) =>
       (tokensByUser.get(n.userId) ?? []).map((token) => ({
@@ -132,6 +155,9 @@ Deno.serve(async (req) => {
         badge: unreadByUser.get(n.userId) ?? 1,
         priority: 'high',
         channelId: 'alerts',
+        interruptionLevel: INTERRUPTION_LEVELS.includes(n.interruptionLevel as InterruptionLevel)
+          ? n.interruptionLevel
+          : 'time-sensitive',
       }))
     );
 
