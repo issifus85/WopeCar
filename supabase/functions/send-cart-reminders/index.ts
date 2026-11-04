@@ -117,7 +117,7 @@ Deno.serve(async (req) => {
 
       await adminClient.functions
         .invoke('send-push-notification', {
-          body: { notifications: [{ userId: item.user_id, title, body, data: { url: '/(tabs)/cart' } }] },
+          body: { notifications: [{ userId: item.user_id, title, body, data: { url: '/(tabs)/cart' }, interruptionLevel: 'active' }] },
         })
         .catch(() => {});
 
