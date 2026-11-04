@@ -40,6 +40,7 @@ type Campaign = {
   starts_at: string;
   ends_at: string | null;
   last_sent_at: string | null;
+  audience: string;
 };
 
 // Whole-day comparison: the cron fires once a day at roughly the same time,
@@ -82,6 +83,28 @@ async function fetchTargetUserIds(adminClient: any, target: string): Promise<str
   return ids;
 }
 
+const ACTIVE_APP_DAYS = 30;
+
+// Users whose app re-registered its push token recently (every cold start /
+// sign-in calls register_push_token, which bumps push_tokens.updated_at).
+// deno-lint-ignore no-explicit-any
+async function fetchActiveAppUserIds(adminClient: any, days: number): Promise<Set<string>> {
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  const ids = new Set<string>();
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await adminClient
+      .from('push_tokens')
+      .select('user_id')
+      .gte('updated_at', since)
+      .order('id')
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    (data ?? []).forEach((r: { user_id: string }) => ids.add(r.user_id));
+    if (!data || data.length < PAGE_SIZE) break;
+  }
+  return ids;
+}
+
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
@@ -106,7 +129,7 @@ Deno.serve(async (req) => {
 
     const { data: campaigns, error } = await adminClient
       .from('promo_notification_campaigns')
-      .select('id, title, body, target, frequency_days, starts_at, ends_at, last_sent_at')
+      .select('id, title, body, target, frequency_days, starts_at, ends_at, last_sent_at, audience')
       .eq('is_active', true);
     if (error) throw error;
 
@@ -121,6 +144,10 @@ Deno.serve(async (req) => {
       let userIds: string[];
       try {
         userIds = await fetchTargetUserIds(adminClient, campaign.target);
+        if (campaign.audience === 'app_active_30d') {
+          const active = await fetchActiveAppUserIds(adminClient, ACTIVE_APP_DAYS);
+          userIds = userIds.filter((id) => active.has(id));
+        }
       } catch (usersError) {
         console.error(`promo campaign ${campaign.id}: could not resolve target users`, usersError);
         continue;
