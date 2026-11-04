@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator, Alert, PixelRatio } from 'react-native';
+import { StyleSheet, Text, TextInput, View, ScrollView, TouchableOpacity, ActivityIndicator, Alert, PixelRatio } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -26,6 +26,7 @@ import { fetchCarById } from '../../services/carsApi';
 import { logBookingCancelled } from '../../services/analytics';
 import { getDatePriceMap } from '../../services/carPricingApi';
 import { payWithPaystack } from '../../services/paystackCheckout';
+import { validatePromoCode } from '../../services/promoApi';
 import { openDirections } from '../../services/mapsLauncher';
 import { getInspection } from '../../services/inspectionsApi';
 import { getRentalAgreement } from '../../services/rentalAgreementApi';
@@ -311,6 +312,9 @@ export default function BookingDetailScreen() {
     const storedDriverDays = booking.withDriver?.selected ? booking.withDriver.days : null;
     setEditDriverDays(storedDriverDays != null && storedDriverDays < originalBillable ? storedDriverDays : null);
     setPaymentError(null);
+    setNewPromo(null);
+    setPromoInput('');
+    setPromoError(null);
     setMode('editing');
   };
 
@@ -343,6 +347,15 @@ export default function BookingDetailScreen() {
       .then(({ data }) => setPromoTerms(data?.[0] ?? null))
       .catch(() => setPromoTerms(null));
   }, [booking?.id, booking?.promoCode]);
+
+  // A promo code the renter adds while changing a booking that doesn't have one yet. Checked with the same validate_promo_code
+  // the checkout uses (min days, trip window, expiry, use limit) against the NEW dates; modify-booking checks it again and only
+  // then uses it up. One code per booking: a booking that already has one keeps it.
+  const [newPromo, setNewPromo] = useState(null);
+  const [promoInput, setPromoInput] = useState('');
+  const [promoError, setPromoError] = useState(null);
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
+  const canAddPromo = !!booking && !booking.promoCode;
 
   const pricing = useMemo(() => {
     if (!car || !editStart || !editEnd || !editPickupTime || !editReturnTime) return null;
@@ -420,10 +433,13 @@ export default function BookingDetailScreen() {
         ? (promoTerms.discount_type === 'percentage' ? subtotal * (Number(promoTerms.discount_value) / 100) : Number(promoTerms.discount_value))
         : Number(booking.promoDiscountAmount) || 0;
       promoDiscountAmount = Math.min(subtotal, Math.max(0, raw));
+    } else if (newPromo) {
+      const raw = newPromo.discountType === 'percentage' ? subtotal * (Number(newPromo.discountValue) / 100) : Number(newPromo.discountValue);
+      promoDiscountAmount = Math.min(subtotal, Math.max(0, raw));
     }
     const total = subtotal - promoDiscountAmount + deliveryFee + securityDeposit + recomputedWopeCareCost + withDriverCost;
     return { rentalCost, addonsCost, deliveryFee, securityDeposit, withDriverCost, driverDailyRate, driverDays, promoDiscountAmount, total };
-  }, [car, pricing, days, booking, originalDays, recomputedWopeCareCost, editWithDriver, editDriverDays, promoTerms, canChooseDriver, legacyDriverBooking]);
+  }, [car, pricing, days, booking, originalDays, recomputedWopeCareCost, editWithDriver, editDriverDays, promoTerms, newPromo, canChooseDriver, legacyDriverBooking]);
 
   // Terms of Service 5.2: once the trip has started, shortening it does not reduce what was paid and nothing is refunded. The server enforces the
   // same rule; this keeps the screen honest (the total stays as paid instead of showing a credit that will never come).
@@ -431,6 +447,45 @@ export default function BookingDetailScreen() {
   const chargesHeld = !!booking && hasTripStarted(booking.startDate, booking.pickupTime) && rawTotal < (booking.totalCost ?? 0) - 0.005;
   const recomputedTotal = chargesHeld ? booking.totalCost : rawTotal;
   const difference = recomputedTotal - (booking?.totalCost ?? 0);
+
+  const handleApplyPromo = async () => {
+    const code = promoInput.trim();
+    if (!code || !editStart || !editEnd) return;
+    setIsApplyingPromo(true);
+    setPromoError(null);
+    try {
+      const result = await validatePromoCode(code, days ? Math.round(days) : null, toISODate(editStart), toISODate(editEnd));
+      setNewPromo(result);
+      setPromoInput('');
+    } catch (e) {
+      setPromoError(e.message || 'Invalid promo code.');
+    } finally {
+      setIsApplyingPromo(false);
+    }
+  };
+
+  const handleRemovePromo = () => {
+    setNewPromo(null);
+    setPromoError(null);
+  };
+
+  // The code was checked against the dates on screen when it was applied. If the dates change afterwards, check it again, so the
+  // preview never shows a discount the server will refuse (e.g. moved outside a December-only code, or below its minimum days).
+  const newPromoCode = newPromo?.code ?? null;
+  const editStartIso = editStart ? toISODate(editStart) : null;
+  const editEndIso = editEnd ? toISODate(editEnd) : null;
+  useEffect(() => {
+    if (!newPromoCode || !editStartIso || !editEndIso || !days) return;
+    let cancelled = false;
+    validatePromoCode(newPromoCode, Math.round(days), editStartIso, editEndIso)
+      .then((result) => { if (!cancelled) setNewPromo(result); })
+      .catch((e) => {
+        if (cancelled) return;
+        setNewPromo(null);
+        setPromoError(`${newPromoCode} was removed: ${e.message || 'it no longer applies to these dates.'}`);
+      });
+    return () => { cancelled = true; };
+  }, [newPromoCode, editStartIso, editEndIso, days]);
 
   const minDays = car ? getMinBookingDays(car.drivenBy) : 1;
   // Only judged once both times are picked - with a time blank the trip counts as 0 days, which is not a real minimum-length problem.
@@ -487,6 +542,8 @@ export default function BookingDetailScreen() {
     withDriverTotalCost: canChooseDriver
       ? (editWithDriver ? recomputedBreakdown.withDriverCost : 0)
       : (booking.withDriver?.selected ? recomputedBreakdown.withDriverCost : undefined),
+    // Only sent when the renter added a code on this screen; the server validates it again and uses it up.
+    promoCode: canAddPromo && newPromo ? newPromo.code : undefined,
     ...extra,
   });
 
@@ -928,6 +985,46 @@ export default function BookingDetailScreen() {
           )}
 
 
+          {canAddPromo && (
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Promo Code</Text>
+              {newPromo ? (
+                <View style={styles.promoAppliedRow}>
+                  <View style={styles.promoAppliedInfo}>
+                    <Ionicons name="pricetag" size={16} color={colors.success} />
+                    <Text style={styles.promoAppliedText}>{newPromo.code} applied</Text>
+                  </View>
+                  <TouchableOpacity onPress={handleRemovePromo} hitSlop={8}>
+                    <Text style={styles.promoRemoveText}>Remove</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.promoInputRow}>
+                  <TextInput
+                    style={styles.promoInput}
+                    value={promoInput}
+                    onChangeText={(value) => { setPromoInput(value); setPromoError(null); }}
+                    placeholder="Enter code"
+                    placeholderTextColor={colors.textSubtle}
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    editable={!isApplyingPromo}
+                  />
+                  <TouchableOpacity
+                    style={[styles.promoApplyButton, (!promoInput.trim() || isApplyingPromo || !editStart || !editEnd) && styles.promoApplyButtonDisabled]}
+                    onPress={handleApplyPromo}
+                    disabled={!promoInput.trim() || isApplyingPromo || !editStart || !editEnd}
+                  >
+                    {isApplyingPromo
+                      ? <ActivityIndicator size="small" color={colors.white} />
+                      : <Text style={styles.promoApplyButtonText}>Apply</Text>}
+                  </TouchableOpacity>
+                </View>
+              )}
+              {!!promoError && <Text style={styles.promoErrorText}>{promoError}</Text>}
+            </View>
+          )}
+
           {!!car && days > 0 && (
             <View style={styles.recomputedBox}>
               <Text style={styles.recomputedLabel}>New total for {days} {days === 1 ? 'day' : 'days'}</Text>
@@ -969,6 +1066,12 @@ export default function BookingDetailScreen() {
               <View style={styles.row}>
                 <Text style={styles.rowLabel}>WopeCar driver</Text>
                 <Text style={styles.rowValue}>{editWithDriver ? 'Added' : 'Removed'}</Text>
+              </View>
+            )}
+            {!!newPromo && canAddPromo && !chargesHeld && recomputedBreakdown.promoDiscountAmount > 0 && (
+              <View style={styles.row}>
+                <Text style={styles.rowLabel}>Promo code ({newPromo.code})</Text>
+                <Text style={[styles.rowValue, { color: colors.success }]}>-{formatCurrency(recomputedBreakdown.promoDiscountAmount, activeCurrency)}</Text>
               </View>
             )}
             <View style={styles.row}>
@@ -1589,6 +1692,63 @@ function createStyles(colors) {
     fontFamily: FONTS.regular,
     fontSize: 13,
     color: colors.textPrimary,
+  },
+  promoInputRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  promoInput: {
+    flex: 1,
+    fontFamily: FONTS.regular,
+    fontSize: 14,
+    color: colors.textPrimary,
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  promoApplyButton: {
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.teal,
+  },
+  promoApplyButtonDisabled: {
+    opacity: 0.5,
+  },
+  promoApplyButtonText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 14,
+    color: colors.white,
+  },
+  promoAppliedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  promoAppliedInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  promoAppliedText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 14,
+    color: colors.success,
+  },
+  promoRemoveText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 13,
+    color: colors.error,
+  },
+  promoErrorText: {
+    fontFamily: FONTS.regular,
+    fontSize: 12,
+    color: colors.error,
+    marginTop: 8,
   },
   recomputedBox: {
     flexDirection: 'row',

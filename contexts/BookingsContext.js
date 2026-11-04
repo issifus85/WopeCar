@@ -197,6 +197,7 @@ export function BookingsProvider({ children }) {
         withDriverDays: fields.withDriverDays,
         paystackReference: fields.paystackReference,
         amountCharged: fields.amountCharged,
+        promoCode: fields.promoCode,
       },
     });
     if (error) throw new Error(await edgeFunctionErrorMessage(error));
@@ -212,6 +213,7 @@ export function BookingsProvider({ children }) {
         pickupLocation: fields.pickupLocation,
         returnLocation: fields.returnLocation,
         totalCost: fields.totalCost,
+        ...(fields.promoCode ? { promoCode: fields.promoCode } : {}),
         wopeCare: fields.wopecareTotalCost != null && b.wopeCare?.plan && b.wopeCare.plan !== 'none'
           ? { ...b.wopeCare, totalCost: fields.wopecareTotalCost }
           : b.wopeCare,
