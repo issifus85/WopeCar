@@ -42,14 +42,50 @@ type Campaign = {
   last_sent_at: string | null;
 };
 
-function isDue(campaign: Campaign, now: Date, todayIso: string): boolean {
+// Whole-day comparison: the cron fires once a day at roughly the same time,
+// but a few ms of jitter used to make "last_sent_at + N days <= now" fail on
+// alternate days, so an every-1-day campaign only went out every other day.
+function addDaysIso(iso: string, days: number): string {
+  const d = new Date(iso.slice(0, 10) + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function isDue(campaign: Campaign, todayIso: string): boolean {
   if (campaign.starts_at > todayIso) return false;
   if (campaign.ends_at && campaign.ends_at < todayIso) return false;
   if (campaign.frequency_days == null) return !campaign.last_sent_at;
   if (!campaign.last_sent_at) return true;
-  const nextDue = new Date(campaign.last_sent_at);
-  nextDue.setDate(nextDue.getDate() + campaign.frequency_days);
-  return nextDue <= now;
+  return addDaysIso(campaign.last_sent_at, campaign.frequency_days) <= todayIso;
+}
+
+// PostgREST returns at most 1000 rows per request (the project's max-rows),
+// so an unpaged select silently stopped every campaign at the first 1000
+// users. Page through all of them.
+const PAGE_SIZE = 1000;
+// Users per send-push-notification call: keeps its push_tokens .in() filter
+// and per-user badge queries small enough to finish well inside its limits.
+const PUSH_BATCH = 200;
+const INSERT_BATCH = 500;
+
+// deno-lint-ignore no-explicit-any
+async function fetchTargetUserIds(adminClient: any, target: string): Promise<string[]> {
+  const ids: string[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    let q = adminClient.from('users').select('id').order('id').range(from, from + PAGE_SIZE - 1);
+    if (target !== 'all') q = q.eq('role', TARGET_ROLE[target]);
+    const { data, error } = await q;
+    if (error) throw error;
+    (data ?? []).forEach((u: { id: string }) => ids.push(u.id));
+    if (!data || data.length < PAGE_SIZE) break;
+  }
+  return ids;
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
 }
 
 Deno.serve(async (req) => {
@@ -76,31 +112,41 @@ Deno.serve(async (req) => {
 
     let campaignsSent = 0;
     let notificationsSent = 0;
+    let pushesSent = 0;
+    let pushesFailed = 0;
 
     for (const campaign of (campaigns ?? []) as Campaign[]) {
-      if (!isDue(campaign, now, todayIso)) continue;
+      if (!isDue(campaign, todayIso)) continue;
 
-      let usersQuery = adminClient.from('users').select('id');
-      if (campaign.target !== 'all') usersQuery = usersQuery.eq('role', TARGET_ROLE[campaign.target]);
-      const { data: users, error: usersError } = await usersQuery;
-      if (usersError) {
+      let userIds: string[];
+      try {
+        userIds = await fetchTargetUserIds(adminClient, campaign.target);
+      } catch (usersError) {
         console.error(`promo campaign ${campaign.id}: could not resolve target users`, usersError);
         continue;
       }
 
-      if (users?.length) {
-        const rows = users.map((u) => ({ user_id: u.id, type: 'promo', title: campaign.title, body: campaign.body }));
+      for (const ids of chunk(userIds, INSERT_BATCH)) {
+        const rows = ids.map((id) => ({ user_id: id, type: 'promo', title: campaign.title, body: campaign.body }));
         const { error: insertError } = await adminClient.from('notifications').insert(rows);
         if (insertError) console.error(`promo campaign ${campaign.id}: notification insert failed`, insertError);
-
-        await adminClient.functions
-          .invoke('send-push-notification', {
-            body: { notifications: users.map((u) => ({ userId: u.id, title: campaign.title, body: campaign.body })) },
-          })
-          .catch((e) => console.error(`promo campaign ${campaign.id}: push send failed`, e));
-
-        notificationsSent += users.length;
       }
+
+      // functions.invoke() resolves with { error } instead of throwing, so the
+      // old .catch() never saw a failed send - read the result instead.
+      for (const ids of chunk(userIds, PUSH_BATCH)) {
+        const { data: pushResult, error: pushError } = await adminClient.functions.invoke('send-push-notification', {
+          body: { notifications: ids.map((id) => ({ userId: id, title: campaign.title, body: campaign.body })) },
+        });
+        if (pushError) {
+          console.error(`promo campaign ${campaign.id}: push batch failed`, pushError);
+        } else {
+          pushesSent += pushResult?.sent ?? 0;
+          pushesFailed += pushResult?.failed ?? 0;
+        }
+      }
+
+      notificationsSent += userIds.length;
 
       const patch: Record<string, unknown> = { last_sent_at: now.toISOString() };
       if (campaign.frequency_days == null) patch.is_active = false;
@@ -110,7 +156,8 @@ Deno.serve(async (req) => {
       campaignsSent += 1;
     }
 
-    return jsonResponse({ success: true, campaignsSent, notificationsSent });
+    console.log('promo run', JSON.stringify({ campaignsSent, notificationsSent, pushesSent, pushesFailed }));
+    return jsonResponse({ success: true, campaignsSent, notificationsSent, pushesSent, pushesFailed });
   } catch (e) {
     return jsonResponse({ error: e instanceof Error ? e.message : 'Unexpected error.' }, 500);
   }

@@ -92,14 +92,20 @@ Deno.serve(async (req) => {
     }
 
     const userIds = [...new Set(notifications.map((n) => n.userId).filter(Boolean))];
-    const { data: tokenRows, error: tokenError } = await adminClient
-      .from('push_tokens')
-      .select('user_id, token')
-      .in('user_id', userIds);
-    if (tokenError) throw tokenError;
+    // .in() goes into the request URL; chunk it so a big audience can't
+    // overflow the URL limit and fail the whole send.
+    const tokenRows: { user_id: string; token: string }[] = [];
+    for (const ids of chunk(userIds, 200)) {
+      const { data, error: tokenError } = await adminClient
+        .from('push_tokens')
+        .select('user_id, token')
+        .in('user_id', ids);
+      if (tokenError) throw tokenError;
+      tokenRows.push(...(data ?? []));
+    }
 
     const tokensByUser = new Map<string, string[]>();
-    (tokenRows ?? []).forEach((row) => {
+    tokenRows.forEach((row) => {
       const list = tokensByUser.get(row.user_id) ?? [];
       list.push(row.token);
       tokensByUser.set(row.user_id, list);
