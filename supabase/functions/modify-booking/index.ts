@@ -157,8 +157,13 @@ function costBreakdownHtml(mod: any) {
   return `<table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px;">${rows}</table>`;
 }
 
+function promoLineHtml(promo: { code: string; discount: number } | null | undefined) {
+  if (!promo) return '';
+  return `<div style="background:#EAF7F0;border-radius:12px;padding:14px 16px;font-size:13px;color:#1F7A4D;margin-bottom:16px;">Promo code <strong>${escapeHtml(promo.code)}</strong> was applied with this change: <strong>-${formatCurrency(promo.discount)}</strong> (already included in the new total).</div>`;
+}
+
 // deno-lint-ignore no-explicit-any
-function buildClientEmailHtml({ booking, car, mod, balanceDue, payUrl, held }: any) {
+function buildClientEmailHtml({ booking, car, mod, balanceDue, payUrl, held, promo }: any) {
   const amountLine = mod.amount_charged > 0
     ? `<div style="background:#EAF7F0;border-radius:12px;padding:14px 16px;font-size:13px;color:#1F7A4D;margin-bottom:16px;"><strong>${formatCurrency(mod.amount_charged)}</strong> was charged to cover this change.</div>`
     : mod.amount_charged < 0
@@ -186,6 +191,7 @@ function buildClientEmailHtml({ booking, car, mod, balanceDue, payUrl, held }: a
         ${changeRowsHtml(mod)}
         <div style="font-size:13px;font-weight:bold;color:#154B59;margin-bottom:6px;">Cost breakdown</div>
         ${costBreakdownHtml(mod)}
+        ${promoLineHtml(promo)}
         ${amountLine}
         ${heldBlock}
         ${balanceBlock}
@@ -197,7 +203,7 @@ function buildClientEmailHtml({ booking, car, mod, balanceDue, payUrl, held }: a
 }
 
 // deno-lint-ignore no-explicit-any
-function buildAdminEmailHtml({ booking, car, renter, mod, modifiedBy, balanceDue }: any) {
+function buildAdminEmailHtml({ booking, car, renter, mod, modifiedBy, balanceDue, promo }: any) {
   const body = `
       <div style="padding:28px 24px;">
         <div style="text-align:center;margin-bottom:20px;">
@@ -211,6 +217,7 @@ function buildAdminEmailHtml({ booking, car, renter, mod, modifiedBy, balanceDue
         ${changeRowsHtml(mod)}
         <div style="font-size:13px;font-weight:bold;color:#154B59;margin-bottom:6px;">Cost breakdown</div>
         ${costBreakdownHtml(mod)}
+        ${promoLineHtml(promo)}
         <table style="width:100%;border-collapse:collapse;font-size:14px;border-top:1px solid #e5e5e5;padding-top:8px;">
           <tr><td style="padding:6px 0;color:#5b6b6c;">Amount ${mod.amount_charged >= 0 ? 'charged' : 'credited'}</td><td style="padding:6px 0;text-align:right;color:#154B59;">${formatCurrency(Math.abs(mod.amount_charged))}</td></tr>
           ${balanceDue > 0 ? `<tr><td style="padding:6px 0;color:#975125;"><strong>Balance due from the client</strong></td><td style="padding:6px 0;text-align:right;color:#975125;"><strong>${formatCurrency(balanceDue)}</strong> (they were emailed and notified to pay it)</td></tr>` : ''}
@@ -244,7 +251,7 @@ async function handleModify(req: Request, body: ModifyBody, internalActAs: strin
     const {
       bookingId, startDate, endDate, pickupTime, returnTime, pickupLocation, returnLocation,
       rentalCost, addonsCost, deliveryFee, securityDeposit, totalCost, billableDays,
-      wopecareTotalCost, withDriverTotalCost, withDriver, withDriverDays, paystackReference, amountCharged,
+      wopecareTotalCost, withDriverTotalCost, withDriver, withDriverDays, paystackReference, amountCharged, promoCode,
     } = body;
 
     if (!bookingId || !startDate || !endDate || totalCost == null) {
@@ -321,6 +328,25 @@ async function handleModify(req: Request, body: ModifyBody, internalActAs: strin
 
     // A booking made with a promo code that has a minimum length can't be shortened below it afterwards
     // (otherwise the discount could be kept while cutting the days). Staff can still override.
+    // A promo code added with this change (the booking had none). One code per booking: a booking that already used one keeps it.
+    // Checked with the same validate_promo_code the checkout uses (active, not expired, under its use limit, minimum days, trip
+    // window) against the NEW dates; it is only used up (redeem_promo_code) right before the change is saved.
+    const requestedPromo = typeof promoCode === 'string' && promoCode.trim() ? promoCode.trim() : null;
+    let newPromo: { code: string; discountType: string | null; discountValue: number } | null = null;
+    if (requestedPromo && !(booking.promo_code && booking.promo_code.toUpperCase() === requestedPromo.toUpperCase())) {
+      if (booking.promo_code) {
+        return jsonResponse({ error: `This booking already uses promo code ${booking.promo_code}. Only one promo code can be used per booking.` }, 400);
+      }
+      const { data: promoRows, error: promoError } = await adminClient.rpc('validate_promo_code', {
+        p_code: requestedPromo, p_days: Math.round(newBillableDays), p_start: startDate, p_end: endDate,
+      });
+      const promoRow = promoRows?.[0];
+      if (promoError || !promoRow) {
+        return jsonResponse({ error: promoError?.message || 'Invalid or expired promo code.' }, 400);
+      }
+      newPromo = { code: promoRow.code, discountType: promoRow.discount_type, discountValue: Number(promoRow.discount_value) };
+    }
+
     if (booking.promo_code && !isAdmin) {
       const { data: promoRow } = await adminClient.from('promo_codes').select('min_days, valid_from, valid_to').ilike('code', booking.promo_code).maybeSingle();
       // A code limited to a trip window (e.g. DETTY10: December only) stops applying if the booking is moved outside it.
@@ -398,7 +424,9 @@ async function handleModify(req: Request, body: ModifyBody, internalActAs: strin
       .in('key', ['self_drive_delivery_fee', 'chauffeur_security_deposit', 'security_deposit_threshold', 'security_deposit_flat', 'security_deposit_percentage']);
     const settingsMap = Object.fromEntries((settingRows ?? []).map((r: { key: string; value: unknown }) => [r.key, r.value]));
     let promoInfo: { discountType: string | null; discountValue: number } | null = null;
-    if (booking.promo_code) {
+    if (newPromo) {
+      promoInfo = { discountType: newPromo.discountType, discountValue: newPromo.discountValue };
+    } else if (booking.promo_code) {
       const { data: promoRow } = await adminClient.from('promo_codes').select('discount_type, discount_value').ilike('code', booking.promo_code).maybeSingle();
       if (promoRow) promoInfo = { discountType: promoRow.discount_type, discountValue: Number(promoRow.discount_value) };
       // The code was deleted after the booking used it: keep the discount the booking already has (flat, capped at the subtotal) rather
@@ -470,6 +498,11 @@ async function handleModify(req: Request, body: ModifyBody, internalActAs: strin
         addonDays: null,
       }
       : pricedRaw;
+    // A new promo code can't lower the price of a trip that has already started (same rule as above: nothing is refunded once it
+    // has started). Refuse rather than quietly use the code up for no discount.
+    if (held && newPromo) {
+      return jsonResponse({ error: 'Your trip has already started, so a promo code can no longer lower its price. Please remove the code to save this change.' }, 400);
+    }
     const effRentalCost = held ? Number(booking.rental_cost) : newRentalCost;
     const effBillableDays = held ? Number(booking.billable_days ?? newBillableDays) : newBillableDays;
     const newTotalCost = priced.totalCost;
@@ -534,9 +567,24 @@ async function handleModify(req: Request, body: ModifyBody, internalActAs: strin
     if (!held && driverPatchFinal) {
       Object.assign(updatePatch, driverPatchFinal);
     }
+    if (newPromo) {
+      // Use one of the code's uses now (it re-checks the limit under a row lock, so two renters can't both take the last use).
+      const { data: redeemed, error: redeemError } = await adminClient.rpc('redeem_promo_code', {
+        p_code: newPromo.code, p_days: Math.round(newBillableDays), p_start: startDate, p_end: endDate,
+      });
+      if (redeemError || !redeemed?.[0]) {
+        return jsonResponse({ error: redeemError?.message || 'Invalid or expired promo code.' }, 400);
+      }
+      updatePatch.promo_code = newPromo.code;
+    }
 
     const { error: updateError } = await adminClient.from('bookings').update(updatePatch).eq('id', bookingId);
     if (updateError) {
+      if (newPromo) {
+        // Give the use back: the change wasn't saved, so the code wasn't used.
+        const { data: pc } = await adminClient.from('promo_codes').select('id, uses_count').ilike('code', newPromo.code).maybeSingle();
+        if (pc && Number(pc.uses_count) > 0) await adminClient.from('promo_codes').update({ uses_count: Number(pc.uses_count) - 1 }).eq('id', pc.id);
+      }
       return jsonResponse({ error: updateError.message }, 500);
     }
 
@@ -640,7 +688,7 @@ async function handleModify(req: Request, body: ModifyBody, internalActAs: strin
           from: 'WopeCar <bookings@wopecar.com>',
           to: [booking.renter.email],
           subject: `Booking Updated - ${booking.cars?.name ?? 'Your Car'}`,
-          html: buildClientEmailHtml({ booking, car: booking.cars, mod, balanceDue, held, payUrl: `${(Deno.env.get('WEBSITE_URL') ?? 'https://wopecar.com').replace(/\/$/, '')}/pay-balance?booking=${booking.id}` }),
+          html: buildClientEmailHtml({ booking, car: booking.cars, mod, balanceDue, held, promo: newPromo ? { code: newPromo.code, discount: priced.promoDiscount } : null, payUrl: `${(Deno.env.get('WEBSITE_URL') ?? 'https://wopecar.com').replace(/\/$/, '')}/pay-balance?booking=${booking.id}` }),
         }));
       }
       if (supportEmail) {
@@ -648,7 +696,7 @@ async function handleModify(req: Request, body: ModifyBody, internalActAs: strin
           from: 'WopeCar <bookings@wopecar.com>',
           to: [supportEmail],
           subject: `Booking Modified - ${booking.booking_ref}`,
-          html: buildAdminEmailHtml({ booking, car: booking.cars, renter: booking.renter, mod, modifiedBy, balanceDue }),
+          html: buildAdminEmailHtml({ booking, car: booking.cars, renter: booking.renter, mod, modifiedBy, balanceDue, promo: newPromo ? { code: newPromo.code, discount: priced.promoDiscount } : null }),
         }));
       }
       await Promise.allSettled(sends);
