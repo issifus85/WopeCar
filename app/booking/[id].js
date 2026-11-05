@@ -1199,6 +1199,24 @@ export default function BookingDetailScreen() {
         </View>
       )}
 
+      {/* WopeDriver: a self-drive renter who'd rather not drive can add a WopeCar driver for some or all of the remaining days. */}
+      {mode === 'view' && canModify && ownType === 'Self-drive' && !bookingHasDriver && booking.paymentStatus === 'paid'
+        && booking.endDate && parseDateOnly(booking.endDate) >= new Date(new Date().setHours(0, 0, 0, 0)) && (
+        <TouchableOpacity
+          style={[styles.card, styles.wopeDriverCard]}
+          onPress={() => router.push({ pathname: '/wopedriver', params: { bookingId: booking.id } })}
+        >
+          <View style={styles.wopeDriverIcon}>
+            <Ionicons name="person-outline" size={20} color={colors.teal} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.wopeDriverTitle}>Rather not drive? Add a WopeDriver</Text>
+            <Text style={styles.wopeDriverSub}>A licensed WopeCar driver for the days you choose</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.textSubtle} />
+        </TouchableOpacity>
+      )}
+
       {mode === 'view' && booking.status === 'Completed' && myReview !== undefined && (
         <View style={styles.actions}>
           <TouchableOpacity
@@ -1468,6 +1486,31 @@ function createStyles(colors) {
   balanceNote: { fontFamily: FONTS.regular, fontSize: 12.5, color: colors.textSubtle, textAlign: 'center', marginBottom: 12, lineHeight: 18 },
   balanceButton: { backgroundColor: colors.teal, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 28, minWidth: 160, alignItems: 'center' },
   balanceButtonText: { fontFamily: FONTS.semiBold, fontSize: 14, color: colors.white },
+  wopeDriverCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.highlight,
+  },
+  wopeDriverIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  wopeDriverTitle: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 15,
+    color: colors.textPrimary,
+  },
+  wopeDriverSub: {
+    fontFamily: FONTS.regular,
+    fontSize: 13,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
   sectionTitle: {
     fontFamily: FONTS.bold,
     fontSize: 15,

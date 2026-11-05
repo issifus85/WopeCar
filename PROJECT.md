@@ -444,6 +444,13 @@ WopeCar takes a platform fee on every booking: the renter pays `bookings.total_c
 
 ---
 
+### 6.14 WopeDriver (driver service)
+
+A WopeCar driver, booked two ways: as an add-on to some or all days of a paid self-drive rental, or for the customer's own car. Entry points: Profile (row right below Partner Mode) and a "Rather not drive? Add a WopeDriver" card on an eligible rental's booking screen (`/wopedriver?bookingId=`).
+- Screens: `app/wopedriver/index.js` (choose service -> pick days on a calendar and set start time, hours and destination per day -> review & request -> done), `app/wopedriver/[id].js` (status, assigned driver, day plan, cancel). Components in `components/wopedriver/`.
+- Backend (`supabase/migrations/0171_wopedriver.sql`), shared with the website and wopecar-admin: `driver_service_settings` (one row), `driver_service_packages` (rate card), `driver_service_zones` (destinations + per-day add-on), `driver_bookings` + `driver_booking_days`. Customers only go through `create_driver_booking(p jsonb)` / `cancel_driver_booking()`; `wopedriver_quote()` is the one price calculation and `services/wopedriverPricing.js` mirrors it for the live estimate (keep them in step; `services/wopedriverPricing.test.js`). Cancelling a rental cancels its open driver add-ons (trigger).
+- Request-then-confirm: nothing is charged in the app; WopeCar confirms within 24 hours, assigns a driver and arranges payment. `send-driver-booking-notification` emails support + the customer on a new request (`event: created`) and tells the customer about status changes (`event: status`, called by wopecar-admin).
+
 ## 7. Business Rules & Constants Reference
 
 All in `constants/pricing.js`. **This is the single source of truth — never hardcode these numbers elsewhere.** Note: this file has grown well beyond the table below (a full dynamic pricing engine — `calculateRentalPricing()`, length-of-stay tiers, car-level and app-wide discounts, several live-editable `app_settings` — see the file itself); this table hasn't been fully audited against that growth, only extended for WopeCare below.
