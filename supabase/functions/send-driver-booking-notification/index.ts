@@ -170,7 +170,7 @@ Deno.serve(async (req) => {
                 <p style="font-size:13px;color:#666;margin:0 0 16px;">${escapeHtml(booking.contact_name ?? '')} · ${escapeHtml(booking.contact_phone)} · ${escapeHtml(booking.contact_email ?? '')}</p>
                 ${bookingTable(booking, days ?? [])}
                 ${booking.notes ? `<p style="font-size:14px;color:#333;white-space:pre-wrap;"><b>Notes:</b> ${escapeHtml(booking.notes)}</p>` : ''}
-                <div style="text-align:center;margin-top:18px;"><a href="https://admin.wopecar.com/wopedriver/${booking.id}" style="display:inline-block;background:#154B59;color:#fff;font-weight:bold;font-size:14px;padding:12px 28px;border-radius:10px;text-decoration:none;">Open in Admin</a></div>
+                <div style="text-align:center;margin-top:18px;"><a href="https://admin.wopecar.com/wopedriver?id=${booking.id}" style="display:inline-block;background:#154B59;color:#fff;font-weight:bold;font-size:14px;padding:12px 28px;border-radius:10px;text-decoration:none;">Open in Admin</a></div>
               </div>`),
             });
           } catch (e) { errors.push(e instanceof Error ? e.message : 'support email failed'); }
