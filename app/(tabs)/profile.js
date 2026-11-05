@@ -121,6 +121,21 @@ export default function ProfileScreen() {
         <Ionicons name="chevron-forward" size={20} color={colors.textSubtle} />
       </TouchableOpacity>
 
+      {/* WopeDriver add-on service: a WopeCar driver for a self-drive rental or for the customer's own car. */}
+      <TouchableOpacity style={styles.hostRow} onPress={() => router.push('/wopedriver')}>
+        <View style={styles.hostIcon}>
+          <Ionicons name="person-outline" size={20} color={colors.teal} />
+        </View>
+        <View style={styles.accountInfo}>
+          <View style={styles.titleRow}>
+            <Text style={styles.hostTitle}>WopeDriver</Text>
+            <View style={styles.newBadge}><Text style={styles.newBadgeText}>NEW</Text></View>
+          </View>
+          <Text style={styles.accountSubtitle}>Book a driver for your rental or your own car</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={colors.textSubtle} />
+      </TouchableOpacity>
+
       <View style={styles.menu}>
         {MENU_ITEMS.map((item, index) => (
           <TouchableOpacity
@@ -244,6 +259,23 @@ function createStyles(colors) {
       backgroundColor: colors.surface,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    titleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    newBadge: {
+      backgroundColor: colors.navy,
+      borderRadius: 6,
+      paddingHorizontal: 6,
+      paddingVertical: 1,
+      marginLeft: 8,
+    },
+    newBadgeText: {
+      fontFamily: FONTS.bold,
+      fontSize: 10,
+      color: colors.white,
+      letterSpacing: 0.5,
     },
     hostTitle: {
       fontFamily: FONTS.semiBold,
