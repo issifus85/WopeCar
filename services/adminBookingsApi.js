@@ -139,15 +139,34 @@ export async function cancelBooking(booking, reason) {
 }
 
 /**
- * Records money received that the app did not capture itself. Goes through the admin_mark_booking_paid() database function (migration 0166):
- * it needs a method plus a reference or note, refuses cancelled / already-paid bookings, records who did it, sets the status and notifies the
- * renter and vendor. A database trigger blocks every other way of flipping a booking to paid from a signed-in session.
+ * Records money received that the app did not capture itself. Goes through the admin_mark_booking_paid() database function (migrations 0166
+ * and 0174): it needs a method plus a reference or note, refuses cancelled / already-paid bookings, records who did it, puts the reference on
+ * the booking, sets the status and notifies the renter and vendor. A database trigger blocks every other way of flipping a booking to paid
+ * from a signed-in session.
+ *
+ * "Paystack (seen in the dashboard)" is a real Paystack charge nobody claimed, so it does not go straight to the database: confirm-booking-payment
+ * verifies the reference with Paystack first and marks the booking paid itself, exactly as a checkout payment would (the amount has to cover the
+ * booking, the reference cannot already belong to another booking). The database call that follows only files who recorded it.
  */
 export async function markBookingPaid(booking, { method, reference, note }) {
+  const trimmedRef = reference?.trim() || null;
+  if (method === 'paystack_dashboard' && trimmedRef) {
+    const { data, error: fnError } = await supabase.functions.invoke('confirm-booking-payment', {
+      body: { bookingIds: [booking.id], reference: trimmedRef, asAdmin: true },
+    });
+    if (fnError) throw new Error(await edgeFunctionErrorMessage(fnError));
+    if (data?.error) throw new Error(data.error);
+    if (data?.transaction_status !== 'success') {
+      throw new Error(`Paystack reports this transaction as "${data?.transaction_status ?? 'unknown'}", so it cannot be recorded as paid.`);
+    }
+    if (data?.outcomes?.[booking.id] !== 'confirmed') {
+      throw new Error('Paystack confirmed the payment but the booking could not be marked as paid. Check the booking and try again.');
+    }
+  }
   const { error } = await supabase.rpc('admin_mark_booking_paid', {
     p_booking_id: booking.id,
     p_method: method,
-    p_reference: reference?.trim() || null,
+    p_reference: trimmedRef,
     p_note: note?.trim() || null,
   });
   if (error) throw new Error(error.message);
