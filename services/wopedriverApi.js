@@ -1,6 +1,7 @@
 // WopeDriver (driver service) - app side of the backend in supabase/migrations/0171_wopedriver.sql.
 // The website uses the same tables and RPCs (create_driver_booking / cancel_driver_booking / wopedriver_quote).
-import supabase, { getCurrentUser } from './supabase';
+import supabase, { getCurrentUser, edgeFunctionErrorMessage } from './supabase';
+import { payWithPaystack } from './paystackCheckout';
 
 const num = (v, fallback = 0) => (v == null || Number.isNaN(Number(v)) ? fallback : Number(v));
 
@@ -88,6 +89,7 @@ function normalizeDriverBooking(b) {
     carTransmission: b.car_transmission ?? '',
     carPlate: b.car_plate ?? '',
     meetingPoint: b.meeting_point,
+    usesRentalPickup: !!b.uses_rental_pickup,
     contactName: b.contact_name ?? '',
     contactPhone: b.contact_phone ?? '',
     notes: b.notes ?? '',
@@ -98,6 +100,11 @@ function normalizeDriverBooking(b) {
     extraTotal: num(b.extra_total),
     addonTotal: num(b.addon_total),
     total: num(b.total_cost),
+    amountPaid: num(b.amount_paid),
+    // What the customer still owes, and what WopeCar owes back after a change that lowered the total.
+    amountDue: Math.max(0, Math.round((num(b.total_cost) - num(b.amount_paid)) * 100) / 100),
+    refundDue: Math.max(0, Math.round((num(b.amount_paid) - num(b.total_cost)) * 100) / 100),
+    modificationCount: num(b.modification_count),
     firstDate: b.first_service_date,
     lastDate: b.last_service_date,
     driverName: b.assigned_driver_name ?? '',
@@ -109,6 +116,7 @@ function normalizeDriverBooking(b) {
         id: d.id,
         date: d.service_date,
         startTime: d.start_time,
+        zoneId: d.zone_id ?? null,
         hours: num(d.hours),
         zoneLabel: d.zone_label ?? '',
         packageLabel: d.package_label ?? '',
@@ -144,6 +152,39 @@ export async function getDriverBooking(id) {
 export async function cancelDriverBooking(id, reason) {
   const { error } = await supabase.rpc('cancel_driver_booking', { p_id: id, p_reason: reason ?? null });
   if (error) throw rpcError(error);
+  // Tells support (with any refund owed) and emails the customer. Best-effort: the cancel is already saved.
+  supabase.functions.invoke('send-driver-booking-notification', { body: { driverBookingId: id, event: 'cancelled' } }).catch(() => {});
+}
+
+/** Change a request. payload has the same fields as createDriverBooking. Returns { id, booking_ref, total_cost, amount_paid, amount_due, status }. */
+export async function modifyDriverBooking(id, payload) {
+  const { data, error } = await supabase.rpc('modify_driver_booking', { p_id: id, p: payload });
+  if (error) throw rpcError(error);
+  supabase.functions.invoke('send-driver-booking-notification', { body: { driverBookingId: id, event: 'modified' } }).catch(() => {});
+  return data;
+}
+
+/**
+ * Pays what is due on a driver booking with Paystack, then records it (confirm-driver-booking-payment verifies the
+ * transaction with Paystack; paystack-webhook does the same if the app is closed mid-payment).
+ * Resolves with { status, amountPaid, amountDue }. Throws an Error with a user-facing message if cancelled or refused.
+ */
+export async function payDriverBooking(driverBookingId, amount) {
+  let reference;
+  try {
+    reference = await payWithPaystack(amount, null, 'wopedriver', { driverBookingId });
+  } catch (e) {
+    // The sheet was closed, but a Mobile Money approval can still land: check the started transaction before giving up.
+    if (!e?.reference) throw e;
+    const { data } = await supabase.functions.invoke('confirm-driver-booking-payment', { body: { driverBookingId, reference: e.reference } });
+    if (data?.status === 'applied' || data?.status === 'already_applied') return data;
+    throw e;
+  }
+  const { data, error } = await supabase.functions.invoke('confirm-driver-booking-payment', { body: { driverBookingId, reference } });
+  if (error) throw new Error(await edgeFunctionErrorMessage(error));
+  if (data?.error) throw new Error(data.error);
+  if (data?.status === 'not_paid') throw new Error('Payment was not successful. Please try again.');
+  return data;
 }
 
 export const DRIVER_STATUS_LABELS = {

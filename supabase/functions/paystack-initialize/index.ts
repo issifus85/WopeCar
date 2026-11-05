@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'PAYSTACK_SECRET_KEY is not configured for this project.' }, 500);
     }
 
-    const { amount, callbackUrl, bookingIds, purpose, modification } = await req.json();
+    const { amount, callbackUrl, bookingIds, purpose, modification, driverBookingId } = await req.json();
     const numericAmount = Number(amount);
     if (!numericAmount || numericAmount <= 0) {
       return jsonResponse({ error: 'A positive amount is required.' }, 400);
@@ -71,8 +71,19 @@ Deno.serve(async (req) => {
     // paystack-webhook can later check the payment against exactly these
     // bookings, and so the webhook can finish them if the client never does.
     // Older app builds don't send it and simply get no metadata.
-    let metadata: { booking_ids: string[]; user_id: string; purpose?: string } | undefined;
-    if (Array.isArray(bookingIds) && bookingIds.length > 0) {
+    let metadata: { booking_ids?: string[]; user_id: string; purpose?: string; driver_booking_id?: string } | undefined;
+    if (purpose === 'wopedriver') {
+      // Paying for a WopeDriver request (driver_bookings, migrations 0171/0172): the charge must be exactly what is still due on it.
+      // confirm-driver-booking-payment / paystack-webhook only accept transactions stamped this way.
+      if (!driverBookingId || typeof driverBookingId !== 'string') return jsonResponse({ error: 'This payment needs the driver booking id.' }, 400);
+      const { data: db } = await adminClient.from('driver_bookings').select('id, user_id, status, total_cost, amount_paid').eq('id', driverBookingId).maybeSingle();
+      if (!db || db.user_id !== user.id) return jsonResponse({ error: 'This driver booking does not belong to this account.' }, 403);
+      if (!['requested', 'confirmed'].includes(db.status)) return jsonResponse({ error: 'This driver booking can no longer be paid for.' }, 409);
+      const due = Math.round((Number(db.total_cost) - Number(db.amount_paid ?? 0)) * 100) / 100;
+      if (due <= 0) return jsonResponse({ error: 'Nothing is due on this driver booking.' }, 409);
+      if (Math.abs(due - numericAmount) > 0.5) return jsonResponse({ error: `The amount due is GHS ${due.toFixed(2)}.` }, 400);
+      metadata = { purpose: 'wopedriver', driver_booking_id: db.id, user_id: user.id };
+    } else if (Array.isArray(bookingIds) && bookingIds.length > 0) {
       const ids = Array.from(new Set(bookingIds.filter((id: unknown) => typeof id === 'string'))) as string[];
       const { data: owned } = await adminClient.from('bookings').select('id').in('id', ids).eq('renter_id', user.id);
       if (!owned || owned.length !== ids.length) {
@@ -148,9 +159,9 @@ Deno.serve(async (req) => {
       const { paystackReference: _ref, amountCharged: _amt, pendingReference: _p, actAsUserId: _a, ...payload } = modification as Record<string, unknown>;
       const { error: pendingError } = await adminClient.from('pending_booking_modifications').insert({
         reference: paystackJson.data.reference,
-        booking_id: metadata.booking_ids[0],
+        booking_id: metadata.booking_ids![0],
         renter_id: user.id,
-        payload: { ...payload, bookingId: metadata.booking_ids[0] },
+        payload: { ...payload, bookingId: metadata.booking_ids![0] },
         amount: numericAmount,
       });
       if (pendingError) {

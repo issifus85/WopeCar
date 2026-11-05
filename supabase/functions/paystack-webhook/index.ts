@@ -6,6 +6,8 @@
 // Idempotent with it - whichever runs second finds the bookings already paid
 // with this reference and changes nothing.
 //
+// A WopeDriver payment (metadata purpose 'wopedriver') is applied through _shared/driverPayment.ts.
+//
 // A paid booking CHANGE (metadata purpose 'modify') is applied from the change saved by paystack-initialize, through
 // modify-booking (see applyPaidModification below and migration 0168).
 //
@@ -26,6 +28,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { confirmBookingsForReference, fetchPaystackTransaction, PaymentRejected } from '../_shared/confirmPayment.ts';
 import { confirmBalanceFromPaystack, triggerBalanceQuickbooks } from '../_shared/balancePayment.ts';
 import { getInternalSecret } from '../_shared/cronAuth.ts';
+import { confirmDriverPaymentFromPaystack } from '../_shared/driverPayment.ts';
 
 async function hmacSha512Hex(key: string, message: string) {
   const cryptoKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(key), { name: 'HMAC', hash: 'SHA-512' }, false, ['sign']);
@@ -129,6 +132,15 @@ Deno.serve(async (req) => {
 
     // Re-fetch from Paystack rather than trusting the webhook body's fields.
     const tx = await fetchPaystackTransaction(reference, paystackSecretKey);
+    // deno-lint-ignore no-explicit-any
+    const meta = (tx.metadata ?? {}) as any;
+    if (meta.purpose === 'wopedriver' && meta.driver_booking_id && meta.user_id) {
+      // A WopeDriver payment (confirm-driver-booking-payment is the client-side twin; whichever runs second is a no-op).
+      const driverAdmin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+      const result = await confirmDriverPaymentFromPaystack(driverAdmin, { driverBookingId: meta.driver_booking_id, reference, tx, payerId: meta.user_id });
+      console.log(`paystack-webhook ${reference}: wopedriver ${result.status}`);
+      return new Response('ok');
+    }
     const bookingIds = tx.metadata?.booking_ids;
     const payerId = tx.metadata?.user_id;
     if (!Array.isArray(bookingIds) || bookingIds.length === 0 || !payerId) return new Response('no bookings on this transaction');

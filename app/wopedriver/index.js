@@ -2,7 +2,9 @@
 // the customer's own car. Steps: choose service -> pick days & set each day's trip -> review & request -> done.
 // Prices on screen are a live estimate (services/wopedriverPricing.js); create_driver_booking() prices it again
 // server-side and that is what is recorded. Opened from Profile (below Partner Mode) or from a rental's booking
-// screen (?bookingId=..., which preselects that rental).
+// screen (?bookingId=..., which preselects that rental). The customer pays with Paystack right after sending the request
+// (if they skip it, they can pay from the request's screen). ?edit=<driver booking id> reopens a sent request to change it
+// (modify_driver_booking): same plan and review steps, prefilled.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Alert, BackHandler, KeyboardAvoidingView, Platform,
@@ -14,13 +16,13 @@ import { formatCurrency } from '../../constants/pricing';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import LocationSearchModal from '../../components/LocationSearchModal';
+import PlaceInput from '../../components/wopedriver/PlaceInput';
 import DriverStatusPill from '../../components/wopedriver/DriverStatusPill';
 import DriverDayCalendar, { isoDate, parseIso, addDays, dayLabel } from '../../components/wopedriver/DriverDayCalendar';
 import {
-  getDriverServiceConfig, getEligibleRentals, getMyDriverBookings, createDriverBooking,
+  getDriverServiceConfig, getEligibleRentals, getMyDriverBookings, createDriverBooking, getDriverBooking, modifyDriverBooking, payDriverBooking,
 } from '../../services/wopedriverApi';
-import { quoteDay, quoteTotals, maxHoursFor, startOptions, clampDay, timeLabel, toTimeString } from '../../services/wopedriverPricing';
+import { quoteDay, quoteTotals, maxHoursFor, startOptions, clampDay, timeLabel, toTimeString, fromTimeString } from '../../services/wopedriverPricing';
 
 const STEPS = { choose: 1, plan: 2, review: 3 };
 
@@ -52,12 +54,15 @@ export default function WopeDriverScreen() {
   const [car, setCar] = useState({ model: '', transmission: 'Automatic', plate: '' });
   const [useRentalPickup, setUseRentalPickup] = useState(true);
   const [meetingPoint, setMeetingPoint] = useState('');
-  const [isLocationModalVisible, setIsLocationModalVisible] = useState(false);
   const [contactName, setContactName] = useState(user?.name ?? '');
   const [contactPhone, setContactPhone] = useState(user?.phone ?? '');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
+  // Changing a sent request: the booking being edited (null when creating).
+  const editId = typeof params.edit === 'string' && params.edit ? params.edit : null;
+  const [editing, setEditing] = useState(null);
+  const [paying, setPaying] = useState(false);
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -72,7 +77,28 @@ export default function WopeDriverScreen() {
       getEligibleRentals().then(setRentals).catch(() => setRentals([])).finally(() => setRentalsLoaded(true));
       getMyDriverBookings().then(setMyBookings).catch(() => setMyBookings([]));
     }
-  }, [user]);
+    if (editId) {
+      try {
+        const b = await getDriverBooking(editId);
+        if (!b || !['requested', 'confirmed'].includes(b.status)) throw new Error('This driver booking can no longer be changed.');
+        const m = b.serviceType === 'rental_addon' ? 'rental' : 'own';
+        const daysMap = Object.fromEntries(b.days.map((d) => [d.date, { start: fromTimeString(d.startTime), hours: d.hours, zoneId: d.zoneId }]));
+        setMode(m);
+        setRentalId(b.rentalBookingId);
+        setDaysByMode((prev) => ({ ...prev, [m]: daysMap }));
+        setCar({ model: b.carDescription, transmission: b.carTransmission || 'Automatic', plate: b.carPlate });
+        setUseRentalPickup(b.usesRentalPickup);
+        setMeetingPoint(b.usesRentalPickup ? '' : b.meetingPoint);
+        setContactName(b.contactName);
+        setContactPhone(b.contactPhone);
+        setNotes(b.notes);
+        setEditing(b);
+        setStep('plan');
+      } catch (e) {
+        setLoadError(e?.message || 'Could not load this driver booking.');
+      }
+    }
+  }, [user, editId]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -191,10 +217,10 @@ export default function WopeDriverScreen() {
 
   const goBack = useCallback(() => {
     if (step === 'review') { setStep('plan'); return true; }
-    if (step === 'plan') { setStep('choose'); return true; }
+    if (step === 'plan' && !editId) { setStep('choose'); return true; }
     if (router.canGoBack()) router.back(); else router.replace('/(tabs)/profile');
     return true;
-  }, [step, router]);
+  }, [step, router, editId]);
 
   useFocusEffect(useCallback(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -228,16 +254,57 @@ export default function WopeDriverScreen() {
         notes: notes.trim(),
         days: selectedKeys.map((k) => ({ date: k, start: toTimeString(days[k].start), hours: days[k].hours, zone_id: days[k].zoneId })),
       };
+      if (editing) {
+        const res = await modifyDriverBooking(editing.id, payload);
+        const due = Number(res.amount_due ?? 0);
+        const refund = Math.max(0, Number(res.amount_paid ?? 0) - Number(res.total_cost ?? 0));
+        const goToBooking = () => openRequest(editing.id);
+        if (due > 0) {
+          setResult({ ...res, paid: false, isChange: true });
+          setStep('done');
+          await payNow({ ...res, isChange: true });
+        } else {
+          Alert.alert(
+            'Changes saved',
+            `WopeCar will re-confirm your driver within 24 hours.${refund > 0 ? ` The new total is lower, so we'll refund ${money(refund)}.` : ''}`,
+            [{ text: 'OK', onPress: goToBooking }],
+          );
+        }
+        return;
+      }
       const res = await createDriverBooking(payload);
-      setResult(res);
+      setResult({ ...res, amount_due: res.total_cost, paid: false });
       setDaysByMode((prev) => ({ ...prev, [mode]: {} }));
       setNotes('');
       setStep('done');
       getMyDriverBookings().then(setMyBookings).catch(() => {});
+      await payNow({ ...res, amount_due: res.total_cost });
     } catch (e) {
-      Alert.alert('Could not send your request', e?.message || 'Please try again.');
+      Alert.alert(editing ? 'Could not save your changes' : 'Could not send your request', e?.message || 'Please try again.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Opened from the request's own screen when changing it: go back there (it reloads) rather than stacking a second copy.
+  const openRequest = (id) => {
+    if (editId && router.canGoBack()) router.back();
+    else router.replace({ pathname: '/wopedriver/[id]', params: { id } });
+  };
+
+  // Paystack for what is due on the request. If the customer backs out, the request stays (unpaid) and can be paid
+  // from the done screen or the request's own screen.
+  const payNow = async (r) => {
+    const due = Number(r?.amount_due ?? 0);
+    if (!r?.id || due <= 0) return;
+    setPaying(true);
+    try {
+      await payDriverBooking(r.id, due);
+      setResult((prev) => ({ ...(prev ?? r), paid: true, payError: null }));
+    } catch (e) {
+      setResult((prev) => ({ ...(prev ?? r), paid: false, payError: e?.message || 'Payment was not completed.' }));
+    } finally {
+      setPaying(false);
     }
   };
 
@@ -265,26 +332,53 @@ export default function WopeDriverScreen() {
   }
 
   if (step === 'done') {
+    const unpaid = result && !result.paid && Number(result.amount_due ?? 0) > 0;
     return (
       <View style={[styles.container, styles.center, { paddingHorizontal: 28 }]}>
-        <View style={styles.doneIcon}><Ionicons name="checkmark" size={36} color={colors.white} /></View>
-        <Text style={styles.doneTitle}>Driver request received</Text>
-        <Text style={styles.doneText}>
-          Expect a confirmation from WopeCar within 24 hours. We'll send your driver's details by email and in the app.
-        </Text>
+        {paying ? (
+          <>
+            <ActivityIndicator size="large" color={colors.teal} />
+            <Text style={[styles.doneText, { marginTop: 16 }]}>Waiting for your payment…</Text>
+          </>
+        ) : (
+          <>
+            <View style={[styles.doneIcon, unpaid && { backgroundColor: colors.warning }]}>
+              <Ionicons name={unpaid ? 'card-outline' : 'checkmark'} size={36} color={colors.white} />
+            </View>
+            <Text style={styles.doneTitle}>
+              {unpaid ? (result.isChange ? 'Changes saved, payment due' : 'Request saved, payment due') : result?.isChange ? 'Changes saved and paid' : 'Driver request received'}
+            </Text>
+            <Text style={styles.doneText}>
+              {unpaid
+                ? `${result.payError ? `${result.payError} ` : ''}Pay ${money(result.amount_due)} to send your request to WopeCar's drivers. You get a full refund if we can't confirm a driver.`
+                : "Expect a confirmation from WopeCar within 24 hours. We'll send your driver's details by email and in the app."}
+            </Text>
+          </>
+        )}
         {!!result?.booking_ref && <Text style={styles.doneRef}>{result.booking_ref}</Text>}
-        <TouchableOpacity style={[styles.primaryButton, styles.fullWidth]} onPress={() => router.replace({ pathname: '/wopedriver/[id]', params: { id: result.id } })}>
-          <Text style={styles.primaryButtonText}>View request</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.ghostButton, styles.fullWidth]} onPress={() => { setResult(null); setStep('choose'); }}>
-          <Text style={styles.ghostButtonText}>Done</Text>
-        </TouchableOpacity>
+        {unpaid && !paying && (
+          <TouchableOpacity style={[styles.primaryButton, styles.fullWidth]} onPress={() => payNow(result)}>
+            <Text style={styles.primaryButtonText}>Pay {money(result.amount_due)}</Text>
+          </TouchableOpacity>
+        )}
+        {!paying && (
+          <TouchableOpacity style={[unpaid ? styles.ghostButton : styles.primaryButton, styles.fullWidth]} onPress={() => openRequest(result.id)}>
+            <Text style={unpaid ? styles.ghostButtonText : styles.primaryButtonText}>View request</Text>
+          </TouchableOpacity>
+        )}
+        {!paying && !editId && (
+          <TouchableOpacity style={[styles.ghostButton, styles.fullWidth]} onPress={() => { setResult(null); setStep('choose'); }}>
+            <Text style={styles.ghostButtonText}>Done</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
 
   const stepNo = STEPS[step];
-  const title = step === 'choose' ? 'WopeDriver' : step === 'plan' ? (mode === 'own' ? 'Driver for your car' : 'Add a driver') : 'Review driver request';
+  const title = editing
+    ? (step === 'plan' ? `Change ${editing.ref}` : 'Review your changes')
+    : step === 'choose' ? 'WopeDriver' : step === 'plan' ? (mode === 'own' ? 'Driver for your car' : 'Add a driver') : 'Review driver request';
   const subtitle = step === 'choose' ? 'A licensed driver for any trip' : step === 'plan' ? (mode === 'own' ? 'No rental needed' : 'Optional add-on to your rental') : `${mode === 'own' ? (car.model.trim() || 'Your own car') : rental?.carName ?? ''} · ${selectedKeys.length} ${selectedKeys.length === 1 ? 'day' : 'days'}`;
 
   return (
@@ -372,7 +466,7 @@ export default function WopeDriverScreen() {
           <>
             {mode === 'rental' ? (
               <>
-                {rentals.length > 1 ? (
+                {rentals.length > 1 && !editing ? (
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
                     {rentals.map((r) => (
                       <TouchableOpacity key={r.id} style={[styles.rentalChip, r.id === rentalId && styles.rentalChipSelected]} onPress={() => { setRentalId(r.id); setDaysByMode((p) => ({ ...p, rental: {} })); setFocus(null); }}>
@@ -504,17 +598,14 @@ export default function WopeDriverScreen() {
               </TouchableOpacity>
             )}
             {!(mode === 'rental' && useRentalPickup && rental?.pickupLocation) && (
-              <View style={styles.inputWithButton}>
-                <TextInput
-                  style={[styles.input, { flex: 1, marginBottom: 0 }]}
+              <View style={{ marginBottom: 10 }}>
+                <PlaceInput
                   value={meetingPoint}
                   onChangeText={setMeetingPoint}
+                  title={mode === 'own' ? 'Pickup address' : 'Meeting point'}
                   placeholder={mode === 'own' ? 'Where should we collect your car?' : 'Meeting point, e.g. Labone, Accra'}
-                  placeholderTextColor={colors.textSubtle}
+                  inputStyle={styles.input}
                 />
-                <TouchableOpacity style={styles.searchButton} onPress={() => setIsLocationModalVisible(true)} accessibilityLabel="Search for a place">
-                  <Ionicons name="search" size={18} color={colors.white} />
-                </TouchableOpacity>
               </View>
             )}
 
@@ -529,7 +620,11 @@ export default function WopeDriverScreen() {
               placeholderTextColor={colors.textSubtle}
               multiline
             />
-            <Text style={styles.hint}>Subject to driver availability. WopeCar confirms within 24 hours. Nothing is charged until your driver is confirmed.</Text>
+            <Text style={styles.hint}>
+              {editing
+                ? `Subject to driver availability: WopeCar re-confirms changed requests within 24 hours.${editing.amountPaid > 0 ? ` You've paid ${money(editing.amountPaid)}. If the new total is higher you pay the difference; if it's lower we refund it.` : ''}`
+                : "You pay securely with Paystack to send the request. WopeCar confirms within 24 hours, subject to driver availability. If we can't confirm a driver, you get a full refund."}
+            </Text>
           </>
         )}
       </ScrollView>
@@ -539,7 +634,7 @@ export default function WopeDriverScreen() {
         {step !== 'choose' && totals && (
           <View style={styles.footerMeta}>
             <Text style={styles.footerCount}>
-              {step === 'review' ? 'Estimated total' : `${selectedKeys.length} ${selectedKeys.length === 1 ? 'day' : 'days'} with a driver`}
+              {step === 'review' ? (editing ? 'New total' : 'Total') : `${selectedKeys.length} ${selectedKeys.length === 1 ? 'day' : 'days'} with a driver`}
             </Text>
             <Text style={styles.footerTotal}>{money(totals.total)}</Text>
           </View>
@@ -551,22 +646,21 @@ export default function WopeDriverScreen() {
         )}
         {step === 'plan' && (
           <TouchableOpacity style={[styles.primaryButton, !planOk && styles.primaryButtonDisabled]} disabled={!planOk} onPress={() => setStep('review')}>
-            <Text style={styles.primaryButtonText}>Review driver request</Text>
+            <Text style={styles.primaryButtonText}>{editing ? 'Review changes' : 'Review driver request'}</Text>
           </TouchableOpacity>
         )}
         {step === 'review' && (
           <TouchableOpacity style={[styles.primaryButton, (!reviewOk || submitting) && styles.primaryButtonDisabled]} disabled={!reviewOk || submitting} onPress={submit}>
-            {submitting ? <ActivityIndicator color={colors.white} /> : <Text style={styles.primaryButtonText}>Request driver</Text>}
+            {submitting ? <ActivityIndicator color={colors.white} /> : (
+              <Text style={styles.primaryButtonText}>
+                {editing
+                  ? (totals.total - editing.amountPaid > 0.005 && editing.amountPaid > 0 ? `Save & pay ${money(totals.total - editing.amountPaid)}` : editing.amountPaid > 0 ? 'Save changes' : `Save & pay ${money(totals.total)}`)
+                  : `Request & pay ${money(totals.total)}`}
+              </Text>
+            )}
           </TouchableOpacity>
         )}
       </View>
-
-      <LocationSearchModal
-        visible={isLocationModalVisible}
-        title={mode === 'own' ? 'Pickup address' : 'Meeting point'}
-        onClose={() => setIsLocationModalVisible(false)}
-        onSelect={(place) => { setMeetingPoint(place); setIsLocationModalVisible(false); }}
-      />
     </KeyboardAvoidingView>
   );
 }
@@ -721,8 +815,6 @@ function createStyles(colors) {
     fieldLabel: { fontFamily: FONTS.medium, fontSize: 12, color: colors.textMuted, marginBottom: 6 },
     input: { backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, paddingVertical: 11, fontFamily: FONTS.regular, fontSize: 15, color: colors.textPrimary, marginBottom: 10 },
     textarea: { minHeight: 80, textAlignVertical: 'top' },
-    inputWithButton: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-    searchButton: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.navy, alignItems: 'center', justifyContent: 'center' },
     row2: { flexDirection: 'row', gap: 10 },
     segment: { flexDirection: 'row', backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
     segmentItem: { flex: 1, paddingVertical: 11, alignItems: 'center' },

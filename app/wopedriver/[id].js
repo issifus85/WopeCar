@@ -1,7 +1,7 @@
-// One WopeDriver request: status, driver details once confirmed, the day-by-day plan, and cancel.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+// One WopeDriver request: status, driver details once confirmed, the day-by-day plan, payment, change and cancel.
+import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Linking, RefreshControl } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { formatCurrency } from '../../constants/pricing';
@@ -9,16 +9,16 @@ import { useAppTheme } from '../../contexts/ThemeContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import DriverStatusPill from '../../components/wopedriver/DriverStatusPill';
 import { dayLabel } from '../../components/wopedriver/DriverDayCalendar';
-import { getDriverBooking, cancelDriverBooking } from '../../services/wopedriverApi';
+import { getDriverBooking, cancelDriverBooking, payDriverBooking } from '../../services/wopedriverApi';
 import { timeLabel, fromTimeString } from '../../services/wopedriverPricing';
 
 const STATUS_MESSAGES = {
   requested: 'We are matching you with a driver. WopeCar confirms within 24 hours.',
-  confirmed: 'Your driver is booked. Payment is arranged with WopeCar before the first day.',
+  confirmed: 'Your driver is booked.',
   in_progress: 'Your driver is on the job.',
   completed: 'This driver booking is complete. Thanks for riding with WopeDriver.',
   cancelled: 'This driver booking was cancelled.',
-  declined: "Sorry, we didn't have a driver available for these days. Nothing was charged.",
+  declined: "Sorry, we didn't have a driver available for these days.",
 };
 
 export default function DriverBookingScreen() {
@@ -32,6 +32,7 @@ export default function DriverBookingScreen() {
   const [booking, setBooking] = useState(undefined);
   const [refreshing, setRefreshing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [paying, setPaying] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -41,12 +42,13 @@ export default function DriverBookingScreen() {
     }
   }, [id]);
 
-  useEffect(() => { load(); }, [load]);
+  // Reloads when coming back from changing or paying for the request.
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const goBack = () => (router.canGoBack() ? router.back() : router.replace('/wopedriver'));
 
   const confirmCancel = () => {
-    Alert.alert('Cancel driver request?', `${booking.ref} will be cancelled.`, [
+    Alert.alert('Cancel driver request?', `${booking.ref} will be cancelled.${booking.amountPaid > 0 ? ` We'll refund the ${money(booking.amountPaid)} you paid.` : ''}`, [
       { text: 'Keep it', style: 'cancel' },
       {
         text: 'Cancel request',
@@ -66,9 +68,24 @@ export default function DriverBookingScreen() {
     ]);
   };
 
+  const pay = async () => {
+    setPaying(true);
+    try {
+      await payDriverBooking(booking.id, booking.amountDue);
+      await load();
+      Alert.alert('Payment received', `Thanks, we received ${money(booking.amountDue)}.`);
+    } catch (e) {
+      Alert.alert('Payment not completed', e?.message || 'Please try again.');
+    } finally {
+      setPaying(false);
+    }
+  };
+
   if (booking === undefined) {
     return <View style={[styles.container, styles.center]}><ActivityIndicator color={colors.teal} /></View>;
   }
+
+  const open = !!booking && ['requested', 'confirmed'].includes(booking.status);
 
   return (
     <View style={styles.container}>
@@ -94,6 +111,20 @@ export default function DriverBookingScreen() {
               <Text style={[styles.muted, { marginTop: 4 }]}>Reason: {booking.cancelReason}</Text>
             )}
           </View>
+
+          {open && booking.amountDue > 0 && (
+            <View style={[styles.card, styles.payCard]}>
+              <Text style={styles.cardTitle}>{booking.amountPaid > 0 ? 'Balance to pay' : 'Payment due'}</Text>
+              <Text style={styles.body}>
+                {booking.amountPaid > 0
+                  ? `You've paid ${money(booking.amountPaid)}. Your changes added ${money(booking.amountDue)}.`
+                  : 'Pay to send your request to our drivers. You get a full refund if we can\'t confirm a driver.'}
+              </Text>
+              <TouchableOpacity style={styles.payButton} onPress={pay} disabled={paying}>
+                {paying ? <ActivityIndicator color={colors.white} /> : <Text style={styles.payText}>Pay {money(booking.amountDue)}</Text>}
+              </TouchableOpacity>
+            </View>
+          )}
 
           {!!booking.driverName && ['confirmed', 'in_progress'].includes(booking.status) && (
             <View style={styles.card}>
@@ -137,12 +168,31 @@ export default function DriverBookingScreen() {
               );
             })}
             <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>{booking.paymentStatus === 'paid' ? 'Total (paid)' : 'Estimated total'}</Text>
+              <Text style={styles.totalLabel}>Total</Text>
               <Text style={styles.totalValue}>{money(booking.total)}</Text>
             </View>
+            {booking.amountPaid > 0 && (
+              <View style={styles.paidRow}>
+                <Text style={styles.muted}>{booking.paymentStatus === 'refunded' ? 'Refunded' : 'Paid'}</Text>
+                <Text style={styles.muted}>{money(booking.amountPaid)}</Text>
+              </View>
+            )}
+            {booking.refundDue > 0 && booking.paymentStatus !== 'refunded' && (
+              <Text style={[styles.mutedSmall, { marginTop: 4 }]}>Your new total is lower. WopeCar will refund {money(booking.refundDue)}.</Text>
+            )}
           </View>
 
-          {['requested', 'confirmed'].includes(booking.status) && (
+          {open && (
+            <TouchableOpacity style={styles.changeButton} onPress={() => router.push({ pathname: '/wopedriver', params: { edit: booking.id } })}>
+              <Ionicons name="create-outline" size={18} color={colors.white} />
+              <Text style={styles.changeText}>Change request</Text>
+            </TouchableOpacity>
+          )}
+          {open && booking.status === 'confirmed' && (
+            <Text style={[styles.mutedSmall, { textAlign: 'center', marginBottom: 8 }]}>Changing a confirmed request sends it back to WopeCar to re-confirm your driver.</Text>
+          )}
+
+          {open && (
             <TouchableOpacity style={styles.cancelButton} onPress={confirmCancel} disabled={cancelling}>
               {cancelling ? <ActivityIndicator color={colors.error} /> : <Text style={styles.cancelText}>Cancel request</Text>}
             </TouchableOpacity>
@@ -193,6 +243,12 @@ function createStyles(colors) {
     totalRow: { flexDirection: 'row', justifyContent: 'space-between', paddingTop: 10 },
     totalLabel: { fontFamily: FONTS.semiBold, fontSize: 14, color: colors.textPrimary },
     totalValue: { fontFamily: FONTS.bold, fontSize: 18, color: colors.textPrimary },
+    payCard: { borderColor: colors.teal },
+    payButton: { marginTop: 12, borderRadius: 12, paddingVertical: 14, alignItems: 'center', backgroundColor: colors.teal },
+    payText: { fontFamily: FONTS.semiBold, fontSize: 15, color: colors.white },
+    paidRow: { flexDirection: 'row', justifyContent: 'space-between', paddingTop: 4 },
+    changeButton: { flexDirection: 'row', gap: 6, borderRadius: 12, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.navy, marginTop: 4, marginBottom: 10 },
+    changeText: { fontFamily: FONTS.semiBold, fontSize: 15, color: colors.white },
     cancelButton: { borderRadius: 12, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderColor: colors.error, marginTop: 4 },
     cancelText: { fontFamily: FONTS.semiBold, fontSize: 15, color: colors.error },
     supportButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14 },

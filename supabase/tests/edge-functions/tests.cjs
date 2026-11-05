@@ -259,6 +259,70 @@ async function runCancel({ pickup, total = 3000, deposit = 600, status = 'pendin
     check('an unpaid booking never gets a balance due', r.status === 200 && !(r.booking.balance_due > 0), JSON.stringify([r.status, r.booking.balance_due]));
   }
 
+  // ============================== WopeDriver payments ==============================
+  console.log('--- WopeDriver payments ---');
+  const driverTx = (over = {}) => ({ status: true, data: { status: 'success', amount: 40000, currency: 'GHS', reference: 'ps_wd', customer: { email: 'r@example.com' }, metadata: { purpose: 'wopedriver', driver_booking_id: 'D1', user_id: 'R' }, ...over } });
+  async function runDriverConfirm({ callerId = 'R', tx = driverTx(), body = { driverBookingId: 'D1', reference: 'ps_wd' } }) {
+    const tables = { users: [{ id: 'R', role: 'renter' }, { id: 'X', role: 'renter' }], driver_bookings: [{ id: 'D1', user_id: 'R', status: 'requested', total_cost: 400, amount_paid: 0 }] };
+    const { client } = makeDb(tables);
+    const rpcs = [], posts = [];
+    const rpc = async (name, args) => { rpcs.push({ name, args }); return { data: { status: 'applied', payment_id: 'P1', amount_paid: args.p_amount, amount_due: 0 }, error: null }; };
+    const fetchStub = async (url, opts) => {
+      if (String(url).includes('api.paystack.co/transaction/verify')) return { ok: true, json: async () => tx };
+      posts.push({ url: String(url), body: opts?.body ? JSON.parse(opts.body) : null });
+      return { ok: true, json: async () => ({}) };
+    };
+    const handler = loadFunction('confirm-driver-booking-payment/index.ts', { createClient: (u, k, o) => ({ ...client(o?.global ? callerId : null), rpc }), env: { SUPABASE_URL: 'u', SUPABASE_ANON_KEY: 'a', SUPABASE_SERVICE_ROLE_KEY: 's', PAYSTACK_SECRET_KEY: 'k' }, fetch: fetchStub });
+    const res = await handler(req(body));
+    return { status: res.status, body: await res.json(), rpcs, posts };
+  }
+  {
+    const r = await runDriverConfirm({});
+    check('a WopeDriver Paystack payment is recorded for the amount actually paid, against its reference', r.status === 200 && r.body.status === 'applied' && r.rpcs.length === 1 && r.rpcs[0].name === 'apply_driver_booking_payment' && r.rpcs[0].args.p_amount === 400 && r.rpcs[0].args.p_reference === 'ps_wd', JSON.stringify([r.status, r.body, r.rpcs]));
+    check('...and the customer receipt / support email is sent', r.posts.some((p) => p.url.includes('send-driver-booking-notification') && p.body.event === 'paid' && p.body.paymentId === 'P1'), JSON.stringify(r.posts));
+  }
+  {
+    const r = await runDriverConfirm({ tx: driverTx({ metadata: { purpose: 'wopedriver', driver_booking_id: 'D2', user_id: 'R' } }) });
+    check('a payment started for another driver booking is refused (403), nothing recorded', r.status === 403 && r.rpcs.length === 0, JSON.stringify([r.status, r.body]));
+  }
+  {
+    const r = await runDriverConfirm({ tx: driverTx({ metadata: { booking_ids: ['B1'], user_id: 'R' } }) });
+    check('a rental payment cannot be applied to a driver booking (403)', r.status === 403 && r.rpcs.length === 0, JSON.stringify([r.status, r.body]));
+  }
+  {
+    const r = await runDriverConfirm({ callerId: 'X', tx: driverTx({ metadata: { purpose: 'wopedriver', driver_booking_id: 'D1', user_id: 'X' } }) });
+    check('another account cannot apply a payment to someone else\'s driver booking (404)', r.status === 404 && r.rpcs.length === 0, JSON.stringify([r.status, r.body]));
+  }
+  {
+    const r = await runDriverConfirm({ tx: driverTx({ status: 'failed' }) });
+    check('a failed Paystack payment records nothing on the driver booking', r.body.status === 'not_paid' && r.rpcs.length === 0, JSON.stringify(r.body));
+  }
+  {
+    const r = await runDriverConfirm({ tx: driverTx({ currency: 'USD' }) });
+    check('a non-GHS payment is refused', r.status === 400 && r.rpcs.length === 0, JSON.stringify([r.status, r.body]));
+  }
+  async function runDriverInit({ callerId = 'R', amount = 400, booking = {} }) {
+    const tables = { users: [{ id: 'R', email: 'r@example.com' }, { id: 'X', email: 'x@example.com' }], driver_bookings: [{ id: 'D1', user_id: 'R', status: 'requested', total_cost: 650, amount_paid: 250, ...booking }] };
+    const { client } = makeDb(tables);
+    const sent = [];
+    const fetchStub = async (url, opts) => { sent.push(JSON.parse(opts.body)); return { ok: true, json: async () => ({ status: true, data: { authorization_url: 'https://pay', reference: 'ps_new' } }) }; };
+    const handler = loadFunction('paystack-initialize/index.ts', { createClient: (u, k, o) => client(o?.global ? callerId : null), env: { SUPABASE_URL: 'u', SUPABASE_ANON_KEY: 'a', SUPABASE_SERVICE_ROLE_KEY: 's', PAYSTACK_SECRET_KEY: 'k' }, fetch: fetchStub });
+    const res = await handler(req({ amount, callbackUrl: 'https://cb', purpose: 'wopedriver', driverBookingId: 'D1' }));
+    return { status: res.status, body: await res.json(), sent };
+  }
+  {
+    const r = await runDriverInit({});
+    check('paystack-initialize charges exactly what is due on a driver booking and stamps it (purpose wopedriver)', r.status === 200 && r.sent.length === 1 && r.sent[0].amount === 40000 && r.sent[0].metadata.purpose === 'wopedriver' && r.sent[0].metadata.driver_booking_id === 'D1' && r.sent[0].metadata.user_id === 'R', JSON.stringify([r.status, r.body, r.sent]));
+    const r2 = await runDriverInit({ amount: 100 });
+    check('...a different amount is refused (400) and Paystack is never called', r2.status === 400 && r2.sent.length === 0, JSON.stringify([r2.status, r2.body]));
+    const r3 = await runDriverInit({ callerId: 'X' });
+    check('...someone else\'s driver booking is refused (403)', r3.status === 403 && r3.sent.length === 0, JSON.stringify([r3.status, r3.body]));
+    const r4 = await runDriverInit({ booking: { status: 'cancelled' } });
+    check('...a cancelled driver booking cannot be paid (409)', r4.status === 409 && r4.sent.length === 0, JSON.stringify([r4.status, r4.body]));
+    const r5 = await runDriverInit({ booking: { amount_paid: 650 } });
+    check('...nothing due -> refused (409)', r5.status === 409 && r5.sent.length === 0, JSON.stringify([r5.status, r5.body]));
+  }
+
   // ============================== confirm-balance-payment ==============================
   console.log('--- confirm-balance-payment ---');
   async function runBalance({ balance = 300, callerId = 'R', body, tx = null, payments = [], mods }) {
