@@ -23,6 +23,7 @@ import { useCheckout } from '../../contexts/CheckoutContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 import { parseDateOnly } from '../../constants/dateUtils';
+import { logCheckoutStep } from '../../services/analytics';
 
 function formatDate(iso) {
   return parseDateOnly(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
@@ -46,6 +47,10 @@ export default function CheckoutSummaryScreen() {
   const car = useMemo(() => applyDriverMode(carData, !!draft.withDriver), [carData, draft.withDriver]);
   const [isLoading, setIsLoading] = useState(true);
   const [datePriceMap, setDatePriceMap] = useState({});
+
+  useEffect(() => {
+    logCheckoutStep({ step: 4, stepName: 'summary', carId });
+  }, [carId]);
 
   useEffect(() => {
     fetchCarById(carId)

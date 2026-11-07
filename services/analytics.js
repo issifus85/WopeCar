@@ -43,52 +43,70 @@ import {
 // local development.
 const shouldLog = Constants.expoConfig?.extra?.APP_ENV !== 'development';
 
+// Event names follow GA4's recommended e-commerce vocabulary (search,
+// view_item, add_to_cart, begin_checkout, add_payment_info, purchase,
+// refund, generate_lead, sign_up, login) and match the website's
+// lib/analytics.ts exactly, so web and app land in the same GA4 funnel
+// and e-commerce reports and the weekly report can show one funnel with
+// a platform split. Function names are unchanged so callers didn't move.
+// The old custom names (search_cars, view_car, start_checkout,
+// save_to_cart, booking_completed) are no longer sent.
+const CURRENCY = 'GHS';
+const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+const carItem = ({ carId, carName, carType, pricePerDay, quantity, driveType }) => ({
+  item_id: String(carId ?? ''),
+  item_name: carName ?? '',
+  item_category: driveType === 'chauffeur' || driveType === 'Chauffeur' ? 'chauffeured' : 'self_drive',
+  item_category2: carType || undefined,
+  price: pricePerDay != null ? round2(pricePerDay) : undefined,
+  quantity: quantity ?? 1,
+});
+
 // ─── SCREEN TRACKING ──────────────────────────────────
-export async function logScreen(screenName) {
+// Called automatically for every route by components/ScreenViewTracker.js.
+export async function logScreen(screenName, screenClass) {
   if (!shouldLog) return;
   await fbLogScreenView(getAnalytics(), {
     screen_name: screenName,
-    screen_class: screenName,
+    screen_class: screenClass || screenName,
   });
 }
 
 // ─── SEARCH & BROWSE ──────────────────────────────────
 export async function logSearchCars({ location, carType, startDate, endDate }) {
   if (!shouldLog) return;
-  await fbLogEvent(getAnalytics(), 'search_cars', {
-    location: location || 'not_set',
-    car_type: carType || 'all',
-    start_date: startDate || 'not_set',
-    end_date: endDate || 'not_set',
+  await fbLogEvent(getAnalytics(), 'search', {
+    search_term: location || 'any',
+    vehicle_type: carType || 'all',
+    start_date: startDate || undefined,
+    end_date: endDate || undefined,
   });
 }
 
 export async function logViewCar({ carId, carName, carType, pricePerDay, location }) {
   if (!shouldLog) return;
-  await fbLogEvent(getAnalytics(), 'view_car', {
-    car_id: carId,
-    car_name: carName,
-    car_type: carType || 'not_set',
-    price_per_day: pricePerDay,
-    location: location || 'not_set',
+  await fbLogEvent(getAnalytics(), 'view_item', {
+    currency: CURRENCY,
+    value: round2(pricePerDay),
+    location: location || undefined,
+    items: [carItem({ carId, carName, carType, pricePerDay })],
   });
 }
 
 // ─── BOOKING FLOW ──────────────────────────────────────
 export async function logStartCheckout({ carId, carName, totalDays, estimatedCost }) {
   if (!shouldLog) return;
-  await fbLogEvent(getAnalytics(), 'start_checkout', {
-    car_id: carId,
-    car_name: carName,
-    total_days: totalDays,
-    estimated_cost: estimatedCost,
+  await fbLogEvent(getAnalytics(), 'begin_checkout', {
+    currency: CURRENCY,
+    value: round2(estimatedCost),
+    items: [carItem({ carId, carName, quantity: totalDays, pricePerDay: totalDays ? estimatedCost / totalDays : undefined })],
   });
 }
 
 export async function logCheckoutStep({ step, stepName, carId }) {
   if (!shouldLog) return;
-  await fbLogEvent(getAnalytics(), 'checkout_step', {
-    step_number: step,
+  await fbLogEvent(getAnalytics(), 'checkout_progress', {
+    step,
     step_name: stepName,
     car_id: carId,
   });
@@ -96,50 +114,45 @@ export async function logCheckoutStep({ step, stepName, carId }) {
 
 export async function logSaveToCart({ carId, carName, totalCost, totalDays }) {
   if (!shouldLog) return;
-  await fbLogEvent(getAnalytics(), 'save_to_cart', {
-    car_id: carId,
-    car_name: carName,
-    total_cost: totalCost,
-    total_days: totalDays,
+  await fbLogEvent(getAnalytics(), 'add_to_cart', {
+    currency: CURRENCY,
+    value: round2(totalCost),
+    items: [carItem({ carId, carName, quantity: totalDays, pricePerDay: totalDays ? totalCost / totalDays : undefined })],
   });
 }
 
+/**
+ * `value` is revenue, not the amount charged: the refundable security
+ * deposit is subtracted (same rule as the website's purchase event) so
+ * Google Ads optimises toward money WopeCar keeps. The deposit still goes
+ * out as its own parameter for reconciliation against Paystack.
+ */
 export async function logBookingCompleted({
-  bookingRef, carId, carName, totalCost,
-  totalDays, driveType, wopecareSelected, paymentMethod,
+  bookingRef, carId, carName, carType, totalCost, securityDeposit = 0,
+  totalDays, driveType, wopecareSelected, withDriverSelected, paymentMethod, promoCode,
 }) {
   if (!shouldLog) return;
-  const analytics = getAnalytics();
-  await fbLogEvent(analytics, 'booking_completed', {
-    booking_ref: bookingRef,
-    car_id: carId,
-    car_name: carName,
-    total_cost: totalCost,
-    total_days: totalDays,
-    drive_type: driveType || 'self_drive',
-    wopecare_selected: wopecareSelected ? 'yes' : 'no',
-    payment_method: paymentMethod || 'paystack',
-  });
-  // Also logged as a purchase event for Firebase's built-in revenue tracking.
-  await fbLogPurchase(analytics, {
-    currency: 'GHS',
-    value: totalCost,
+  const revenue = round2(totalCost - (securityDeposit || 0));
+  await fbLogPurchase(getAnalytics(), {
+    currency: CURRENCY,
+    value: revenue,
     transaction_id: bookingRef,
-    items: [{
-      item_id: carId,
-      item_name: carName,
-      quantity: totalDays,
-      price: totalCost / totalDays,
-    }],
+    coupon: promoCode || undefined,
+    security_deposit: round2(securityDeposit),
+    payment_type: paymentMethod || 'paystack',
+    wopecare_selected: wopecareSelected ? 'yes' : 'no',
+    with_driver: withDriverSelected ? 'yes' : 'no',
+    items: [carItem({ carId, carName, carType, driveType, quantity: totalDays, pricePerDay: totalDays ? revenue / totalDays : revenue })],
   });
 }
 
 export async function logBookingCancelled({ bookingRef, carId, reason }) {
   if (!shouldLog) return;
-  await fbLogEvent(getAnalytics(), 'booking_cancelled', {
-    booking_ref: bookingRef,
-    car_id: carId,
+  await fbLogEvent(getAnalytics(), 'refund', {
+    currency: CURRENCY,
+    transaction_id: bookingRef,
     reason: reason || 'not_specified',
+    items: [carItem({ carId })],
   });
 }
 
