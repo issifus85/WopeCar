@@ -10,7 +10,7 @@ import { fetchCarById } from '../../services/carsApi';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
-import { logScreen } from '../../services/analytics';
+import { logCheckoutStep } from '../../services/analytics';
 
 export default function CheckoutAddonsScreen() {
   const { carId } = useLocalSearchParams();
@@ -20,9 +20,10 @@ export default function CheckoutAddonsScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { draft, updateDraft } = useCheckout();
 
+  // Screen views are logged automatically (ScreenViewTracker in app/_layout.js); this marks the checkout funnel step.
   useEffect(() => {
-    logScreen('Checkout_Addons');
-  }, []);
+    logCheckoutStep({ step: 2, stepName: 'addons', carId });
+  }, [carId]);
 
   // The car as fetched; `car` is the same car under the driver choice made on the FIRST step (a self-drive car with a driver follows chauffeur
   // rules - see applyDriverMode), so billable days, add-on caps and everything below follow it.

@@ -16,7 +16,7 @@ import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 import ConfirmModal from '../../components/ConfirmModal';
 import OptionPickerModal from '../../components/OptionPickerModal';
 import LocationSearchModal from '../../components/LocationSearchModal';
-import { logScreen, logStartCheckout } from '../../services/analytics';
+import { logCheckoutStep, logStartCheckout } from '../../services/analytics';
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const MONTH_NAMES = [
@@ -171,9 +171,10 @@ export default function CheckoutDatesScreen() {
     }
   }, [carId]);
 
+  // Screen views are logged automatically (ScreenViewTracker in app/_layout.js); this marks the checkout funnel step.
   useEffect(() => {
-    logScreen('Checkout_Dates');
-  }, []);
+    logCheckoutStep({ step: 1, stepName: 'dates', carId });
+  }, [carId]);
 
   // The car as fetched; `car` below is the same car viewed through the driver choice. A self-drive car booked WITH a driver is ruled like a
   // chauffeur booking (see applyDriverMode), so everything on this screen that reads car.drivenBy - time windows, Sundays, minimum days,
