@@ -19,7 +19,7 @@ import FilterModal from '../../components/FilterModal';
 import CarListCard from '../../components/CarListCard';
 import CarTileCard from '../../components/CarTileCard';
 import PromoBanner from '../../components/PromoBanner';
-import { logScreen, logSearchCars } from '../../services/analytics';
+import { logSearchCars } from '../../services/analytics';
 
 // Matches the tile FlatList's own initialNumToRender + a small buffer for
 // the batch right after it - warms expo-image's cache for those cards
@@ -98,10 +98,6 @@ export default function HomeScreen() {
     setIsSearchFocused(false);
     Animated.spring(searchScale, { toValue: 1, friction: 7, useNativeDriver: true }).start();
   };
-
-  useEffect(() => {
-    logScreen('Home');
-  }, []);
 
   // Home has no separate "search" submit - loadCars() re-fetches on every
   // filter/date/sort change, including the very first mount. Only the

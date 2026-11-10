@@ -34,6 +34,7 @@ import EnvironmentBanner from '../components/EnvironmentBanner';
 import PaystackWebViewModal from '../components/PaystackWebViewModal';
 import AppUpdatePrompt from '../components/AppUpdatePrompt';
 import ErrorBoundary from '../components/ErrorBoundary';
+import ScreenViewTracker from '../components/ScreenViewTracker';
 import SplashVideoScreen from '../components/SplashVideoScreen';
 import supabase from '../services/supabase';
 import { parseTokensFromUrl, parseAuthErrorFromUrl } from '../services/supabaseAuthApi';
@@ -290,6 +291,7 @@ function RootNavigator({ authRedirectType }) {
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <EnvironmentBanner />
+      <ScreenViewTracker />
       <PaystackWebViewModal />
       <AppUpdatePrompt />
       <NavigationThemeProvider value={navTheme}>

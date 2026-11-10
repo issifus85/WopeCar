@@ -9,7 +9,7 @@ import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 import ConfirmModal from '../../components/ConfirmModal';
 import WopeCareSelector from '../../components/WopeCareSelector';
-import { logScreen, logWopecareSelected } from '../../services/analytics';
+import { logCheckoutStep, logWopecareSelected } from '../../services/analytics';
 
 // Split out of checkout/addons.js (previously combined with Regional
 // Add-ons on one screen, WopeCare stacked above it) - Regional Add-ons now
@@ -38,9 +38,10 @@ export default function CheckoutWopeCareScreen() {
       .finally(() => setIsLoading(false));
   }, [carId]);
 
+  // Screen views are logged automatically (ScreenViewTracker in app/_layout.js); this marks the checkout funnel step.
   useEffect(() => {
-    logScreen('Checkout_WopeCare');
-  }, []);
+    logCheckoutStep({ step: 3, stepName: 'wopecare', carId });
+  }, [carId]);
 
   const days = useMemo(() => {
     if (!draft.startDate || !draft.endDate || !car) return 0;

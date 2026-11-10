@@ -29,7 +29,7 @@ import { useCart } from '../../contexts/CartContext';
 import { useInbox } from '../../contexts/InboxContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { getAvailabilityBadge } from '../../utils/carAvailability';
-import { logScreen, logViewCar } from '../../services/analytics';
+import { logViewCar } from '../../services/analytics';
 import { useCancellationPolicyText } from '../../services/cancellationPolicy';
 
 const DESCRIPTION_TRUNCATE_LENGTH = 220;
@@ -68,7 +68,6 @@ export default function CarDetailScreen() {
     fetchCarById(id)
       .then((fetchedCar) => {
         setCar(fetchedCar);
-        logScreen('CarDetail');
         logViewCar({
           carId: fetchedCar.id,
           carName: fetchedCar.name,

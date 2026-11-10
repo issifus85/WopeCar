@@ -46,7 +46,7 @@ import { useInbox } from '../../contexts/InboxContext';
 import CheckoutHeader from '../../components/CheckoutHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 import ConfirmModal from '../../components/ConfirmModal';
-import { logScreen, logBookingCompleted, logSaveToCart } from '../../services/analytics';
+import { logCheckoutStep, logBookingCompleted, logSaveToCart } from '../../services/analytics';
 import { parseDateOnly } from '../../constants/dateUtils';
 
 const SAVED_BOOKING_HOLD_MS = 24 * 60 * 60 * 1000;
@@ -115,9 +115,10 @@ export default function CheckoutPaymentScreen() {
       .finally(() => setIsLoading(false));
   }, [carId]);
 
+  // Screen views are logged automatically (ScreenViewTracker in app/_layout.js); this marks the checkout funnel step.
   useEffect(() => {
-    logScreen('Checkout_Payment');
-  }, []);
+    logCheckoutStep({ step: 6, stepName: 'payment', carId });
+  }, [carId]);
 
   // Explicit, deliberate gate - not just relying on `user.id` throwing
   // further down in handlePay if this screen is ever reached logged out.
@@ -482,12 +483,15 @@ export default function CheckoutPaymentScreen() {
         bookingRef: confirmed.booking_ref ?? confirmed.id,
         carId,
         carName: car?.name,
+        carType: car?.type,
         totalCost: draft.totalCost,
+        securityDeposit: Number(confirmed.security_deposit) || 0,
         totalDays: billableDays,
         driveType: car?.drivenBy === 'Chauffeur' ? 'chauffeur' : 'self_drive',
         wopecareSelected: !!wopeCarePlanId,
         withDriverSelected,
         paymentMethod: 'paystack',
+        promoCode: draft.promoCode || null,
       });
 
       const booking = {

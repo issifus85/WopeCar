@@ -15,6 +15,7 @@ import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 import PhotoSourceSheet from '../../components/PhotoSourceSheet';
 import ConfirmModal from '../../components/ConfirmModal';
 import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
+import { logCheckoutStep } from '../../services/analytics';
 
 const UPLOAD_TILE_SIZE = 48;
 
@@ -93,6 +94,10 @@ export default function CheckoutFormScreen() {
   // that are still empty, so it can never clobber a pick already made
   // earlier in this same checkout session (e.g. navigating back here from
   // Payment).
+  useEffect(() => {
+    logCheckoutStep({ step: 5, stepName: 'form', carId });
+  }, [carId]);
+
   useEffect(() => {
     getMyVerificationDocumentsByType()
       .then((docs) => {
