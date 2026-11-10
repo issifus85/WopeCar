@@ -332,6 +332,8 @@ function RootNavigator({ authRedirectType }) {
           {/* Admin Panel - own nested Stack + gate check in admin/_layout.js,
               own native headers throughout (AdminHeader), so headerShown
               stays false here same as the vendor group below. */}
+          <Stack.Screen name="wopedriver/index" options={{ headerShown: false, title: 'WopeDriver' }} />
+          <Stack.Screen name="wopedriver/[id]" options={{ headerShown: false, title: 'Driver Booking' }} />
           <Stack.Screen name="admin" options={{ headerShown: false, title: 'Admin Panel' }} />
           {/* Vendor/Host mode - its own bottom tab bar (Dashboard/Bookings/
               Calendar/Support/Menu) plus stack-pushed screens on top, same

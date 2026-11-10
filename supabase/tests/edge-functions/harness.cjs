@@ -79,7 +79,7 @@ function loadFunction(rel, deps) {
     if (spec.endsWith('_shared/modifyPricing.ts')) return loadShared('_shared/modifyPricing.ts');
     if (spec.endsWith('_shared/time.ts')) return loadShared('_shared/time.ts');
     if (spec.endsWith('_shared/cronAuth.ts')) return { getInternalSecret: async () => 'internal-secret', isTrustedInternalCaller: async (r) => r.headers.get('x-cron-secret') === 'internal-secret' };
-    if (spec.endsWith('_shared/balancePayment.ts') || spec.endsWith('_shared/confirmPayment.ts')) return loadWithFetch(spec.split('/').pop(), deps);
+    if (spec.endsWith('_shared/balancePayment.ts') || spec.endsWith('_shared/confirmPayment.ts') || spec.endsWith('_shared/driverPayment.ts')) return loadWithFetch(spec.split('/').pop(), deps);
     return {};
   };
   let handler;
@@ -98,12 +98,20 @@ function loadShared(rel) {
 }
 
 // Shared modules that call Paystack (confirmPayment.ts, balancePayment.ts): loaded fresh per test so they see that test's fake fetch.
+// One copy per test (per deps object), shared by every import within it - as in Deno, where a module is loaded once, so
+// classes like PaymentRejected are the same class for the function and the shared modules it imports.
+const perTest = new WeakMap();
 function loadWithFetch(file, deps) {
+  if (!perTest.has(deps)) perTest.set(deps, {});
+  const cache = perTest.get(deps);
+  if (cache[file]) return cache[file];
   const src = fs.readFileSync(path.join(FN, '_shared', file), 'utf8');
   const js = ts.transpileModule(src, { compilerOptions: { module: 'CommonJS', target: 'ES2022' } }).outputText;
   const m = { exports: {} };
   const req = (spec) => (spec.endsWith('confirmPayment.ts') ? loadWithFetch('confirmPayment.ts', deps) : {});
-  new Function('module', 'exports', 'require', 'fetch', js)(m, m.exports, req, deps.fetch);
+  const Deno = { env: { get: (k) => deps.env[k] } };
+  cache[file] = m.exports;
+  new Function('module', 'exports', 'require', 'fetch', 'Deno', js)(m, m.exports, req, deps.fetch, Deno);
   return m.exports;
 }
 

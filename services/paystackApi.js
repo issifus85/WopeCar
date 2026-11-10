@@ -30,12 +30,13 @@ export function buildPaystackCallbackUrl(appRedirectUrl) {
  * nothing has written since auth moved to Supabase - every real booking's
  * payment step was silently 401ing before this.
  */
-export async function initializePayment({ amount, callbackUrl, bookingIds, purpose }) {
+export async function initializePayment({ amount, callbackUrl, bookingIds, purpose, extra }) {
   const { data, error } = await supabase.functions.invoke('paystack-initialize', {
-    body: { amount, callbackUrl, bookingIds, ...(purpose ? { purpose } : {}) },
+    // `extra`: purpose-specific fields, e.g. { driverBookingId } for a WopeDriver payment.
+    body: { amount, callbackUrl, bookingIds, ...(purpose ? { purpose } : {}), ...(extra ?? {}) },
   });
-  // A balance payment is refused with a plain-language reason (nothing due / the amount changed) - surface it as is.
-  if (error) throw purpose === 'balance' ? new Error(await edgeFunctionErrorMessage(error)) : error;
+  // A balance / WopeDriver payment is refused with a plain-language reason (nothing due / the amount changed) - surface it as is.
+  if (error) throw purpose === 'balance' || purpose === 'wopedriver' ? new Error(await edgeFunctionErrorMessage(error)) : error;
   return data;
 }
 
