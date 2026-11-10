@@ -1,7 +1,8 @@
 // One WopeDriver request: status, driver details once confirmed, the day-by-day plan, payment, change and cancel.
 import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Linking, RefreshControl } from 'react-native';
-import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { WOPEDRIVER_ENABLED } from '../../constants/features';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { formatCurrency } from '../../constants/pricing';
@@ -21,7 +22,13 @@ const STATUS_MESSAGES = {
   declined: "Sorry, we didn't have a driver available for these days.",
 };
 
-export default function DriverBookingScreen() {
+// Pre-production only for now (constants/features.js): a production build sends any link here back to the Account tab.
+export default function DriverBookingScreenGate() {
+  if (!WOPEDRIVER_ENABLED) return <Redirect href="/(tabs)/profile" />;
+  return <DriverBookingScreen />;
+}
+
+function DriverBookingScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const { colors } = useAppTheme();

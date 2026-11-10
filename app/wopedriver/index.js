@@ -9,7 +9,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Alert, BackHandler, KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { WOPEDRIVER_ENABLED } from '../../constants/features';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
 import { formatCurrency } from '../../constants/pricing';
@@ -26,7 +27,13 @@ import { quoteDay, quoteTotals, maxHoursFor, startOptions, clampDay, timeLabel, 
 
 const STEPS = { choose: 1, plan: 2, review: 3 };
 
-export default function WopeDriverScreen() {
+// Pre-production only for now (constants/features.js): a production build sends any link here back to the Account tab.
+export default function WopeDriverScreenGate() {
+  if (!WOPEDRIVER_ENABLED) return <Redirect href="/(tabs)/profile" />;
+  return <WopeDriverScreen />;
+}
+
+function WopeDriverScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { colors } = useAppTheme();

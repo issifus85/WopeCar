@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
+import { WOPEDRIVER_ENABLED } from '../../constants/features';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useInbox } from '../../contexts/InboxContext';
@@ -121,20 +122,23 @@ export default function ProfileScreen() {
         <Ionicons name="chevron-forward" size={20} color={colors.textSubtle} />
       </TouchableOpacity>
 
-      {/* WopeDriver add-on service: a WopeCar driver for a self-drive rental or for the customer's own car. */}
-      <TouchableOpacity style={styles.hostRow} onPress={() => router.push('/wopedriver')}>
-        <View style={styles.hostIcon}>
-          <Ionicons name="person-outline" size={20} color={colors.teal} />
-        </View>
-        <View style={styles.accountInfo}>
-          <View style={styles.titleRow}>
-            <Text style={styles.hostTitle}>WopeDriver</Text>
-            <View style={styles.newBadge}><Text style={styles.newBadgeText}>NEW</Text></View>
+      {/* WopeDriver add-on service: a WopeCar driver for a self-drive rental or for the customer's own car.
+          Pre-production only for now (constants/features.js). Navy card so it reads differently from the Partner Mode switch. */}
+      {WOPEDRIVER_ENABLED && (
+        <TouchableOpacity style={styles.driverRow} onPress={() => router.push('/wopedriver')}>
+          <View style={styles.driverIcon}>
+            <Ionicons name="person-outline" size={20} color={colors.white} />
           </View>
-          <Text style={styles.accountSubtitle}>Book a driver for your rental or your own car</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={20} color={colors.textSubtle} />
-      </TouchableOpacity>
+          <View style={styles.accountInfo}>
+            <View style={styles.titleRow}>
+              <Text style={styles.driverTitle}>WopeDriver</Text>
+              <View style={styles.newBadge}><Text style={styles.newBadgeText}>NEW</Text></View>
+            </View>
+            <Text style={styles.driverSubtitle}>Book a driver for your rental or your own car</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.white} />
+        </TouchableOpacity>
+      )}
 
       <View style={styles.menu}>
         {MENU_ITEMS.map((item, index) => (
@@ -264,8 +268,36 @@ function createStyles(colors) {
       flexDirection: 'row',
       alignItems: 'center',
     },
-    newBadge: {
+    driverRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
       backgroundColor: colors.navy,
+      marginHorizontal: 16,
+      marginTop: 12,
+      borderRadius: 14,
+      padding: 16,
+    },
+    driverIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: colors.orange,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    driverTitle: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 15,
+      color: colors.white,
+    },
+    driverSubtitle: {
+      fontFamily: FONTS.regular,
+      fontSize: 13,
+      color: 'rgba(255,255,255,0.78)',
+      marginTop: 2,
+    },
+    newBadge: {
+      backgroundColor: colors.orange,
       borderRadius: 6,
       paddingHorizontal: 6,
       paddingVertical: 1,

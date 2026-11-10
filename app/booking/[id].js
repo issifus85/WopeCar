@@ -41,6 +41,7 @@ import LocationSearchModal from '../../components/LocationSearchModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
 import { parseDateOnly } from '../../constants/dateUtils';
+import { WOPEDRIVER_ENABLED } from '../../constants/features';
 
 const CARD_IMAGE_SIZE = 72;
 
@@ -1200,7 +1201,7 @@ export default function BookingDetailScreen() {
       )}
 
       {/* WopeDriver: a self-drive renter who'd rather not drive can add a WopeCar driver for some or all of the remaining days. */}
-      {mode === 'view' && canModify && ownType === 'Self-drive' && !bookingHasDriver && booking.paymentStatus === 'paid'
+      {WOPEDRIVER_ENABLED && mode === 'view' && canModify && ownType === 'Self-drive' && !bookingHasDriver && booking.paymentStatus === 'paid'
         && booking.endDate && parseDateOnly(booking.endDate) >= new Date(new Date().setHours(0, 0, 0, 0)) && (
         <TouchableOpacity
           style={[styles.card, styles.wopeDriverCard]}
