@@ -11,6 +11,16 @@
 // A rejected payment (wrong amount, reference reused, not the payer's
 // booking...) is a 4xx with { error }.
 //
+// `asAdmin: true` is the admin tools' "Mark as Paid" with method
+// "Paystack (seen in the dashboard)": the renter really did pay through
+// Paystack, but no client ever came back to claim it. The caller is an admin
+// rather than the payer, so the payer is taken from the bookings' own renter -
+// every other check (the transaction succeeded, in GHS, for at least what is
+// owed, the reference not already used elsewhere, and paid from the renter's
+// own email) still has to pass. Confirming it here instead of flipping the
+// status by hand is what puts the reference on the booking, so the payment can
+// be refunded and paystack-reconcile / paystack-webhook recognise it.
+//
 // Deploy with: supabase functions deploy confirm-booking-payment
 // Uses the existing PAYSTACK_SECRET_KEY secret.
 
@@ -43,10 +53,26 @@ Deno.serve(async (req) => {
     const { data: { user }, error: getUserError } = await callerClient.auth.getUser();
     if (getUserError || !user) return jsonResponse({ error: 'Invalid or expired session.' }, 401);
 
-    const { bookingIds, bookingId, reference } = await req.json();
+    const { bookingIds, bookingId, reference, asAdmin } = await req.json();
     const ids: string[] = Array.isArray(bookingIds) ? bookingIds : bookingId ? [bookingId] : [];
     if (!reference || typeof reference !== 'string') return jsonResponse({ error: 'reference is required.' }, 400);
     if (ids.length === 0 || ids.some((id) => typeof id !== 'string')) return jsonResponse({ error: 'bookingIds is required.' }, 400);
+
+    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+    // Who the payment has to belong to: normally the caller, who is the payer.
+    let payerId = user.id;
+    if (asAdmin === true) {
+      const { data: isAdmin } = await callerClient.rpc('is_admin');
+      if (isAdmin !== true) return jsonResponse({ error: 'Only an admin can attribute a payment to someone else.' }, 403);
+      const unique = Array.from(new Set(ids));
+      const { data: rows, error: renterError } = await adminClient.from('bookings').select('renter_id').in('id', unique);
+      if (renterError) return jsonResponse({ error: renterError.message }, 500);
+      if (!rows || rows.length !== unique.length) return jsonResponse({ error: 'Booking not found.' }, 404);
+      const renterIds = Array.from(new Set(rows.map((r: { renter_id: string }) => r.renter_id)));
+      if (renterIds.length !== 1) return jsonResponse({ error: 'These bookings belong to different renters.' }, 400);
+      payerId = renterIds[0];
+    }
 
     const tx = await fetchPaystackTransaction(reference, paystackSecretKey);
     const base = {
@@ -59,8 +85,7 @@ Deno.serve(async (req) => {
     };
     if (tx.status !== 'success') return jsonResponse({ ...base, outcomes: {} });
 
-    const adminClient = createClient(supabaseUrl, serviceRoleKey);
-    const outcomes = await confirmBookingsForReference(adminClient, { reference, bookingIds: ids, tx, payerId: user.id });
+    const outcomes = await confirmBookingsForReference(adminClient, { reference, bookingIds: ids, tx, payerId });
     return jsonResponse({ ...base, outcomes });
   } catch (e) {
     if (e instanceof PaymentRejected) return jsonResponse({ error: e.message }, e.status);

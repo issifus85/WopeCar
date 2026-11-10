@@ -57,6 +57,11 @@ export default function MarkPaidModal({ visible, bookingRef, amount, onCancel, o
                 onChangeText={setReference}
                 autoCapitalize="none"
               />
+              <Text style={styles.hint}>
+                {method === 'paystack_dashboard'
+                  ? 'Checked against Paystack before the booking is marked as paid: the transaction has to have succeeded, cover the booking and not already belong to another one.'
+                  : 'Saved on the booking so the payment can be traced later. Paystack cannot refund against a reference from outside it \u2014 a cancellation is returned the way the money came in.'}
+              </Text>
 
               <Text style={styles.label}>Note {reference.trim() ? '(optional)' : '(required if there is no reference)'}</Text>
               <TextInput
@@ -95,6 +100,7 @@ function createStyles(colors) {
     title: { fontFamily: FONTS.bold, fontSize: 17, color: colors.textPrimary, marginBottom: 6 },
     subtitle: { fontFamily: FONTS.regular, fontSize: 12.5, lineHeight: 18, color: colors.textSubtle, marginBottom: 14 },
     label: { fontFamily: FONTS.semiBold, fontSize: 12.5, color: colors.textPrimary, marginBottom: 6 },
+    hint: { fontFamily: FONTS.regular, fontSize: 11.5, lineHeight: 16, color: colors.textMuted, marginTop: -6, marginBottom: 6 },
     chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
     chip: { borderRadius: 100, borderWidth: 1.5, borderColor: colors.border, paddingVertical: 7, paddingHorizontal: 12 },
     chipActive: { backgroundColor: colors.teal, borderColor: colors.teal },

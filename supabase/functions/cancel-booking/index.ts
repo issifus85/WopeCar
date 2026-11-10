@@ -31,7 +31,10 @@
 //     the partial threshold.
 //   - The real Paystack refund is a best-effort, synchronous API call
 //     against the booking's own `payment_ref` (Paystack's transaction
-//     reference, set at checkout - see app/checkout/payment.js). If it
+//     reference, set at checkout - see app/checkout/payment.js). A booking
+//     paid by hand (admin "Mark as Paid") carries a bank / mobile money
+//     reference there instead, which Paystack knows nothing about: those are
+//     skipped and reported as a manual follow-up. If the call itself
 //     fails (e.g. Paystack outage, already-refunded transaction), the
 //     booking still gets cancelled - the failure is reported back and
 //     surfaced to the renter so a human can follow up manually. A refund
@@ -163,12 +166,22 @@ Deno.serve(async (req) => {
         .eq('booking_id', booking.id)
         .order('created_at', { ascending: true });
       const originalPaid = mods && mods.length > 0 ? Number(mods[0].old_total_cost) : Number(booking.total_cost);
+      // A payment recorded by hand (admin "Mark as Paid") writes the reference the admin was given onto the booking too - a bank,
+      // mobile money or Wise reference, not a Paystack transaction. Paystack cannot refund against it, so the original payment counts
+      // as having no reference here: the refund due is still worked out and reported, for the team to return the money the same way it
+      // came in. "Paystack (seen in the dashboard)" is the exception - that reference was verified with Paystack when it was recorded.
+      const { data: manualPayments } = await adminClient
+        .from('booking_manual_payments')
+        .select('method')
+        .eq('booking_id', booking.id);
+      const paidOffPaystack = (manualPayments ?? []).some((m: { method: string }) => m.method !== 'paystack_dashboard');
+      const originalRef = paidOffPaystack ? null : booking.payment_ref;
       // Each part is refunded against the Paystack transaction that took the money (a refund can't exceed its own transaction).
-      const parts: { ref: string | null; cap: number }[] = [{ ref: booking.payment_ref, cap: originalPaid }];
+      const parts: { ref: string | null; cap: number }[] = [{ ref: originalRef, cap: originalPaid }];
       for (const m of mods ?? []) {
         const charged = Number(m.amount_charged);
         if (charged > 0) {
-          if (m.payment_ref && m.payment_ref !== booking.payment_ref) parts.push({ ref: m.payment_ref, cap: charged });
+          if (m.payment_ref && m.payment_ref !== originalRef) parts.push({ ref: m.payment_ref, cap: charged });
           else parts[0].cap += charged;
         }
       }
@@ -199,7 +212,9 @@ Deno.serve(async (req) => {
             const take = Math.round(Math.min(remaining, part.cap) * 100) / 100;
             if (take <= 0) continue;
             if (!part.ref) {
-              refundError = 'A payment on this booking has no Paystack reference — process the rest of the refund manually.';
+              refundError = paidOffPaystack
+                ? 'This booking was paid outside Paystack, so the refund cannot be processed automatically — return it the way the money came in.'
+                : 'A payment on this booking has no Paystack reference — process the rest of the refund manually.';
               continue;
             }
             try {
