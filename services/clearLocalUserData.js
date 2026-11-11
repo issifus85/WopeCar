@@ -1,4 +1,5 @@
 import { clearCartIds } from './cartStorage';
+import { clearSyncMarkers } from './accountListSync';
 import { clearBookings } from './bookingsStorage';
 import { clearFavoriteIds } from './favoritesStorage';
 import { clearInboxData } from './inboxStorage';
@@ -34,6 +35,7 @@ import { clearVendorData } from './vendorStorage';
 export async function clearLocalUserData() {
   await Promise.allSettled([
     clearCartIds(),
+    clearSyncMarkers(),
     clearBookings(),
     clearFavoriteIds(),
     clearInboxData(),

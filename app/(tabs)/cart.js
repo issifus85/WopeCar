@@ -12,6 +12,7 @@ import { useCart } from '../../contexts/CartContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import { fetchCarById } from '../../services/carsApi';
+import { getMyVerificationDocumentsByType } from '../../services/documentsApi';
 import CarListCard from '../../components/CarListCard';
 import ConfirmModal from '../../components/ConfirmModal';
 import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
@@ -112,7 +113,7 @@ export default function CartScreen() {
   const { colors } = useAppTheme();
   const { activeCurrency } = useCurrency();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { cartIds, removeFromCart, savedBookings, removeSavedBooking } = useCart();
+  const { cartIds, removeFromCart, savedBookings, discardSavedBooking } = useCart();
   const { user } = useAuth();
   const { startCheckout, updateDraft } = useCheckout();
   const [cars, setCars] = useState([]);
@@ -170,6 +171,18 @@ export default function CartScreen() {
       licenseBack: booking.licenseBack,
       proofOfAddress: booking.proofOfAddress,
     });
+    // A draft saved on wopecar.com has no document picks on this phone -
+    // link the ones already on file (same as checkout/form.js's prefill) so
+    // the booking still gets its licence/proof of address attached.
+    if (booking.fromServer) {
+      getMyVerificationDocumentsByType()
+        .then((docs) => updateDraft({
+          licenseFront: docs.license_front ?? null,
+          licenseBack: docs.license_back ?? null,
+          proofOfAddress: docs.proof_of_address ?? null,
+        }))
+        .catch(() => {});
+    }
     if (booking.carImage) {
       Image.prefetch(
         resizeImageUrl(booking.carImage, { width: CHECKOUT_IMAGE_SIZE * PixelRatio.get(), height: CHECKOUT_IMAGE_SIZE * PixelRatio.get() }),
@@ -224,7 +237,7 @@ export default function CartScreen() {
                 onCompletePayment={() => handleCompletePayment(item)}
                 onRemove={() => setRemoveTarget(item)}
                 onSearchAgain={() => {
-                  removeSavedBooking(item.id);
+                  discardSavedBooking(item.id);
                   router.push('/(tabs)');
                 }}
                 styles={styles}
@@ -279,7 +292,7 @@ export default function CartScreen() {
         confirmLabel="Remove"
         destructive
         onConfirm={() => {
-          removeSavedBooking(removeTarget.id);
+          discardSavedBooking(removeTarget.id);
           setRemoveTarget(null);
         }}
         onCancel={() => setRemoveTarget(null)}
