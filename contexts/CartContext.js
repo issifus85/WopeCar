@@ -2,6 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { AppState } from 'react-native';
 import * as cartStorage from '../services/cartStorage';
 import { syncCartItemAdded, syncCartItemRemoved } from '../services/cartSync';
+import { reconcileCarIds } from '../services/accountListSync';
+import { fetchOpenPendingInvoices, mergeSavedBookings } from '../services/savedBookingsSync';
 import { sendLocalPushNotification } from '../services/pushNotifications';
 import { voidQuickbooksPendingInvoice } from '../services/supabaseApi';
 import { useAuth } from './AuthContext';
@@ -85,26 +87,53 @@ export function CartProvider({ children }) {
     if (prevUserRef.current && !user) {
       setCartIds([]);
       setSavedBookings([]);
-    } else if (!prevUserRef.current && user) {
-      // Just signed in - push whatever was already sitting in the local
-      // cart (built up while browsing signed-out, or before this sync
-      // existed at all) up to cart_items too, so the reminder cron can see
-      // it going forward. upsert+ignoreDuplicates means this never resets
-      // an item's created_at if it was already synced.
-      cartIds.forEach((id) => syncCartItemAdded(user.id, id));
     }
     prevUserRef.current = user;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  // Account continuity with wopecar.com: the wishlist cart lives in
+  // cart_items and Save & Pay Later drafts in pending_invoices, both shared
+  // with the website. Runs once the local copy has loaded and whenever a
+  // (different) account is signed in, then again each time the app comes
+  // back to the foreground so changes made on the website show up. Signed
+  // out, nothing changes - the cart stays device-local as before.
+  // Local-only cart items are pushed up on an account's first sync on this
+  // device (see services/accountListSync.js), which also feeds the
+  // send-cart-reminders cron the same way the old sign-in push did.
+  const userId = user?.id ?? null;
+  const syncWithAccount = useCallback(async () => {
+    if (!userId) return;
+    const localIds = await cartStorage.getCartIds();
+    const mergedIds = await reconcileCarIds('cart_items', userId, localIds);
+    if (mergedIds) {
+      cartStorage.setCartIds(mergedIds);
+      setCartIds(mergedIds);
+    }
+    try {
+      const serverOpen = await fetchOpenPendingInvoices();
+      setSavedBookings((prev) => {
+        const next = pruneAndRemind(mergeSavedBookings(prev, serverOpen));
+        cartStorage.setSavedBookings(next);
+        return next;
+      });
+    } catch {
+      // Offline/RLS error - keep the local saved bookings as they are.
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    if (!isLoading && userId) syncWithAccount();
+  }, [isLoading, userId, syncWithAccount]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         setSavedBookings(prev => pruneAndRemind(prev));
+        syncWithAccount();
       }
     });
     return () => subscription.remove();
-  }, []);
+  }, [syncWithAccount]);
 
   const isInCart = useCallback((carId) => cartIds.includes(String(carId)), [cartIds]);
 
@@ -148,10 +177,23 @@ export function CartProvider({ children }) {
     });
   }, []);
 
+  // The renter removing a saved booking themselves (not paying it). Also
+  // voids its pending invoice, which marks the pending_invoices row
+  // resolved - otherwise the next account sync would bring the draft back,
+  // and wopecar.com would keep listing it. Same call the website's own
+  // "remove saved booking" makes.
+  const discardSavedBooking = useCallback((id) => {
+    const target = savedBookings.find(b => b.id === id);
+    if (target?.pendingInvoiceId) {
+      voidQuickbooksPendingInvoice(target.pendingInvoiceId).catch(() => {});
+    }
+    removeSavedBooking(id);
+  }, [savedBookings, removeSavedBooking]);
+
   return (
     <CartContext.Provider value={{
       cartIds, savedBookings, isLoading, isInCart, addToCart, removeFromCart,
-      saveBookingDraft, removeSavedBooking,
+      saveBookingDraft, removeSavedBooking, discardSavedBooking,
     }}>
       {children}
     </CartContext.Provider>
