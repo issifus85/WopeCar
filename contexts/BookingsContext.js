@@ -198,6 +198,8 @@ export function BookingsProvider({ children }) {
         paystackReference: fields.paystackReference,
         amountCharged: fields.amountCharged,
         promoCode: fields.promoCode,
+        // Travel add-ons ([{ name, days }]) - only present when the renter changed them; the server then re-prices them.
+        addons: fields.addons,
       },
     });
     if (error) throw new Error(await edgeFunctionErrorMessage(error));
@@ -213,6 +215,7 @@ export function BookingsProvider({ children }) {
         pickupLocation: fields.pickupLocation,
         returnLocation: fields.returnLocation,
         totalCost: fields.totalCost,
+        ...(fields.addons ? { addons: fields.addons } : {}),
         ...(fields.promoCode ? { promoCode: fields.promoCode } : {}),
         wopeCare: fields.wopecareTotalCost != null && b.wopeCare?.plan && b.wopeCare.plan !== 'none'
           ? { ...b.wopeCare, totalCost: fields.wopecareTotalCost }

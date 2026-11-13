@@ -228,6 +228,28 @@ async function runCancel({ pickup, total = 3000, deposit = 600, status = 'pendin
     const before = await runModify({ booking: baseBooking(), body: { ...dates('2026-12-10', '2026-12-13'), billableDays: 3, rentalCost: 4091, wopecareTotalCost: 324, totalCost: 1, amountCharged: 0 } });
     check('shortening BEFORE the trip starts still re-prices normally', before.status === 200 && before.booking.total_cost < 11500 && !before.body.chargesHeld, JSON.stringify([before.status, before.booking.total_cost]));
   }
+  // 12. Travel add-ons (destinations) can be changed with a modification (Nov 13 2026). Base booking: 5 days, Volta x5 (1750).
+  {
+    const same = { ...dates('2026-12-10', '2026-12-15'), billableDays: 5, rentalCost: 6818, wopecareTotalCost: 540 };
+    // add Eastern for 2 days, same dates: +700 add-ons, deposit 25% of (6818+2450)=2317 ; increase must be paid
+    const exp = 6818 + 2450 + 250 + 2317 + 540; const diff = Math.round((exp - 11500) * 100) / 100;
+    const add = await runModify({ body: { ...same, addons: [{ name: 'Volta', days: 5 }, { name: 'Eastern', days: 2 }], totalCost: exp, amountCharged: diff, paystackReference: 'p_add' }, paystack: { status: true, data: { status: 'success', amount: Math.round(diff * 100) } } });
+    check('adding a destination re-prices add-ons, deposit and total and saves names + days', add.status === 200 && JSON.stringify(add.booking.addon_names) === '["Volta","Eastern"]' && JSON.stringify(add.booking.addon_days) === '[5,2]' && add.booking.addons_cost === 2450 && add.booking.total_cost === exp, JSON.stringify([add.status, add.body, add.booking.addon_names, add.booking.addon_days, add.booking.addons_cost, add.booking.total_cost, exp]));
+    check('...and the change history records the destinations before and after', JSON.stringify(add.tables.booking_modifications[0]?.old_addon_names) === '["Volta"]' && JSON.stringify(add.tables.booking_modifications[0]?.new_addon_names) === '["Volta","Eastern"]', JSON.stringify(add.tables.booking_modifications[0]));
+    const unpaid = await runModify({ body: { ...same, addons: [{ name: 'Volta', days: 5 }, { name: 'Eastern', days: 2 }], totalCost: exp, amountCharged: 0 } });
+    check('adding a destination to a paid booking without paying the difference is refused (409)', unpaid.status === 409, JSON.stringify([unpaid.status, unpaid.body]));
+    const bogus = await runModify({ body: { ...same, addons: [{ name: 'Mars', days: 1 }], totalCost: 1, amountCharged: 0 } });
+    check('a destination the car does not offer is refused (400)', bogus.status === 400 && !bogus.log.updates.some((u) => u.table === 'bookings'), JSON.stringify([bogus.status, bogus.body]));
+    const rm = await runModify({ body: { ...same, addons: [], totalCost: 1, amountCharged: 0 } });
+    check('removing every destination before the trip clears names/days and the add-on cost', rm.status === 200 && JSON.stringify(rm.booking.addon_names) === '[]' && JSON.stringify(rm.booking.addon_days) === '[]' && rm.booking.addons_cost === 0, JSON.stringify([rm.status, rm.body, rm.booking.addon_names, rm.booking.addons_cost]));
+    const untouched = await runModify({ body: { ...same, totalCost: 11500, amountCharged: 0 } });
+    check('a change that does not send add-ons keeps the stored destinations', JSON.stringify(untouched.booking.addon_names) === '["Volta"]' && untouched.booking.addons_cost === 1750, JSON.stringify([untouched.booking.addon_names, untouched.booking.addons_cost]));
+    const started = () => { const b = baseBooking(); b.start_date = '2026-10-01'; b.end_date = '2026-10-06'; return b; };
+    const sneaky = await runModify({ booking: started(), body: { ...dates('2026-10-01', '2026-10-03'), billableDays: 2, rentalCost: 2727, wopecareTotalCost: 216, addons: [{ name: 'Volta', days: 2 }, { name: 'Eastern', days: 2 }], totalCost: 1, amountCharged: 0 } });
+    check('a started trip cannot put unused days towards a NEW destination (400)', sneaky.status === 400 && !sneaky.log.updates.some((u) => u.table === 'bookings'), JSON.stringify([sneaky.status, sneaky.body]));
+    const drop = await runModify({ booking: started(), body: { ...dates('2026-10-01', '2026-10-06'), billableDays: 5, rentalCost: 6818, wopecareTotalCost: 540, addons: [], totalCost: 1, amountCharged: 0 } });
+    check('a started trip can drop a destination: names saved, charges stay as paid', drop.status === 200 && JSON.stringify(drop.booking.addon_names) === '[]' && drop.booking.total_cost === 11500, JSON.stringify([drop.status, drop.body, drop.booking.addon_names, drop.booking.total_cost]));
+  }
   // 8. a stranger cannot modify; a cancelled booking cannot be modified
   { const r = await runModify({ callerId: 'S', body: { ...dates('2026-12-10', '2026-12-13'), billableDays: 3, rentalCost: 4091, totalCost: 1 } }); check('a stranger cannot modify (403)', r.status === 403, JSON.stringify([r.status, r.body])); }
   { const b = baseBooking(); b.status = 'cancelled'; const r = await runModify({ booking: b, body: { ...dates('2026-12-10', '2026-12-13'), billableDays: 3, rentalCost: 4091, totalCost: 1 } }); check('a cancelled booking cannot be modified (400)', r.status === 400, JSON.stringify([r.status, r.body])); }

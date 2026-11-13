@@ -197,6 +197,10 @@ export default function BookingDetailScreen() {
   const [editWithDriver, setEditWithDriver] = useState(false);
   // Days the driver is needed for; null = every day of the (possibly changed) trip.
   const [editDriverDays, setEditDriverDays] = useState(null);
+  // Travel add-ons (trips to other cities/regions), same list as checkout: { [name]: days }. Only sent to modify-booking once the renter
+  // actually changes them (addonsTouched), so an untouched booking keeps exactly the add-ons and days it was priced with.
+  const [editAddons, setEditAddons] = useState({});
+  const [addonsTouched, setAddonsTouched] = useState(false);
   const [isPickupModalVisible, setIsPickupModalVisible] = useState(false);
   const [isReturnModalVisible, setIsReturnModalVisible] = useState(false);
   // Dismissed for this screen visit only - not persisted, so the prompt is
@@ -311,6 +315,10 @@ export default function BookingDetailScreen() {
     const originalBillable = booking.billableDays ?? daysBetween(booking.startDate, booking.endDate);
     const storedDriverDays = booking.withDriver?.selected ? booking.withDriver.days : null;
     setEditDriverDays(storedDriverDays != null && storedDriverDays < originalBillable ? storedDriverDays : null);
+    const addonMap = {};
+    (booking.addons ?? []).forEach((a) => { addonMap[a.name] = a.days ?? originalBillable; });
+    setEditAddons(addonMap);
+    setAddonsTouched(false);
     setPaymentError(null);
     setNewPromo(null);
     setPromoInput('');
@@ -396,8 +404,10 @@ export default function BookingDetailScreen() {
     // before per-addon day counts existed only have booking.addonNames
     // (string[]) with no day count of their own - fall back to the
     // original trip length for those, matching the old behavior exactly.
-    const addonSelections = booking.addons
-      ?? (booking.addonNames ?? []).map((name) => ({ name, days: originalDays }));
+    // Once the renter changes the travel add-ons on this screen, their choice is what gets priced.
+    const addonSelections = addonsTouched
+      ? Object.entries(editAddons).map(([name, addonDays]) => ({ name, days: addonDays }))
+      : booking.addons ?? (booking.addonNames ?? []).map((name) => ({ name, days: originalDays }));
     const addons = (car.regionalAddons ?? [])
       .map((addon) => {
         const selection = addonSelections.find((a) => a.name === addon.name);
@@ -439,7 +449,32 @@ export default function BookingDetailScreen() {
     }
     const total = subtotal - promoDiscountAmount + deliveryFee + securityDeposit + recomputedWopeCareCost + withDriverCost;
     return { rentalCost, addonsCost, deliveryFee, securityDeposit, withDriverCost, driverDailyRate, driverDays, promoDiscountAmount, total };
-  }, [car, pricing, days, booking, originalDays, recomputedWopeCareCost, editWithDriver, editDriverDays, promoTerms, newPromo, canChooseDriver, legacyDriverBooking]);
+  }, [car, pricing, days, booking, originalDays, recomputedWopeCareCost, editWithDriver, editDriverDays, promoTerms, newPromo, canChooseDriver, legacyDriverBooking, addonsTouched, editAddons]);
+
+  // A per-day travel add-on can't run longer than the trip: the smaller of calendar days and billed days, same cap as checkout.
+  const calendarDays = editStart && editEnd
+    ? Math.round((parseDateOnly(toISODate(editEnd)) - parseDateOnly(toISODate(editStart))) / (1000 * 60 * 60 * 24)) + 1
+    : 0;
+  const addonCap = Math.max(1, days > 0 ? Math.min(calendarDays || days, days) : calendarDays || 1);
+  const toggleEditAddon = (addon) => {
+    setAddonsTouched(true);
+    setEditAddons((prev) => {
+      const next = { ...prev };
+      if (addon.name in next) delete next[addon.name];
+      else next[addon.name] = addonCap;
+      return next;
+    });
+  };
+  const adjustEditAddonDays = (name, delta) => {
+    setAddonsTouched(true);
+    setEditAddons((prev) => ({ ...prev, [name]: Math.min(Math.max(1, Math.min(prev[name] ?? 1, addonCap) + delta), addonCap) }));
+  };
+  const originalAddonNames = (booking?.addons ?? []).map((a) => a.name);
+  const editAddonNames = Object.keys(editAddons);
+  const addonsChanged = addonsTouched && (
+    editAddonNames.length !== originalAddonNames.length || editAddonNames.some((n) => !originalAddonNames.includes(n))
+    || (booking?.addons ?? []).some((a) => Number(editAddons[a.name]) !== Number(Math.min(a.days ?? days, days)))
+  );
 
   // Terms of Service 5.2: once the trip has started, shortening it does not reduce what was paid and nothing is refunded. The server enforces the
   // same rule; this keeps the screen honest (the total stays as paid instead of showing a credit that will never come).
@@ -544,6 +579,10 @@ export default function BookingDetailScreen() {
       : (booking.withDriver?.selected ? recomputedBreakdown.withDriverCost : undefined),
     // Only sent when the renter added a code on this screen; the server validates it again and uses it up.
     promoCode: canAddPromo && newPromo ? newPromo.code : undefined,
+    // Travel add-ons: only when changed on this screen (older builds never send this, and the server then keeps the stored ones).
+    addons: addonsTouched
+      ? Object.entries(editAddons).map(([name, addonDays]) => ({ name, days: Math.min(addonDays, addonCap) }))
+      : undefined,
     ...extra,
   });
 
@@ -770,6 +809,15 @@ export default function BookingDetailScreen() {
                   </View>
                 </View>
               )}
+              {Array.isArray(mod.new_addon_names) && (mod.old_addon_names ?? []).join(', ') !== mod.new_addon_names.join(', ') && (
+                <View style={styles.row}>
+                  <Text style={styles.rowLabel}>Travel add-ons</Text>
+                  <View style={{ flexShrink: 1, alignItems: 'flex-end' }}>
+                    <Text style={styles.modificationOldValue}>{(mod.old_addon_names ?? []).join(', ') || 'None'}</Text>
+                    <Text style={styles.rowValue}>{mod.new_addon_names.join(', ') || 'None'}</Text>
+                  </View>
+                </View>
+              )}
               {mod.old_rental_cost !== mod.new_rental_cost && (
                 <View style={styles.row}>
                   <Text style={styles.rowLabel}>Rental</Text>
@@ -984,6 +1032,41 @@ export default function BookingDetailScreen() {
             </View>
           )}
 
+          {(car?.regionalAddons ?? []).length > 0 && (
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Travel Add-ons</Text>
+              <Text style={[styles.noPaymentNote, { marginBottom: 8 }]}>Going outside the base rental area? Select the regions you plan to drive to.</Text>
+              {car.regionalAddons.map((addon) => {
+                const isSelected = addon.name in editAddons;
+                const isPerDay = addon.type === 'per_day';
+                const addonDays = Math.min(editAddons[addon.name] ?? 1, addonCap);
+                return (
+                  <View key={addon.name} style={{ marginBottom: 6 }}>
+                    <TouchableOpacity style={styles.checkboxRow} onPress={() => toggleEditAddon(addon)}>
+                      <View style={[styles.checkbox, isSelected && styles.checkboxChecked]}>
+                        {isSelected && <Ionicons name="checkmark" size={14} color={colors.white} />}
+                      </View>
+                      <Text style={[styles.checkboxLabel, { flex: 1 }]}>
+                        {addon.name} (+{formatCurrency(addon.price, activeCurrency)}{isPerDay ? '/day' : ''})
+                      </Text>
+                    </TouchableOpacity>
+                    {isSelected && isPerDay && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, marginLeft: 32, marginBottom: 8 }}>
+                        <Text style={styles.noPaymentNote}>Days in this region</Text>
+                        <TouchableOpacity onPress={() => adjustEditAddonDays(addon.name, -1)} disabled={addonDays <= 1} hitSlop={8}>
+                          <Ionicons name="remove-circle-outline" size={26} color={addonDays <= 1 ? colors.disabled : colors.teal} />
+                        </TouchableOpacity>
+                        <Text style={styles.checkboxLabel}>{addonDays} {addonDays === 1 ? 'day' : 'days'}</Text>
+                        <TouchableOpacity onPress={() => adjustEditAddonDays(addon.name, 1)} disabled={addonDays >= addonCap} hitSlop={8}>
+                          <Ionicons name="add-circle-outline" size={26} color={addonDays >= addonCap ? colors.disabled : colors.teal} />
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          )}
 
           {canAddPromo && (
             <View style={styles.field}>
@@ -1066,6 +1149,20 @@ export default function BookingDetailScreen() {
               <View style={styles.row}>
                 <Text style={styles.rowLabel}>WopeCar driver</Text>
                 <Text style={styles.rowValue}>{editWithDriver ? 'Added' : 'Removed'}</Text>
+              </View>
+            )}
+            {addonsChanged && (
+              <View style={styles.row}>
+                <Text style={styles.rowLabel}>Travel add-ons</Text>
+                <Text style={styles.rowValue} numberOfLines={3}>
+                  {editAddonNames.length
+                    ? Object.entries(editAddons).map(([name, d]) => {
+                      const def = (car?.regionalAddons ?? []).find((a) => a.name === name);
+                      return def?.type === 'per_day' ? `${name} (${Math.min(d, addonCap)} ${Math.min(d, addonCap) === 1 ? 'day' : 'days'})` : name;
+                    }).join(', ')
+                    : 'None'}
+                  {` · ${formatCurrency(recomputedBreakdown.addonsCost, activeCurrency)}`}
+                </Text>
               </View>
             )}
             {!!newPromo && canAddPromo && !chargesHeld && recomputedBreakdown.promoDiscountAmount > 0 && (
@@ -1155,6 +1252,21 @@ export default function BookingDetailScreen() {
               </View>
             </View>
           )}
+        </View>
+      )}
+
+      {mode === 'view' && (booking.addons ?? []).length > 0 && (
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Travel Add-ons</Text>
+          {booking.addons.map((a, i) => {
+            const def = (car?.regionalAddons ?? []).find((d) => d.name === a.name);
+            return (
+              <View key={a.name} style={[styles.row, i === booking.addons.length - 1 && styles.rowLast]}>
+                <Text style={styles.rowLabel}>{a.name}</Text>
+                <Text style={styles.rowValue}>{def?.type === 'per_day' ? `${a.days} ${a.days === 1 ? 'day' : 'days'}` : 'Included'}</Text>
+              </View>
+            );
+          })}
         </View>
       )}
 

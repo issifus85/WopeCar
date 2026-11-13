@@ -105,6 +105,11 @@ function changeRowsHtml(mod: any) {
     rows += row('Delivery location', mod.old_pickup_location || '—', mod.new_pickup_location || '—');
     rows += row('Pickup location', mod.old_return_location || '—', mod.new_return_location || '—');
   }
+  const oldDest = (mod.old_addon_names ?? []).join(', ');
+  const newDest = (mod.new_addon_names ?? []).join(', ');
+  if (Array.isArray(mod.new_addon_names) && oldDest !== newDest) {
+    rows += row('Travel destinations', oldDest || 'None', newDest || 'None');
+  }
 
   return `<table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px;">${rows}</table>`;
 }
@@ -138,6 +143,9 @@ function costBreakdownHtml(mod: any) {
   }
   if (Number(mod.old_with_driver_total_cost) !== Number(mod.new_with_driver_total_cost) && (Number(mod.old_with_driver_total_cost) > 0 || Number(mod.new_with_driver_total_cost) > 0)) {
     rows += row('With Driver', mod.old_with_driver_total_cost, mod.new_with_driver_total_cost);
+  }
+  if (Number(mod.old_addons_cost ?? 0) !== Number(mod.new_addons_cost ?? 0)) {
+    rows += row('Travel add-ons', mod.old_addons_cost ?? 0, mod.new_addons_cost ?? 0);
   }
   if (Number(mod.old_delivery_fee) !== Number(mod.new_delivery_fee)) {
     rows += row('Delivery fee', mod.old_delivery_fee, mod.new_delivery_fee);
@@ -251,7 +259,7 @@ async function handleModify(req: Request, body: ModifyBody, internalActAs: strin
     const {
       bookingId, startDate, endDate, pickupTime, returnTime, pickupLocation, returnLocation,
       rentalCost, addonsCost, deliveryFee, securityDeposit, totalCost, billableDays,
-      wopecareTotalCost, withDriverTotalCost, withDriver, withDriverDays, paystackReference, amountCharged, promoCode,
+      wopecareTotalCost, withDriverTotalCost, withDriver, withDriverDays, paystackReference, amountCharged, promoCode, addons,
     } = body;
 
     if (!bookingId || !startDate || !endDate || totalCost == null) {
@@ -423,6 +431,35 @@ async function handleModify(req: Request, body: ModifyBody, internalActAs: strin
       .select('key, value')
       .in('key', ['self_drive_delivery_fee', 'chauffeur_security_deposit', 'security_deposit_threshold', 'security_deposit_flat', 'security_deposit_percentage']);
     const settingsMap = Object.fromEntries((settingRows ?? []).map((r: { key: string; value: unknown }) => [r.key, r.value]));
+
+    // Travel add-ons (trips to other cities/regions). Only changed when the caller sends `addons` ([{ name, days }]); older app builds
+    // don't, and keep the booking's stored add-ons as before. Each name must be one the car offers today; a destination the booking
+    // already has stays allowed even if the car no longer lists it. Days are capped to the billed days by computeModifyPricing.
+    const addonDefsNow = (carRow?.regional_addons as { name: string; type: string; price: number }[] | null) ?? [];
+    const storedAddonNames: string[] = booking.addon_names ?? [];
+    let requestedAddons: { names: string[]; days: number[] } | null = null;
+    if (Array.isArray(addons)) {
+      const names: string[] = [];
+      const days: number[] = [];
+      for (const a of addons as { name?: unknown; days?: unknown }[]) {
+        const name = typeof a?.name === 'string' ? a.name.trim() : '';
+        if (!name || names.includes(name)) continue;
+        if (!addonDefsNow.some((d) => d.name === name) && !storedAddonNames.includes(name)) {
+          return jsonResponse({ error: `${name} is no longer offered as a travel add-on for this car. Please reload and choose again.` }, 400);
+        }
+        names.push(name);
+        const n = Number(a?.days);
+        days.push(Number.isFinite(n) && n >= 1 ? Math.round(n) : Math.max(1, Math.round(newBillableDays)));
+      }
+      requestedAddons = { names, days };
+    }
+    const addonsChanged = !!requestedAddons && (
+      requestedAddons.names.length !== storedAddonNames.length
+      || requestedAddons.names.some((n, idx) => {
+        const stored = storedAddonNames.indexOf(n);
+        return stored === -1 || Number(booking.addon_days?.[stored] ?? -1) !== requestedAddons!.days[idx];
+      })
+    );
     let promoInfo: { discountType: string | null; discountValue: number } | null = null;
     if (newPromo) {
       promoInfo = { discountType: newPromo.discountType, discountValue: newPromo.discountValue };
@@ -474,9 +511,9 @@ async function handleModify(req: Request, body: ModifyBody, internalActAs: strin
       rentalCost: newRentalCost,
       wopecareTotalCost: Number(wopecareTotalCost ?? booking.wopecare_total_cost ?? 0),
       driver: driverNow,
-      addonNames: booking.addon_names ?? null,
-      addonDays: booking.addon_days ?? null,
-      addonDefs: (carRow?.regional_addons as { name: string; type: string; price: number }[] | null) ?? null,
+      addonNames: requestedAddons ? requestedAddons.names : (booking.addon_names ?? null),
+      addonDays: requestedAddons ? requestedAddons.days : (booking.addon_days ?? null),
+      addonDefs: addonDefsNow,
       currentAddonsCost: Number(booking.addons_cost ?? 0),
       currentDeliveryFee: Number(booking.delivery_fee ?? 0),
       promo: promoInfo,
@@ -502,6 +539,11 @@ async function handleModify(req: Request, body: ModifyBody, internalActAs: strin
     // has started). Refuse rather than quietly use the code up for no discount.
     if (held && newPromo) {
       return jsonResponse({ error: 'Your trip has already started, so a promo code can no longer lower its price. Please remove the code to save this change.' }, 400);
+    }
+    // Same rule for destinations: unused days of a trip that has started can't pay for a new destination. Removing one is fine (the
+    // charges simply stay as paid); adding one while the total still ends up lower than what was paid is refused.
+    if (held && requestedAddons && requestedAddons.names.some((n) => !storedAddonNames.includes(n))) {
+      return jsonResponse({ error: 'Your trip has already started, so unused days can\'t be put towards a new destination. Please keep your dates and add the destination on its own, or contact support.' }, 400);
     }
     const effRentalCost = held ? Number(booking.rental_cost) : newRentalCost;
     const effBillableDays = held ? Number(booking.billable_days ?? newBillableDays) : newBillableDays;
@@ -560,7 +602,13 @@ async function handleModify(req: Request, body: ModifyBody, internalActAs: strin
       wopecar_margin: wopecarMargin,
       ...(booking.payment_status === 'paid' && balanceDue !== previousBalance ? { balance_due: balanceDue } : {}),
     };
-    if (priced.addonDays) updatePatch.addon_days = priced.addonDays;
+    if (requestedAddons && (addonsChanged || !held)) {
+      // The destinations chosen on this change (also what the rental agreement lists). On a held change only a removal gets here.
+      updatePatch.addon_names = requestedAddons.names;
+      updatePatch.addon_days = pricedRaw.addonDays ?? [];
+    } else if (priced.addonDays) {
+      updatePatch.addon_days = priced.addonDays;
+    }
     if (!held && wopecareTotalCost != null) {
       updatePatch.wopecare_total_cost = Number(wopecareTotalCost);
     }
@@ -619,12 +667,19 @@ async function handleModify(req: Request, body: ModifyBody, internalActAs: strin
       new_total_cost: newTotalCost,
       amount_charged: Number(amountCharged ?? (newTotalCost - oldTotal)),
       payment_ref: paystackReference ?? null,
+      old_addon_names: storedAddonNames,
+      new_addon_names: (updatePatch.addon_names as string[] | undefined) ?? storedAddonNames,
     };
-    const { data: insertedMod, error: modError } = await adminClient
+    let { data: insertedMod, error: modError } = await adminClient
       .from('booking_modifications')
       .insert(modRow)
       .select()
       .single();
+    if (modError && /addon_names/.test(modError.message ?? '')) {
+      // Migration 0177 (the destination columns) not run yet on this database: keep the history row without them.
+      const { old_addon_names: _o, new_addon_names: _n, ...withoutAddons } = modRow;
+      ({ data: insertedMod, error: modError } = await adminClient.from('booking_modifications').insert(withoutAddons).select().single());
+    }
     if (modError) {
       // The booking write already succeeded - a failure recording the audit
       // row must not be reported as the whole operation having failed.
@@ -658,6 +713,9 @@ async function handleModify(req: Request, body: ModifyBody, internalActAs: strin
       + `Total ${formatCurrency(mod.old_total_cost)} → ${formatCurrency(mod.new_total_cost)}.`
       + (balanceDue > 0 ? ` Balance due: ${formatCurrency(balanceDue)} - open the booking to pay it.` : '')
       + (held ? ' Your trip had already started, so shortening it does not change what you paid: unused days are not refunded or credited (Terms of Service, section 5.2).' : '')
+      + (addonsChanged && updatePatch.addon_names
+        ? ` Travel destinations: ${(updatePatch.addon_names as string[]).length ? (updatePatch.addon_names as string[]).join(', ') : 'none'}.`
+        : '')
       + (driverPatch && driverPatch.with_driver !== (!!booking.with_driver || Number(booking.with_driver_total_cost ?? 0) > 0)
         ? ` A WopeCar driver was ${driverPatch.with_driver ? 'added to' : 'removed from'} the booking.`
         : '');
