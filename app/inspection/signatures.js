@@ -4,7 +4,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useInspection } from '../../contexts/InspectionContext';
-import { syncInspection, uploadInspectionSignature, uploadMissingInspectionPhotos, submitInspection, generateInspectionReport, verifiedInspectionId } from '../../services/inspectionsApi';
+import { syncInspection, uploadInspectionSignatures, uploadMissingInspectionPhotos, submitInspection, generateInspectionReport, verifiedInspectionId } from '../../services/inspectionsApi';
+import { describeSubmitError } from '../../services/transientErrors';
 import InspectionHeader from '../../components/InspectionHeader';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 import SignaturePad from '../../components/SignaturePad';
@@ -97,25 +98,25 @@ export default function InspectionSignaturesScreen() {
         return verified;
       }
     } catch (e) {
-      // Offline: the cached id is only usable when the draft really is this booking's.
+      // Lookup failed (after retries): the cached id is only usable when the draft really is this booking's.
       if (draftIsForThis && draft.serverId) return draft.serverId;
+      // A draft left over from another booking must never be synced into this one - report the real failure instead.
+      if (!draftIsForThis) throw e;
     }
-    // A draft left over from another booking must never be synced into this one.
-    if (!draftIsForThis) return null;
-    try {
-      const inspection = await syncInspection(bookingId, {
-        type,
-        mileage: draft.mileage,
-        mileageUnit: draft.mileageUnit,
-        fuelLevel: draft.fuelLevel,
-        checklist: draft.checklist,
-        damagePoints: draft.damagePoints,
-      });
-      updateDraft({ serverId: inspection.id, pendingSync: false });
-      return inspection.id;
-    } catch (e) {
-      return null;
+    if (!draftIsForThis) {
+      throw new Error('This inspection is not saved on this device. Go back to the booking and start the inspection again.');
     }
+    // Errors propagate (no more "return null"): a busy server used to be shown as "You appear to be offline" even on full signal.
+    const inspection = await syncInspection(bookingId, {
+      type,
+      mileage: draft.mileage,
+      mileageUnit: draft.mileageUnit,
+      fuelLevel: draft.fuelLevel,
+      checklist: draft.checklist,
+      damagePoints: draft.damagePoints,
+    });
+    updateDraft({ serverId: inspection.id, pendingSync: false });
+    return inspection.id;
   };
 
   const canSubmit = !!draft.signatures.renter && !!draft.signatures.agent;
@@ -124,14 +125,8 @@ export default function InspectionSignaturesScreen() {
     setIsSubmitting(true);
     try {
       const inspectionId = await ensureServerId();
-      if (!inspectionId) {
-        Alert.alert('You appear to be offline', 'Your signatures are saved on this device - reconnect and try Submit again.');
-        updateDraft({ pendingSync: true });
-        return;
-      }
 
-      await uploadInspectionSignature(inspectionId, 'renter', draft.signatures.renter);
-      await uploadInspectionSignature(inspectionId, 'agent', draft.signatures.agent);
+      await uploadInspectionSignatures(inspectionId, { renter: draft.signatures.renter, agent: draft.signatures.agent });
 
       // A photo whose upload failed earlier is still only on this device - send it now, or submit refuses with "photos required".
       await uploadMissingInspectionPhotos(inspectionId, draft.photos);
@@ -181,7 +176,9 @@ export default function InspectionSignaturesScreen() {
       );
     } catch (e) {
       updateDraft({ pendingSync: true });
-      Alert.alert('Could not submit inspection', e?.message || 'Please check your connection and try again.');
+      // Only a request that never reached the server says "offline"; a busy server says so, anything else shows its own message.
+      const { title, message } = describeSubmitError(e);
+      Alert.alert(title, message);
     } finally {
       setIsSubmitting(false);
     }

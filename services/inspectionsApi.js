@@ -1,5 +1,6 @@
 import supabase, { getCurrentUser } from './supabase';
 import { PHOTO_ANGLES } from '../constants/inspectionPhotos';
+import { withRetry } from './transientErrors';
 
 // checklist stays an opaque jsonb blob, matching how Laravel itself treated
 // interior_checklist as a plain unconverted JSON blob - no per-key mapping
@@ -39,14 +40,34 @@ function normalizeInspection(row) {
 
 const SELECT_WITH_CHILDREN = '*, vehicle_inspection_photos(*), vehicle_inspection_damage_points(*)';
 
+// Every call below goes through withRetry: a momentarily busy database ("Too many connections issued to the database", pool timeouts, 5xx)
+// is retried with backoff instead of failing the inspection. Only transient errors are retried, never RLS refusals or validation errors.
+async function query(build) {
+  return withRetry(async () => {
+    const { data, error } = await build();
+    if (error) throw error;
+    return data;
+  });
+}
+
 async function fetchById(inspectionId) {
-  const { data, error } = await supabase
+  const data = await query(() => supabase
     .from('vehicle_inspections')
     .select(SELECT_WITH_CHILDREN)
     .eq('id', inspectionId)
-    .single();
-  if (error) throw error;
+    .single());
   return normalizeInspection(data);
+}
+
+// The uploader's id is only needed for the storage path, so read it from the local session instead of asking the Auth server on every
+// file (auth.getUser() is a network round trip and a database query). Storage still verifies the JWT itself.
+async function currentUserId() {
+  const { data } = await supabase.auth.getSession();
+  const id = data?.session?.user?.id;
+  if (id) return id;
+  const user = await withRetry(() => getCurrentUser());
+  if (!user) throw new Error('Please sign in again to upload inspection files.');
+  return user.id;
 }
 
 // Photos/signatures reuse the documents storage bucket
@@ -54,11 +75,10 @@ async function fetchById(inspectionId) {
 // documents/<user_id>/..., so no new storage policy was needed for this
 // feature. upsert:true so a retake/re-sign cleanly overwrites the same slot.
 async function uploadInspectionFile(inspectionId, filename, uri, contentType) {
-  const user = await getCurrentUser();
+  const userId = await currentUserId();
   const arrayBuffer = await fetch(uri).then((res) => res.arrayBuffer());
-  const path = `${user.id}/inspections/${inspectionId}/${filename}`;
-  const { error } = await supabase.storage.from('documents').upload(path, arrayBuffer, { contentType, upsert: true });
-  if (error) throw error;
+  const path = `${userId}/inspections/${inspectionId}/${filename}`;
+  await query(() => supabase.storage.from('documents').upload(path, arrayBuffer, { contentType, upsert: true }));
   return path;
 }
 
@@ -68,13 +88,12 @@ async function uploadInspectionFile(inspectionId, filename, uri, contentType) {
  * same convention the old 404-catch provided.
  */
 export async function getInspection(bookingId, type) {
-  const { data, error } = await supabase
+  const data = await query(() => supabase
     .from('vehicle_inspections')
     .select(SELECT_WITH_CHILDREN)
     .eq('booking_id', bookingId)
     .eq('type', type)
-    .maybeSingle();
-  if (error) throw error;
+    .maybeSingle());
   return normalizeInspection(data);
 }
 
@@ -85,7 +104,7 @@ export async function getInspection(bookingId, type) {
  * diffing, same contract as the Laravel version.
  */
 export async function syncInspection(bookingId, { type, mileage, mileageUnit, fuelLevel, checklist, damagePoints }) {
-  const { data: inspection, error } = await supabase
+  const inspection = await query(() => supabase
     .from('vehicle_inspections')
     .upsert(
       {
@@ -98,15 +117,8 @@ export async function syncInspection(bookingId, { type, mileage, mileageUnit, fu
       },
       { onConflict: 'booking_id,type' }
     )
-    .select()
-    .single();
-  if (error) throw error;
-
-  const { error: deleteError } = await supabase
-    .from('vehicle_inspection_damage_points')
-    .delete()
-    .eq('inspection_id', inspection.id);
-  if (deleteError) throw deleteError;
+    .select('id')
+    .single());
 
   const points = (damagePoints ?? []).map((d) => ({
     inspection_id: inspection.id,
@@ -116,10 +128,15 @@ export async function syncInspection(bookingId, { type, mileage, mileageUnit, fu
     damage_type: d.damageType,
     note: d.note || null,
   }));
-  if (points.length) {
-    const { error: insertError } = await supabase.from('vehicle_inspection_damage_points').insert(points);
-    if (insertError) throw insertError;
-  }
+  // Delete + insert retried as one unit, so a retry after a lost response can never leave duplicate damage points.
+  await withRetry(async () => {
+    const { error: deleteError } = await supabase.from('vehicle_inspection_damage_points').delete().eq('inspection_id', inspection.id);
+    if (deleteError) throw deleteError;
+    if (points.length) {
+      const { error: insertError } = await supabase.from('vehicle_inspection_damage_points').insert(points);
+      if (insertError) throw insertError;
+    }
+  });
 
   return fetchById(inspection.id);
 }
@@ -127,25 +144,29 @@ export async function syncInspection(bookingId, { type, mileage, mileageUnit, fu
 export async function uploadInspectionPhoto(inspectionId, angle, uri, { latitude, longitude, capturedAt } = {}) {
   const filePath = await uploadInspectionFile(inspectionId, `${angle}.jpg`, uri, 'image/jpeg');
 
-  const { error } = await supabase
+  await query(() => supabase
     .from('vehicle_inspection_photos')
     .upsert(
       { inspection_id: inspectionId, angle, file_path: filePath, latitude: latitude ?? null, longitude: longitude ?? null, captured_at: capturedAt ?? null },
       { onConflict: 'inspection_id,angle' }
-    );
-  if (error) throw error;
-
-  return fetchById(inspectionId);
+    ));
+  // No re-fetch of the whole inspection here (no caller used it): one less database query per photo.
+  return filePath;
 }
 
 export async function uploadInspectionSignature(inspectionId, role, uri) {
-  const filePath = await uploadInspectionFile(inspectionId, `signature-${role}.png`, uri, 'image/png');
+  return uploadInspectionSignatures(inspectionId, { [role === 'agent' ? 'agent' : 'renter']: uri });
+}
 
-  const column = role === 'agent' ? 'agent_signature_path' : 'renter_signature_path';
-  const { error } = await supabase.from('vehicle_inspections').update({ [column]: filePath }).eq('id', inspectionId);
-  if (error) throw error;
-
-  return fetchById(inspectionId);
+/** Uploads the renter's and/or agent's signature files, then records both paths in a single update. */
+export async function uploadInspectionSignatures(inspectionId, { renter, agent }) {
+  const changes = {};
+  if (renter) changes.renter_signature_path = await uploadInspectionFile(inspectionId, 'signature-renter.png', renter, 'image/png');
+  if (agent) changes.agent_signature_path = await uploadInspectionFile(inspectionId, 'signature-agent.png', agent, 'image/png');
+  if (Object.keys(changes).length) {
+    await query(() => supabase.from('vehicle_inspections').update(changes).eq('id', inspectionId));
+  }
+  return changes;
 }
 
 /**
@@ -155,8 +176,7 @@ export async function uploadInspectionSignature(inspectionId, role, uri) {
  */
 export async function verifiedInspectionId(candidateId, bookingId, type) {
   if (candidateId) {
-    const { data, error } = await supabase.from('vehicle_inspections').select('id, booking_id, type').eq('id', candidateId).maybeSingle();
-    if (error) throw error;
+    const data = await query(() => supabase.from('vehicle_inspections').select('id, booking_id, type').eq('id', candidateId).maybeSingle());
     if (data && String(data.booking_id) === String(bookingId) && data.type === type) return data.id;
   }
   const existing = await getInspection(bookingId, type);
@@ -172,8 +192,9 @@ const REQUIRED_ANGLES = PHOTO_ANGLES.map((a) => a.key);
  * the device's local copies (angle -> local uri, as kept in the inspection draft).
  */
 export async function uploadMissingInspectionPhotos(inspectionId, localPhotos) {
-  const inspection = await fetchById(inspectionId);
-  const onServer = new Set((inspection?.photos ?? []).map((p) => p.angle));
+  const photos = await query(() => supabase.from('vehicle_inspection_photos').select('angle').eq('inspection_id', inspectionId));
+  const onServer = new Set((photos ?? []).map((p) => p.angle));
+  // One at a time on purpose: parallel uploads multiply the database connections Storage needs at once.
   for (const angle of REQUIRED_ANGLES) {
     const uri = localPhotos?.[angle];
     if (uri && !onServer.has(angle)) {
@@ -201,13 +222,17 @@ export async function submitInspection(inspectionId) {
     throw new Error('Both signatures are required before submitting.');
   }
 
-  const { error } = await supabase
-    .from('vehicle_inspections')
-    .update({ status: 'submitted', submitted_at: new Date().toISOString() })
-    .eq('id', inspectionId);
-  if (error) throw error;
+  try {
+    await query(() => supabase
+      .from('vehicle_inspections')
+      .update({ status: 'submitted', submitted_at: new Date().toISOString() })
+      .eq('id', inspectionId));
+  } catch (e) {
+    // A retry whose first attempt did go through hits the submitted-inspection lock (0157): that means it IS submitted.
+    if (!/already been submitted/i.test(e?.message ?? '')) throw e;
+  }
 
-  return fetchById(inspectionId);
+  return { ...inspection, status: 'submitted' };
 }
 
 /**

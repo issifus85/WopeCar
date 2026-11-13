@@ -1,4 +1,25 @@
 import supabase, { getCurrentUser } from './supabase';
+import { withRetry } from './transientErrors';
+
+// Database calls retry with backoff when the server is momentarily busy ("Too many connections issued to the database", pool timeouts,
+// 5xx) instead of failing the agreement on the first try. Permanent errors (RLS, validation, the submitted lock) are thrown at once.
+async function query(build) {
+  return withRetry(async () => {
+    const { data, error } = await build();
+    if (error) throw error;
+    return data;
+  });
+}
+
+// The uploader's id is only needed for the storage path: read it from the local session rather than asking the Auth server every time.
+async function currentUserId() {
+  const { data } = await supabase.auth.getSession();
+  const id = data?.session?.user?.id;
+  if (id) return id;
+  const user = await withRetry(() => getCurrentUser());
+  if (!user) throw new Error('Please sign in again to sign the agreement.');
+  return user.id;
+}
 
 function normalizeAgreement(row) {
   if (!row) return null;
@@ -46,12 +67,11 @@ export async function getRentalAgreementSignatureUrl(path) {
  * "Not Started" convention for Booking Detail's entry point.
  */
 export async function getRentalAgreement(bookingId) {
-  const { data, error } = await supabase
+  const data = await query(() => supabase
     .from('rental_agreements')
     .select('*')
     .eq('booking_id', bookingId)
-    .maybeSingle();
-  if (error) throw error;
+    .maybeSingle());
   return normalizeAgreement(data);
 }
 
@@ -131,12 +151,11 @@ export async function saveRentalAgreementDraft(bookingId, fields) {
   if ('returnTime' in fields) row.return_time = fields.returnTime || null;
   if ('ghanaOnlyUse' in fields) row.ghana_only_use = fields.ghanaOnlyUse;
 
-  const { data, error } = await supabase
+  const data = await query(() => supabase
     .from('rental_agreements')
     .upsert(row, { onConflict: 'booking_id' })
     .select()
-    .single();
-  if (error) throw error;
+    .single());
   return normalizeAgreement(data);
 }
 
@@ -144,11 +163,10 @@ export async function saveRentalAgreementDraft(bookingId, fields) {
 // - documents/<user_id>/agreements/<agreement_id>/... is already covered by
 // the existing owner-scoped policy, no new storage policy needed.
 async function uploadAgreementFile(agreementId, filename, uri, contentType) {
-  const user = await getCurrentUser();
+  const userId = await currentUserId();
   const arrayBuffer = await fetch(uri).then((res) => res.arrayBuffer());
-  const path = `${user.id}/agreements/${agreementId}/${filename}`;
-  const { error } = await supabase.storage.from('documents').upload(path, arrayBuffer, { contentType, upsert: true });
-  if (error) throw error;
+  const path = `${userId}/agreements/${agreementId}/${filename}`;
+  await query(() => supabase.storage.from('documents').upload(path, arrayBuffer, { contentType, upsert: true }));
   return path;
 }
 
@@ -156,14 +174,26 @@ export async function uploadRentalAgreementSignature(agreementId, role, uri) {
   const filePath = await uploadAgreementFile(agreementId, `${role}-signature.png`, uri, 'image/png');
 
   const column = role === 'representative' ? 'representative_signature_path' : 'client_signature_path';
-  const { data, error } = await supabase
+  const data = await query(() => supabase
     .from('rental_agreements')
     .update({ [column]: filePath })
     .eq('id', agreementId)
     .select()
-    .single();
-  if (error) throw error;
+    .single());
   return normalizeAgreement(data);
+}
+
+/** Uploads both signature files, then records both paths in ONE update (one database write instead of two, each with a full re-read). */
+export async function uploadRentalAgreementSignatures(agreementId, { client, representative }) {
+  const changes = {};
+  if (client) changes.client_signature_path = await uploadAgreementFile(agreementId, 'client-signature.png', client, 'image/png');
+  if (representative) {
+    changes.representative_signature_path = await uploadAgreementFile(agreementId, 'representative-signature.png', representative, 'image/png');
+  }
+  if (Object.keys(changes).length) {
+    await query(() => supabase.from('rental_agreements').update(changes).eq('id', agreementId));
+  }
+  return changes;
 }
 
 const REQUIRED_FIELDS = ['lessee_name', 'vehicle_registration', 'vehicle_make', 'daily_rate', 'duration_start', 'duration_end'];
@@ -174,12 +204,11 @@ const REQUIRED_FIELDS = ['lessee_name', 'vehicle_registration', 'vehicle_make', 
  * be submitted incomplete via any other path.
  */
 export async function submitRentalAgreement(agreementId) {
-  const { data: row, error: fetchError } = await supabase
+  const row = await query(() => supabase
     .from('rental_agreements')
     .select('*')
     .eq('id', agreementId)
-    .single();
-  if (fetchError) throw fetchError;
+    .single());
 
   // Already submitted (a retry, or the other party - client or admin - finished it first): nothing left to do.
   if (row.status === 'submitted') return normalizeAgreement(row);
@@ -190,12 +219,17 @@ export async function submitRentalAgreement(agreementId) {
     throw new Error('Both signatures are required before submitting.');
   }
 
-  const { data, error } = await supabase
-    .from('rental_agreements')
-    .update({ status: 'submitted', submitted_at: new Date().toISOString() })
-    .eq('id', agreementId)
-    .select()
-    .single();
-  if (error) throw error;
-  return normalizeAgreement(data);
+  try {
+    const data = await query(() => supabase
+      .from('rental_agreements')
+      .update({ status: 'submitted', submitted_at: new Date().toISOString() })
+      .eq('id', agreementId)
+      .select()
+      .single());
+    return normalizeAgreement(data);
+  } catch (e) {
+    // A retry whose first attempt did go through hits the submitted lock (0162): the agreement IS submitted.
+    if (!/already been submitted/i.test(e?.message ?? '')) throw e;
+    return normalizeAgreement({ ...row, status: 'submitted' });
+  }
 }
