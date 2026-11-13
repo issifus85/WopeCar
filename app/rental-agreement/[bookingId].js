@@ -13,10 +13,11 @@ import {
   getRentalAgreement,
   saveRentalAgreementDraft,
   startRentalAgreementForBooking,
-  uploadRentalAgreementSignature,
+  uploadRentalAgreementSignatures,
   submitRentalAgreement,
   generateRentalAgreementReport,
 } from '../../services/rentalAgreementApi';
+import { describeSubmitError } from '../../services/transientErrors';
 import CheckoutFooterButton from '../../components/CheckoutFooterButton';
 import SignaturePad from '../../components/SignaturePad';
 import ObligationsModal from '../../components/ObligationsModal';
@@ -279,8 +280,7 @@ export default function RentalAgreementScreen() {
         setAgreementId(id);
       }
 
-      await uploadRentalAgreementSignature(id, 'client', signatures.client);
-      await uploadRentalAgreementSignature(id, 'representative', signatures.representative);
+      await uploadRentalAgreementSignatures(id, { client: signatures.client, representative: signatures.representative });
       await submitRentalAgreement(id);
       // A PDF copy is stored and emailed to the renter and WopeCar. Best-effort: the agreement is already submitted and viewable in-app.
       generateRentalAgreementReport(id).catch(() => {});
@@ -306,7 +306,9 @@ export default function RentalAgreementScreen() {
         ]
       );
     } catch (e) {
-      Alert.alert('Could not generate agreement', e?.message || 'Please check your connection and try again.');
+      // Busy server and no signal get their own messages instead of a raw database error.
+      const { title, message } = describeSubmitError(e, { failTitle: 'Could not generate agreement', action: 'Generate Agreement' });
+      Alert.alert(title, message);
     } finally {
       setIsSubmitting(false);
     }
