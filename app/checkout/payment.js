@@ -36,6 +36,7 @@ import {
 } from '../../services/supabaseApi';
 import { payWithPaystack } from '../../services/paystackCheckout';
 import { useAuth } from '../../contexts/AuthContext';
+import { isUsablePhone } from '../../utils/phone';
 import { useCheckout } from '../../contexts/CheckoutContext';
 import { useBookings } from '../../contexts/BookingsContext';
 import { useCart } from '../../contexts/CartContext';
@@ -75,7 +76,7 @@ export default function CheckoutPaymentScreen() {
   const { addBooking } = useBookings();
   const { removeFromCart, saveBookingDraft, savedBookings, removeSavedBooking } = useCart();
   const { notifyBookingEvent } = useInbox();
-  const { user } = useAuth();
+  const { user, updateProfile } = useAuth();
 
   // Set when this screen was reached via Cart's "Complete Payment" (skips
   // straight here from checkout/(tabs)/cart.js, bypassing the other 5
@@ -97,6 +98,7 @@ export default function CheckoutPaymentScreen() {
   // isSubmittingRef below for why that one must stay).
   const [showTermsError, setShowTermsError] = useState(false);
   const [termsErrorMessage, setTermsErrorMessage] = useState('');
+  const [showPhonePrompt, setShowPhonePrompt] = useState(false);
 
   // Set synchronously (not via isProcessing state, which only takes effect
   // on the next render) and holds the reservation itself once created -
@@ -242,12 +244,40 @@ export default function CheckoutPaymentScreen() {
     };
   };
 
+  // Cart's "Complete Payment" (and a Save & Pay Later made on wopecar.com)
+  // land here without passing through Booking Details, so a renter who
+  // signed in with Apple/Google and never gave a phone could reach Pay with
+  // nothing on file. Make sure the profile has one before anything is
+  // reserved or saved; the bookings_require_renter_phone trigger (migration
+  // 0178) enforces the same thing server-side.
+  const ensurePhoneOnFile = async () => {
+    if (isUsablePhone(user?.phone)) return true;
+    const draftPhone = (draft.form?.phone ?? '').trim();
+    if (isUsablePhone(draftPhone)) {
+      try {
+        await updateProfile({ phone: draftPhone });
+        return true;
+      } catch {
+        // fall through to asking for it
+      }
+    }
+    setShowPhonePrompt(true);
+    return false;
+  };
+
+  const handleAddPhone = () => {
+    setShowPhonePrompt(false);
+    router.push({ pathname: '/checkout/form', params: { carId, returnTo: 'payment' } });
+  };
+
   const handlePay = async () => {
     if (!agreedToTerms) {
       setShowTermsError(true);
       setTermsErrorMessage('Please agree to the Terms of Service to continue.');
       return;
     }
+    if (isSubmittingRef.current) return;
+    if (!reservedBookingRef.current && !(await ensurePhoneOnFile())) return;
 
     // A synchronous latch, not just isProcessing state - state only takes
     // effect on the next render, so two taps landing in the same JS tick
@@ -554,6 +584,8 @@ export default function CheckoutPaymentScreen() {
   // point; that still only gets created once the renter actually resumes
   // and pays (handlePay above).
   const handleSaveToCart = async () => {
+    if (isSaving) return;
+    if (!(await ensurePhoneOnFile())) return;
     setIsSaving(true);
     setError(null);
     try {
@@ -799,6 +831,16 @@ export default function CheckoutPaymentScreen() {
         cancelLabel={null}
         onConfirm={() => setTermsErrorMessage('')}
         onCancel={() => setTermsErrorMessage('')}
+      />
+
+      <ConfirmModal
+        visible={showPhonePrompt}
+        title="Add Your Phone Number"
+        message="We need a phone number on your account so your host and WopeCar support can reach you about this booking."
+        confirmLabel="Add Phone Number"
+        cancelLabel="Cancel"
+        onConfirm={handleAddPhone}
+        onCancel={() => setShowPhonePrompt(false)}
       />
 
       <ConfirmModal
