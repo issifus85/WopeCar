@@ -16,6 +16,7 @@ import PhotoSourceSheet from '../../components/PhotoSourceSheet';
 import ConfirmModal from '../../components/ConfirmModal';
 import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
 import { logCheckoutStep } from '../../services/analytics';
+import { isUsablePhone } from '../../utils/phone';
 
 const UPLOAD_TILE_SIZE = 48;
 
@@ -60,7 +61,7 @@ function DocumentUploadTile({ label, value, disabled, onPick, error, styles, col
 }
 
 export default function CheckoutFormScreen() {
-  const { carId } = useLocalSearchParams();
+  const { carId, returnTo } = useLocalSearchParams();
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -87,6 +88,7 @@ export default function CheckoutFormScreen() {
   // what's missing instead of just doing nothing.
   const [showFieldErrors, setShowFieldErrors] = useState(false);
   const [missingFieldsMessage, setMissingFieldsMessage] = useState('');
+  const [isSavingDetails, setIsSavingDetails] = useState(false);
 
   // One-time seed from whatever this renter already has on file (a prior
   // booking, or a direct Documents Hub upload) - so a returning renter
@@ -126,12 +128,14 @@ export default function CheckoutFormScreen() {
     }
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
+    if (isSavingDetails) return;
     const missing = [];
     if (!firstName.trim()) missing.push('Enter your first name.');
     if (!lastName.trim()) missing.push('Enter your last name.');
     if (!email.trim()) missing.push('Enter your email address.');
     if (!phone.trim()) missing.push('Enter your phone number.');
+    else if (!isUsablePhone(phone)) missing.push('Enter a valid phone number, including the area or country code.');
     if (!address.trim()) missing.push('Enter your address.');
     if (!licenseFront) missing.push("Upload your driver's licence or ID (front).");
     if (!licenseBack) missing.push("Upload your driver's licence or ID (back).");
@@ -143,14 +147,42 @@ export default function CheckoutFormScreen() {
       return;
     }
 
-    updateForm({ firstName, lastName, email, phone, address });
-    updateDraft({ licenseFront, licenseBack, proofOfAddress });
-    // Best-effort sync back to the profile - so an address typed on a first
-    // booking prefills every booking after it (and the Account screen) too,
-    // not just this checkout session's own draft. Never blocks checkout.
+    // Save the contact details to the renter's profile (public.users)
+    // BEFORE moving on. This used to save only the address, so the phone
+    // and name typed here lived only in this checkout's local draft and
+    // never reached the server: admin/host saw "Phone: -" on the booking,
+    // and Sign in with Apple/Google renters (who never had a phone on file)
+    // looked like they had skipped the field. The bookings_require_renter_phone
+    // trigger (migration 0178) now rejects a booking whose renter has no
+    // phone, so this save has to succeed before Payment, not best-effort.
+    const trimmedPhone = phone.trim();
     const trimmedAddress = address.trim();
-    if (trimmedAddress && trimmedAddress !== (user?.address ?? '').trim()) {
-      updateProfile({ address: trimmedAddress }).catch(() => {});
+    const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+    const profileUpdates = {};
+    if (trimmedPhone !== (user?.phone ?? '').trim()) profileUpdates.phone = trimmedPhone;
+    if (trimmedAddress !== (user?.address ?? '').trim()) profileUpdates.address = trimmedAddress;
+    if (fullName && fullName !== (user?.name ?? '').trim()) profileUpdates.full_name = fullName;
+
+    if (Object.keys(profileUpdates).length) {
+      setIsSavingDetails(true);
+      try {
+        await updateProfile(profileUpdates);
+      } catch (e) {
+        setMissingFieldsMessage(`We couldn't save your contact details. Please check your connection and try again.${e?.message ? `\n\n${e.message}` : ''}`);
+        return;
+      } finally {
+        setIsSavingDetails(false);
+      }
+    }
+
+    updateForm({ firstName, lastName, email, phone: trimmedPhone, address });
+    updateDraft({ licenseFront, licenseBack, proofOfAddress });
+    // Sent here from Payment only to add a missing phone (a resumed saved
+    // booking skips this step): go back to that same Payment screen so its
+    // resumedBookingId - and the saved booking's invoice - is kept.
+    if (returnTo === 'payment' && router.canGoBack()) {
+      router.back();
+      return;
     }
     router.push({ pathname: '/checkout/payment', params: { carId } });
   };
@@ -198,7 +230,7 @@ export default function CheckoutFormScreen() {
 
         <View style={styles.field}>
           <Text style={styles.label}>Phone</Text>
-          <TextInput style={[styles.input, showFieldErrors && !phone.trim() && styles.inputError]} value={phone} onChangeText={setPhone} placeholder="Phone number" placeholderTextColor={colors.textSubtle} keyboardType="phone-pad" />
+          <TextInput style={[styles.input, showFieldErrors && !isUsablePhone(phone) && styles.inputError]} value={phone} onChangeText={setPhone} placeholder="Phone number" placeholderTextColor={colors.textSubtle} keyboardType="phone-pad" />
         </View>
 
         <View style={styles.field}>
@@ -214,7 +246,7 @@ export default function CheckoutFormScreen() {
         <DocumentUploadTile label="Utility Bill / Bank Statement" value={proofOfAddress} disabled={isPicking} error={showFieldErrors && !proofOfAddress} onPick={() => setPickerField('proofOfAddress')} styles={styles} colors={colors} />
       </ScrollView>
 
-      <CheckoutFooterButton label="Checkout" onPress={handleContinue} />
+      <CheckoutFooterButton label={isSavingDetails ? 'Saving...' : 'Checkout'} onPress={handleContinue} disabled={isSavingDetails} />
       </KeyboardAvoidingView>
 
       <PhotoSourceSheet
