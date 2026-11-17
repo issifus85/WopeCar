@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { useAppUpdate } from '../services/appUpdate';
 
 /**
  * Mounted once in app/_layout.js.
- * - 'optional': a dismissible card at the top ("A new version is available")
- *   that comes back on the next launch until the user actually updates.
+ * - 'optional': a centred "Update available" pop-up shown each time the app
+ *   is opened (cold start) until the user actually updates. "Not now" closes
+ *   it for that session only. It used to be a small dismissible card at the
+ *   top, which most iOS 1.0.3 users ignored (Nov 10 2026).
  * - 'required': a full-screen, non-dismissible block (installed version is
  *   older than min_supported_*_version in app_settings) - only for a version
  *   that genuinely can't work any more.
@@ -17,10 +18,9 @@ import { useAppUpdate } from '../services/appUpdate';
  */
 export default function AppUpdatePrompt() {
   const { colors } = useAppTheme();
-  const insets = useSafeAreaInsets();
   const { status, latest, storeUrl, openStore } = useAppUpdate();
   const [dismissed, setDismissed] = useState(false);
-  const styles = createStyles(colors, insets);
+  const styles = createStyles(colors);
 
   if (!storeUrl) return null;
 
@@ -46,40 +46,50 @@ export default function AppUpdatePrompt() {
   if (status !== 'optional' || dismissed) return null;
 
   return (
-    <View style={styles.cardWrap} pointerEvents="box-none">
-      <View style={styles.card}>
-        <Ionicons name="arrow-up-circle" size={26} color={colors.teal} />
-        <View style={styles.cardText}>
-          <Text style={styles.cardTitle}>Update available</Text>
-          <Text style={styles.cardBody} numberOfLines={1}>WopeCar {latest} is ready.</Text>
+    <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={() => setDismissed(true)}>
+      <View style={styles.popupBackdrop}>
+        <View style={styles.popup}>
+          <View style={styles.popupIcon}>
+            <Ionicons name="arrow-up-circle" size={40} color={colors.teal} />
+          </View>
+          <Text style={styles.popupTitle}>Update available</Text>
+          <Text style={styles.popupBody}>
+            {latest ? `WopeCar ${latest} is ready. ` : 'A new version of WopeCar is ready. '}
+            Update now for the latest features, fixes and a smoother booking experience.
+          </Text>
+          <TouchableOpacity style={styles.blockButton} onPress={openStore} activeOpacity={0.85}>
+            <Text style={styles.blockButtonText}>Update now</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.popupLater} onPress={() => setDismissed(true)} activeOpacity={0.7}>
+            <Text style={styles.popupLaterText}>Not now</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.cardButton} onPress={openStore} activeOpacity={0.85}>
-          <Text style={styles.cardButtonText}>Update</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setDismissed(true)} hitSlop={10} accessibilityLabel="Dismiss">
-          <Ionicons name="close" size={20} color={colors.textSubtle} />
-        </TouchableOpacity>
       </View>
-    </View>
+    </Modal>
   );
 }
 
-function createStyles(colors, insets) {
+function createStyles(colors) {
   return StyleSheet.create({
-    cardWrap: {
-      position: 'absolute', top: insets.top + 8, left: 12, right: 12, zIndex: 1000,
+    popupBackdrop: {
+      flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24,
+      backgroundColor: 'rgba(0,0,0,0.55)',
     },
-    card: {
-      flexDirection: 'row', alignItems: 'center', gap: 10,
-      backgroundColor: colors.surface, borderRadius: 16, paddingVertical: 10, paddingHorizontal: 14,
-      borderWidth: 1, borderColor: colors.border,
-      shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 6,
+    popup: {
+      alignSelf: 'stretch', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 22,
+      paddingTop: 26, paddingBottom: 14, paddingHorizontal: 22,
+      shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 10,
     },
-    cardText: { flex: 1 },
-    cardTitle: { fontFamily: FONTS.semiBold, fontSize: 14, color: colors.textPrimary },
-    cardBody: { fontFamily: FONTS.regular, fontSize: 12.5, color: colors.textSubtle, marginTop: 1 },
-    cardButton: { backgroundColor: colors.teal, borderRadius: 100, paddingVertical: 7, paddingHorizontal: 14 },
-    cardButtonText: { fontFamily: FONTS.semiBold, fontSize: 13, color: colors.white },
+    popupIcon: {
+      width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center',
+      backgroundColor: colors.background, marginBottom: 16,
+    },
+    popupTitle: { fontFamily: FONTS.bold, fontSize: 21, color: colors.textPrimary, marginBottom: 8, textAlign: 'center' },
+    popupBody: {
+      fontFamily: FONTS.regular, fontSize: 14.5, lineHeight: 21, color: colors.textSubtle, textAlign: 'center', marginBottom: 22,
+    },
+    popupLater: { paddingVertical: 12, paddingHorizontal: 20, marginTop: 4 },
+    popupLaterText: { fontFamily: FONTS.semiBold, fontSize: 14.5, color: colors.textSubtle },
     blockScreen: {
       flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32,
       backgroundColor: colors.background,
