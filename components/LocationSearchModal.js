@@ -9,7 +9,8 @@ const MIN_QUERY_LENGTH = 2;
 
 // Bottom-sheet structure mirrors components/InviteParticipantModal.js.
 // Generic enough to back both the pickup and return location fields.
-export default function LocationSearchModal({ visible, onClose, title = 'Search Location', onSelect }) {
+// `initialQuery`: what the user already typed in the field behind the sheet, so the sheet opens with those results.
+export default function LocationSearchModal({ visible, onClose, title = 'Search Location', onSelect, initialQuery = '' }) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [query, setQuery] = useState('');
@@ -20,7 +21,11 @@ export default function LocationSearchModal({ visible, onClose, title = 'Search 
     if (!visible) {
       setQuery('');
       setResults([]);
+    } else if (initialQuery) {
+      setQuery(initialQuery);
     }
+    // Only when the sheet opens or closes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
   useEffect(() => {

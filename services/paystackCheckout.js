@@ -40,7 +40,7 @@ function waitForWebPopupRedirect(popup, callbackUrl) {
  * resolves with the verified transaction reference once payment succeeds.
  * Throws an Error with a user-facing message on cancellation or failure.
  */
-export async function payWithPaystack(amount, bookingIds, purpose) {
+export async function payWithPaystack(amount, bookingIds, purpose, extra) {
   let popup = null;
   if (Platform.OS === 'web') {
     popup = window.open('about:blank', '_blank');
@@ -62,6 +62,7 @@ export async function payWithPaystack(amount, bookingIds, purpose) {
       callbackUrl,
       bookingIds,
       purpose,
+      extra,
     });
     startedReference = reference;
 
