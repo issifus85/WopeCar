@@ -12,7 +12,7 @@ do $$
 declare
   v_admin uuid; v_off1 uuid; v_off2 uuid; v_off3 uuid; v_booking uuid; v_renter uuid;
   v_del uuid; v_pick uuid; v_pre uuid; v_post uuid; v_agreement uuid;
-  v_count int; v_ok boolean; v_text text; v_row rental_agreements;
+  v_count int; v_ok boolean; v_text text; v_row rental_agreements; v_vendor_user uuid;
 begin
   select id into v_admin from users where role = 'admin' order by created_at limit 1;
   select b.id, b.renter_id into v_booking, v_renter
@@ -21,11 +21,14 @@ begin
       and not exists (select 1 from vehicle_inspections vi where vi.booking_id = b.id)
       and not exists (select 1 from rental_agreements ra where ra.booking_id = b.id)
     order by b.start_date desc limit 1;
-  select id into v_off1 from users where role in ('renter', 'vendor') and id <> v_renter
+  -- The test officers must be ordinary accounts with no other link to this booking: not its renter and not the car's owner (a vendor can
+  -- already write their own car's inspections, which would hide what the officer rules allow).
+  select v.user_id into v_vendor_user from bookings b join vendors v on v.id = b.vendor_id where b.id = v_booking;
+  select id into v_off1 from users where role in ('renter', 'vendor') and id <> v_renter and id is distinct from v_vendor_user
     and not exists (select 1 from officer_profiles o where o.user_id = users.id) order by created_at limit 1;
-  select id into v_off2 from users where role in ('renter', 'vendor') and id not in (v_renter, v_off1)
+  select id into v_off2 from users where role in ('renter', 'vendor') and id not in (v_renter, v_off1) and id is distinct from v_vendor_user
     and not exists (select 1 from officer_profiles o where o.user_id = users.id) order by created_at limit 1;
-  select id into v_off3 from users where role in ('renter', 'vendor') and id not in (v_renter, v_off1, v_off2)
+  select id into v_off3 from users where role in ('renter', 'vendor') and id not in (v_renter, v_off1, v_off2) and id is distinct from v_vendor_user
     and not exists (select 1 from officer_profiles o where o.user_id = users.id) order by created_at limit 1;
   if v_admin is null or v_booking is null or v_off1 is null or v_off2 is null or v_off3 is null then
     raise exception 'Need an admin, a confirmed booking (with a chat) that has no inspection or agreement yet, and three other accounts.';
