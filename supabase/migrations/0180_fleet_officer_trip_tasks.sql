@@ -213,7 +213,7 @@ begin
       if t.officer_id is not null then
         perform fo_chat_remove_officer(b.id, t.officer_id);
         perform fo_notify(array[t.officer_id], 'Trip cancelled',
-          'Booking ' || coalesce(b.booking_ref, '') || ' was cancelled, so your ' || case t.type when 'delivery' then 'delivery' else 'collection' end || ' is off.',
+          'Booking ' || coalesce(b.booking_ref, '') || ' was cancelled, so your ' || case t.type when 'delivery' then 'delivery' else 'return pickup' end || ' is off.',
           '/officer', b.id);
       end if;
     end loop;
@@ -388,7 +388,7 @@ begin
             (select display_name from officer_profiles where user_id = p_officer_id),
             (select phone from users where id = p_officer_id);
   end if;
-  v_label := case t.type when 'delivery' then 'delivery' else 'collection' end;
+  v_label := case t.type when 'delivery' then 'delivery' else 'return pickup' end;
   v_when := coalesce(to_char(t.scheduled_at at time zone 'Africa/Accra', 'Dy DD Mon, HH12:MI AM'), 'soon');
 
   if v_old is not null then
@@ -486,7 +486,7 @@ begin
     perform fo_chat_remove_officer(t.booking_id, auth.uid());
     select booking_ref into v_ref from bookings where id = t.booking_id;
     perform fo_notify(fo_admin_ids(), 'Officer declined a trip',
-      fo_officer_name(auth.uid()) || ' declined the ' || case t.type when 'delivery' then 'delivery' else 'collection' end
+      fo_officer_name(auth.uid()) || ' declined the ' || case t.type when 'delivery' then 'delivery' else 'return pickup' end
         || coalesce(' for ' || v_ref, '') || '. It needs a new officer.',
       case when t.booking_id is not null then '/admin/booking/' || t.booking_id::text else '/admin' end, t.booking_id);
   end if;
@@ -732,7 +732,7 @@ begin
     n := n + 1;
     perform fo_notify(fo_admin_ids(),
       case when r.officer_id is null then 'Trip has no officer' else 'Trip not started' end,
-      'The ' || case r.type when 'delivery' then 'delivery' else 'collection' end
+      'The ' || case r.type when 'delivery' then 'delivery' else 'return pickup' end
         || coalesce(' for ' || (select booking_ref from bookings where id = r.booking_id), '')
         || case when r.officer_id is null then ' is 15 minutes past its time and has no officer.'
                 else ' is 15 minutes past its time and ' || fo_officer_name(r.officer_id) || ' has not started it.' end,

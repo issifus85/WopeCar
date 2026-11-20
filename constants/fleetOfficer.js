@@ -28,11 +28,11 @@ export const TRIP_STATUS_TONES = {
   cancelled: 'muted',
 };
 
-/** "Delivery" / "Collection" for a rental; "Chauffeur start" / "Chauffeur end" when the officer drives the renter. */
+/** "Delivery" / "Return Pickup" for a rental; "Chauffeur start" / "Chauffeur end" when the officer drives the renter. */
 export function tripTypeLabel(type, driveType) {
   const chauffeur = driveType === 'Chauffeur' || driveType === 'WopeDriver';
   if (type === 'delivery') return chauffeur ? 'Chauffeur start' : 'Delivery';
-  return chauffeur ? 'Chauffeur end' : 'Collection';
+  return chauffeur ? 'Chauffeur end' : 'Return Pickup';
 }
 
 export function formatTripTime(iso) {

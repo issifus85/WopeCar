@@ -150,7 +150,7 @@ export default function OfficerHomeScreen() {
             <View style={styles.emptyState}>
               <Ionicons name="calendar-clear-outline" size={32} color={colors.disabled} />
               <Text style={styles.emptyStateTitle}>{tab === 'done' ? 'No completed trips yet' : 'No trips here'}</Text>
-              <Text style={styles.emptyStateText}>When WopeCar assigns you a delivery or collection, you get a notification and it appears here.</Text>
+              <Text style={styles.emptyStateText}>When WopeCar assigns you a delivery or return pickup, you get a notification and it appears here.</Text>
             </View>
           )
         }

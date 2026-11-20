@@ -76,7 +76,7 @@ export default function FleetOfficerSection({ bookingId, bookingStatus }) {
       ) : openTasks.length === 0 ? (
         <View style={{ gap: 8 }}>
           <Text style={styles.muted}>
-            {status === 'confirmed' ? 'No delivery or collection trips yet.' : 'Trips are created when the booking is confirmed.'}
+            {status === 'confirmed' ? 'No delivery or return pickup trips yet.' : 'Trips are created when the booking is confirmed.'}
           </Text>
           {status === 'confirmed' && (
             <TouchableOpacity style={styles.button} onPress={createTrips} disabled={busyId === 'create'}>
