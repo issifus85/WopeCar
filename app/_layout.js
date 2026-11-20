@@ -440,6 +440,10 @@ function RootNavigator({ authRedirectType }) {
             options={{ headerShown: true, title: 'Fleet Officer', headerBackTitle: 'Account', ...themedHeader }}
           />
           <Stack.Screen
+            name="officer/task/[id]"
+            options={{ headerShown: true, title: 'Trip', headerBackTitle: 'My trips', ...themedHeader }}
+          />
+          <Stack.Screen
             name="documents"
             options={{ headerShown: true, title: 'Documents', ...themedHeader }}
           />

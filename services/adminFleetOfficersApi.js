@@ -25,3 +25,23 @@ export async function setFleetOfficerActive(userId, active) {
   if (error) throw error;
   return data;
 }
+
+// ---- trip tasks (migration 0180) ----
+
+export async function listTripTasks({ bookingId = null, from = null, to = null } = {}) {
+  const { data, error } = await supabase.rpc('admin_list_trip_tasks', { p_booking_id: bookingId, p_from: from, p_to: to });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** officerId null = unassign. The database adds / removes the officer in the booking chat and sends the pushes. */
+export async function assignTripTask(taskId, officerId) {
+  const { error } = await supabase.rpc('admin_assign_trip_task', { p_task_id: taskId, p_officer_id: officerId });
+  if (error) throw error;
+}
+
+/** Creates the delivery + collection tasks for a confirmed booking (e.g. one confirmed before Fleet Officer existed). */
+export async function ensureTripTasks(bookingId) {
+  const { error } = await supabase.rpc('admin_ensure_trip_tasks', { p_booking_id: bookingId });
+  if (error) throw error;
+}
