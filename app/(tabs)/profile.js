@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../constants/theme';
+import { FLEET_OFFICER_ENABLED } from '../../constants/fleetOfficer';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useInbox } from '../../contexts/InboxContext';
@@ -67,11 +68,16 @@ export default function ProfileScreen() {
     // Admin Panel sits above every other row, including Ride Support - it's
     // a separate, higher-privilege area (role='admin'), not a support-staff
     // convenience like Ride Support (is_support).
+    // Fleet Officer (preprod only for now): shown only to an ACTIVE officer, above the normal rows - the officer's own area on top
+    // of their usual renter / vendor account. A deactivated officer loses it on the next launch (getCurrentUser re-reads it).
+    if (FLEET_OFFICER_ENABLED && user?.isFleetOfficer) {
+      items = [{ label: 'Fleet Officer', icon: 'car-sport-outline', route: '/officer' }, ...items];
+    }
     if (user?.role === 'admin') {
       items = [{ label: 'Admin Panel', icon: 'shield-checkmark-outline', route: '/admin' }, ...items];
     }
     return items;
-  }, [user?.isSupport, user?.role]);
+  }, [user?.isSupport, user?.role, user?.isFleetOfficer]);
 
   return (
     <View style={styles.container}>

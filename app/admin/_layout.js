@@ -61,6 +61,7 @@ export default function AdminLayout() {
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="users" />
+      <Stack.Screen name="fleet-officers" />
       <Stack.Screen name="vendors" />
       <Stack.Screen name="cars" />
       <Stack.Screen name="reviews" />

@@ -4,17 +4,21 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../../../constants/theme';
 import { useAppTheme } from '../../../contexts/ThemeContext';
+import { FLEET_OFFICER_ENABLED } from '../../../constants/fleetOfficer';
 
 // Catch-all admin destinations not already covered by the Dashboard/
 // Bookings/Inbox tabs - same "Menu" role as app/vendor/(tabs)/menu.js for
 // vendor mode.
-const MENU_LINKS = [
+const ALL_MENU_LINKS = [
   { key: 'users', icon: 'people-outline', label: 'Users', subtitle: 'Manage renter, vendor, and admin accounts', route: '/admin/users' },
+  // Preprod only until the Fleet Officer release gate passes (filtered out below on production builds).
+  { key: 'fleet-officers', icon: 'car-outline', label: 'Fleet Officers', subtitle: 'Drivers who deliver and collect cars', route: '/admin/fleet-officers', fleetOfficer: true },
   { key: 'vendors', icon: 'briefcase-outline', label: 'Vendors', subtitle: 'Review and approve vendor applications', route: '/admin/vendors' },
   { key: 'cars', icon: 'car-sport-outline', label: 'Cars', subtitle: 'Approve, deactivate, and review listings', route: '/admin/cars' },
   { key: 'reviews', icon: 'star-outline', label: 'Reviews', subtitle: 'Moderate renter reviews', route: '/admin/reviews' },
   { key: 'settings', icon: 'settings-outline', label: 'Settings', subtitle: 'Business rules, regions, promo codes', route: '/admin/settings' },
 ];
+const MENU_LINKS = ALL_MENU_LINKS.filter((link) => !link.fleetOfficer || FLEET_OFFICER_ENABLED);
 
 function Row({ icon, label, subtitle, onPress, last, styles, colors, tintColor }) {
   return (
