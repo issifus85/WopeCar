@@ -214,6 +214,22 @@ function buildEmailHtml(booking: any, agreement: any) {
   </div>`;
 }
 
+// Fleet Officer (WopeCar migrations 0179-0181, preprod until its release gate): the officer assigned to a trip on this booking runs the
+// inspection / agreement as WopeCar, so they may generate the copy like an admin. Where the Fleet Officer tables don't exist (production
+// today) the lookup simply fails and this returns false - nothing changes there.
+async function isAssignedFleetOfficer(adminClient: any, bookingId: string, userId: string): Promise<boolean> {
+  try {
+    const [{ data: tasks, error: taskError }, { data: profile, error: profileError }] = await Promise.all([
+      adminClient.from('trip_tasks').select('id').eq('booking_id', bookingId).eq('officer_id', userId).neq('status', 'cancelled').limit(1),
+      adminClient.from('officer_profiles').select('is_active').eq('user_id', userId).maybeSingle(),
+    ]);
+    if (taskError || profileError) return false;
+    return (tasks?.length ?? 0) > 0 && !!profile?.is_active;
+  } catch {
+    return false;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -247,7 +263,8 @@ Deno.serve(async (req) => {
 
     const { data: callerProfile } = await adminClient.from('users').select('role, is_support').eq('id', caller.id).maybeSingle();
     const isAdmin = callerProfile?.role === 'admin' || !!callerProfile?.is_support;
-    if (!isAdmin && booking.renter_id !== caller.id) return jsonResponse({ error: 'Not authorized to generate this agreement copy.' }, 403);
+    const isOfficer = !isAdmin && booking.renter_id !== caller.id && (await isAssignedFleetOfficer(adminClient, booking.id, caller.id));
+    if (!isAdmin && !isOfficer && booking.renter_id !== caller.id) return jsonResponse({ error: 'Not authorized to generate this agreement copy.' }, 403);
 
     if (agreement.status !== 'submitted') return jsonResponse({ error: 'The agreement is not submitted yet.' }, 400);
     if (agreement.report_pdf_path) return jsonResponse({ success: true, reportPdfPath: agreement.report_pdf_path, note: 'Copy already generated.' });

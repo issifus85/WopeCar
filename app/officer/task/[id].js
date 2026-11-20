@@ -10,6 +10,9 @@ import BadgeStatus from '../../../components/admin/BadgeStatus';
 import SectionHeading from '../../../components/SectionHeading';
 import { FLEET_OFFICER_ENABLED, TRIP_STATUS_LABELS, TRIP_STATUS_TONES, tripTypeLabel, formatTripTime } from '../../../constants/fleetOfficer';
 import { getMyTrip, respondToTrip, advanceTrip, sendQuickReply } from '../../../services/officerApi';
+import { getInspection } from '../../../services/inspectionsApi';
+import { getRentalAgreement } from '../../../services/rentalAgreementApi';
+import { inspectionAvailability } from '../../../constants/inspectionAvailability';
 
 const QUICK_REPLIES = [
   { kind: 'on_my_way', label: 'On my way' },
@@ -33,8 +36,8 @@ function openDirections(address) {
 
 /**
  * One trip for the assigned officer: what, when, where, who, and the next step. The database (officer_advance_trip_task) only
- * lets the status move forward: Accept -> Start trip -> Arrived -> Complete. Phase 3 puts the inspection and rental agreement
- * between Arrived and Complete.
+ * lets the status move forward: Accept -> Start trip -> Arrived -> Complete. From Arrived the officer runs the booking's existing inspection
+ * and rental agreement (same screens and records as admin); the trip completes itself once that paperwork is submitted.
  */
 export default function OfficerTripScreen() {
   const { id } = useLocalSearchParams();
@@ -45,12 +48,24 @@ export default function OfficerTripScreen() {
   const [trip, setTrip] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [busy, setBusy] = useState(null);
+  // The booking's existing inspection / agreement records (null = not started), read on every focus so coming back from the wizard shows
+  // the saved draft or the submitted state.
+  const [paperwork, setPaperwork] = useState(null);
 
   const isOfficer = FLEET_OFFICER_ENABLED && !!user?.isFleetOfficer;
 
   const load = useCallback(async () => {
     try {
-      setTrip(await getMyTrip(id));
+      const next = await getMyTrip(id);
+      setTrip(next);
+      if (next?.bookingId) {
+        const [pre, post, agreement] = await Promise.all([
+          getInspection(next.bookingId, 'pre').catch(() => null),
+          getInspection(next.bookingId, 'post').catch(() => null),
+          getRentalAgreement(next.bookingId).catch(() => null),
+        ]);
+        setPaperwork({ pre, post, agreement });
+      }
     } catch {
       setTrip(null);
     } finally {
@@ -113,14 +128,31 @@ export default function OfficerTripScreen() {
     ]
   );
 
+  const paperworkRows = buildPaperworkRows(trip, paperwork);
+  const missing = paperworkRows.filter((r) => r.status !== 'submitted').map((r) => r.label.toLowerCase());
   const confirmComplete = () => Alert.alert(
     `Complete this ${typeLabel.toLowerCase()}?`,
-    'Only do this once the car has been handed over.',
+    missing.length
+      ? `The ${missing.join(' and ')} ${missing.length > 1 ? 'are' : 'is'} not submitted yet. Only complete the trip without ${missing.length > 1 ? 'them' : 'it'} if WopeCar has told you to.`
+      : 'Only do this once the car has been handed over.',
     [
       { text: 'Not yet', style: 'cancel' },
       { text: 'Complete', onPress: () => run('complete', () => advanceTrip(trip.id, 'completed')) },
     ]
   );
+
+  // The inspection and agreement are started at the car: once the officer has arrived (as admin does today, same screens, same records).
+  const paperworkReady = ['arrived', 'inspecting'].includes(trip.status);
+  const openPaperwork = (row) => {
+    const bookingId = trip.bookingId;
+    if (row.kind === 'agreement') {
+      if (row.status === 'submitted') router.push({ pathname: '/rental-agreement/report', params: { bookingId } });
+      else router.push({ pathname: '/rental-agreement/[bookingId]', params: { bookingId, localId: bookingId, from: 'officer', taskId: trip.id } });
+      return;
+    }
+    if (row.status === 'submitted') router.push({ pathname: '/inspection/report', params: { bookingId, type: row.kind } });
+    else router.push({ pathname: '/inspection/mileage', params: { bookingId, localId: bookingId, type: row.kind, from: 'officer', taskId: trip.id } });
+  };
 
   let primary = null;
   if (trip.status === 'assigned') primary = { key: 'accept', label: 'Accept trip', icon: 'checkmark-circle-outline', onPress: () => run('accept', () => respondToTrip(trip.id, true)) };
@@ -194,6 +226,28 @@ export default function OfficerTripScreen() {
         </View>
       )}
 
+      {paperworkRows.length > 0 && (
+        <View style={styles.section}>
+          <SectionHeading>Handover paperwork</SectionHeading>
+          {!paperworkReady && !paperworkRows.some((r) => r.status === 'submitted') && (
+            <Text style={styles.small}>Available once you've arrived.</Text>
+          )}
+          {paperworkRows.map((row) => {
+            const submitted = row.status === 'submitted';
+            const canStart = paperworkReady && row.available;
+            const disabled = !submitted && !canStart;
+            const label = submitted ? 'Submitted - View' : !row.available ? row.reason : row.status === 'draft' ? 'In progress - Continue' : 'Not started - Start';
+            return (
+              <TouchableOpacity key={row.key} style={styles.paperRow} disabled={disabled} onPress={() => openPaperwork(row)}>
+                <Text style={styles.rowText}>{row.label}</Text>
+                <Text style={[styles.paperStatus, disabled && { color: colors.textSubtle }, submitted && { color: colors.success }]}>{label}</Text>
+                {!disabled && <Ionicons name={submitted ? 'chevron-forward' : 'play-circle-outline'} size={18} color={COLORS.teal} />}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
       {canQuickReply && (
         <View style={styles.section}>
           <SectionHeading>Quick replies</SectionHeading>
@@ -233,6 +287,23 @@ export default function OfficerTripScreen() {
       )}
     </ScrollView>
   );
+}
+
+// What this trip covers: a delivery = the pre-rental inspection + the client rental agreement; a return pickup = the post-rental inspection.
+function buildPaperworkRows(trip, paperwork) {
+  if (!trip?.bookingId || !paperwork) return [];
+  const pre = paperwork.pre?.status ?? null;
+  const rows = trip.type === 'delivery'
+    ? [
+      { key: 'pre', kind: 'pre', label: 'Pre-rental inspection', status: pre },
+      { key: 'agreement', kind: 'agreement', label: 'Rental agreement', status: paperwork.agreement?.status ?? null },
+    ]
+    : [{ key: 'post', kind: 'post', label: 'Post-rental inspection', status: paperwork.post?.status ?? null }];
+  return rows.map((row) => {
+    if (row.kind === 'agreement') return { ...row, available: true, reason: null };
+    const { available, reason } = inspectionAvailability({ type: row.kind, bookingStatus: trip.bookingStatus, preStatus: pre });
+    return { ...row, available, reason };
+  });
 }
 
 function ContactRow({ label, name, phone, styles, colors }) {
@@ -292,6 +363,8 @@ function createStyles(colors) {
     contactName: { fontFamily: FONTS.semiBold, fontSize: 15, color: colors.textPrimary },
     contactActions: { flexDirection: 'row', gap: 8 },
     iconButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.highlight, alignItems: 'center', justifyContent: 'center' },
+    paperRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.divider },
+    paperStatus: { fontFamily: FONTS.semiBold, fontSize: 13, color: COLORS.teal },
     chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, borderWidth: 1, borderColor: COLORS.teal, minWidth: 80, alignItems: 'center' },
     chipText: { fontFamily: FONTS.medium, fontSize: 13, color: COLORS.teal },

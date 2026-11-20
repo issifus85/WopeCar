@@ -372,6 +372,22 @@ async function buildReportPdf(inspection: any, booking: any, adminClient: Return
   return pdfDoc.save();
 }
 
+// Fleet Officer (WopeCar migrations 0179-0181, preprod until its release gate): the officer assigned to a trip on this booking runs the
+// inspection / agreement as WopeCar, so they may generate the copy like an admin. Where the Fleet Officer tables don't exist (production
+// today) the lookup simply fails and this returns false - nothing changes there.
+async function isAssignedFleetOfficer(adminClient: any, bookingId: string, userId: string): Promise<boolean> {
+  try {
+    const [{ data: tasks, error: taskError }, { data: profile, error: profileError }] = await Promise.all([
+      adminClient.from('trip_tasks').select('id').eq('booking_id', bookingId).eq('officer_id', userId).neq('status', 'cancelled').limit(1),
+      adminClient.from('officer_profiles').select('is_active').eq('user_id', userId).maybeSingle(),
+    ]);
+    if (taskError || profileError) return false;
+    return (tasks?.length ?? 0) > 0 && !!profile?.is_active;
+  } catch {
+    return false;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -425,7 +441,8 @@ Deno.serve(async (req) => {
     const isAdmin = callerProfile?.role === 'admin' || !!callerProfile?.is_support;
     const isRenter = booking.renter_id === caller.id;
     const isVendorOwner = booking.vendors?.user_id === caller.id;
-    if (!isAdmin && !isRenter && !isVendorOwner) {
+    const isOfficer = !isAdmin && !isRenter && !isVendorOwner && (await isAssignedFleetOfficer(adminClient, booking.id, caller.id));
+    if (!isAdmin && !isRenter && !isVendorOwner && !isOfficer) {
       return jsonResponse({ error: 'Not authorized to generate this inspection report.' }, 403);
     }
     // Who carried out this inspection decides who is emailed - never both the renter AND the vendor. An inspection the client
