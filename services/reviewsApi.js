@@ -1,22 +1,23 @@
 import supabase from './supabase';
 
+// Read from the reviews_public VIEW, not the `reviews` table. The table
+// carries renter_id but no readable name: `users` has no public SELECT
+// policy, so the old `renter:renter_id ( full_name, avatar_url )` embed came
+// back null - with a 200, not an error - and every review rendered as
+// "A WopeCar renter". Migration 0180 adds the view, which publishes the
+// reviewer's FIRST NAME only and withholds the surname, renter_id and avatar.
 const REVIEW_SELECT = `
-  id, booking_id, car_id, vendor_id, renter_id,
+  id, booking_id, car_id, vendor_id,
   overall_rating, cleanliness_rating, accuracy_rating, communication_rating,
   value_rating, convenience_rating, content, created_at, updated_at,
-  renter:renter_id ( full_name, avatar_url )
+  author_first_name
 `;
 
-// "First L." instead of a full name - reviews are public (readable by
-// anyone, even signed-out), so this is the same privacy bar as any other
-// public-review platform (Google, Amazon) rather than exposing a renter's
-// full legal name to strangers.
-function maskName(fullName) {
-  const trimmed = (fullName || '').trim();
-  if (!trimmed) return 'A WopeCar renter';
-  const parts = trimmed.split(/\s+/);
-  if (parts.length === 1) return parts[0];
-  return `${parts[0]} ${parts[parts.length - 1].charAt(0).toUpperCase()}.`;
+// Nothing is masked here any more - the database decides what is publishable
+// and only ever sends the first name (migration 0180), so the full name never
+// reaches a client to be trimmed. This only has to cope with it being absent.
+function displayAuthorName(firstName) {
+  return (firstName || '').trim() || 'A WopeCar renter';
 }
 
 function normalizeReview(row) {
@@ -33,8 +34,10 @@ function normalizeReview(row) {
       convenience: row.convenience_rating,
     },
     content: row.content ?? '',
-    authorName: maskName(row.renter?.full_name),
-    authorAvatar: row.renter?.avatar_url ?? null,
+    authorName: displayAuthorName(row.author_first_name),
+    // No avatar on purpose: a face is more identifying than a first name, and
+    // ReviewsSection already falls back to an initial-letter circle.
+    authorAvatar: null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -42,14 +45,16 @@ function normalizeReview(row) {
 
 /**
  * Published reviews for a car, most recent first - public data, readable by
- * anyone browsing (reviews_public_select RLS policy), no auth required.
+ * anyone browsing (the reviews_public view, granted SELECT to anon), no auth
+ * required.
  */
 export async function getCarReviews(carId, { limit = 20 } = {}) {
+  // No .eq('is_published', true) - the view does not expose that column
+  // because it hard-filters on it itself, where no policy change can weaken it.
   const { data, error } = await supabase
-    .from('reviews')
+    .from('reviews_public')
     .select(REVIEW_SELECT)
     .eq('car_id', carId)
-    .eq('is_published', true)
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error) throw error;
