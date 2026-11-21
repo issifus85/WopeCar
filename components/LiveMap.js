@@ -111,3 +111,6 @@ function createStyles(colors) {
     },
   });
 }
+
+// Shared with the admin dispatch map (components/admin/DispatchMap.js) so both use the same guarded native module and provider choice.
+export { Maps as mapsModule, useGoogle as useGoogleMaps, MapErrorBoundary };

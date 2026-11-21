@@ -12,6 +12,7 @@ import { FLEET_OFFICER_ENABLED } from '../../../constants/fleetOfficer';
 const ALL_MENU_LINKS = [
   { key: 'users', icon: 'people-outline', label: 'Users', subtitle: 'Manage renter, vendor, and admin accounts', route: '/admin/users' },
   // Preprod only until the Fleet Officer release gate passes (filtered out below on production builds).
+  { key: 'dispatch', icon: 'map-outline', label: 'Dispatch', subtitle: "Today's deliveries and pickups, live", route: '/admin/dispatch', fleetOfficer: true },
   { key: 'fleet-officers', icon: 'car-outline', label: 'Fleet Officers', subtitle: 'Drivers who deliver and collect cars', route: '/admin/fleet-officers', fleetOfficer: true },
   { key: 'vendors', icon: 'briefcase-outline', label: 'Vendors', subtitle: 'Review and approve vendor applications', route: '/admin/vendors' },
   { key: 'cars', icon: 'car-sport-outline', label: 'Cars', subtitle: 'Approve, deactivate, and review listings', route: '/admin/cars' },
