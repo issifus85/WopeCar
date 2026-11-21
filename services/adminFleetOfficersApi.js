@@ -1,4 +1,5 @@
 import supabase from './supabase';
+import { logFleetEvent } from './analytics';
 
 // Admin management of Fleet officers (migration 0179). Every call goes through an admin-only SECURITY DEFINER RPC, so the rules
 // (existing accounts only, no suspended accounts, deactivating unassigns open tasks) live in the database, not here.
@@ -36,8 +37,9 @@ export async function listTripTasks({ bookingId = null, from = null, to = null }
 
 /** officerId null = unassign. The database adds / removes the officer in the booking chat and sends the pushes. */
 export async function assignTripTask(taskId, officerId) {
-  const { error } = await supabase.rpc('admin_assign_trip_task', { p_task_id: taskId, p_officer_id: officerId });
+  const { data, error } = await supabase.rpc('admin_assign_trip_task', { p_task_id: taskId, p_officer_id: officerId });
   if (error) throw error;
+  if (officerId) logFleetEvent('officer_assigned', { taskId, tripType: data?.type });
 }
 
 /** Creates the delivery + collection tasks for a confirmed booking (e.g. one confirmed before Fleet Officer existed). */

@@ -15,7 +15,32 @@ let inFlight = false;
 let restartTimer = null;
 let watchGeneration = 0;
 let watchStarting = false;
+let lastSentCoords = null;
+let lastCoords = null;
+let heartbeat = null;
 const listeners = new Set();
+
+// Phase 6 battery tuning. Driving: a fix about every 5 s. Crawling or walking: every 10 s. Standing still (moved less than 15 m since
+// the last one sent): every 30 s, only to keep the renter's map from showing "location is old" at a long red light.
+const MOVING_GAP_MS = 4500;
+const SLOW_GAP_MS = 10000;
+const STILL_GAP_MS = 30000;
+const HEARTBEAT_MS = 30000;
+
+function metersBetween(a, b) {
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLng = toRad(b.longitude - a.longitude);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.latitude)) * Math.cos(toRad(b.latitude)) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371000 * Math.asin(Math.sqrt(h));
+}
+
+function minGapFor(coords) {
+  const moved = lastSentCoords ? metersBetween(lastSentCoords, coords) : Infinity;
+  if (moved < 15) return STILL_GAP_MS;
+  const speed = coords.speed != null && coords.speed >= 0 ? coords.speed : null;
+  return speed != null && speed < 3 ? SLOW_GAP_MS : MOVING_GAP_MS;
+}
 
 function emit(patch) {
   state = { ...state, ...patch };
@@ -35,9 +60,10 @@ export function subscribeTracker(fn) {
 async function send(taskId, coords) {
   if (inFlight) return;
   const now = Date.now();
-  if (now - lastSentAt < 4500) return;
+  if (now - lastSentAt < minGapFor(coords)) return;
   inFlight = true;
   lastSentAt = now;
+  lastSentCoords = { latitude: coords.latitude, longitude: coords.longitude };
   try {
     const { sharing, etaDue } = await shareLocation(taskId, {
       latitude: coords.latitude,
@@ -61,8 +87,18 @@ async function send(taskId, coords) {
 }
 
 function onFix(taskId, loc) {
+  lastCoords = loc.coords;
   emit({ lastFix: { latitude: loc.coords.latitude, longitude: loc.coords.longitude, heading: loc.coords.heading } });
   send(taskId, loc.coords);
+}
+
+// The phone only reports a new position after moving 10 m, so standing still sends nothing. Re-send the last position every 30 s.
+function startHeartbeat(taskId) {
+  clearInterval(heartbeat);
+  heartbeat = setInterval(() => {
+    if (!(state.active && state.taskId === taskId) || !lastCoords) return;
+    if (Date.now() - lastSentAt >= HEARTBEAT_MS - 1000) send(taskId, lastCoords);
+  }, 5000);
 }
 
 // iOS reports a transient "location unknown" error whenever GPS briefly drops (tunnel, indoors, or the simulator switching routes), and
@@ -138,12 +174,16 @@ async function doStartTracking(taskId) {
   }
   emit({ taskId, active: true, error: null });
   lastSentAt = 0;
+  lastSentCoords = null;
+  lastCoords = null;
+  startHeartbeat(taskId);
   await startWatch(taskId);
   // Send the first fix straight away instead of waiting for the phone to move.
   Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
     .then((loc) => {
       if (state.active && state.taskId === taskId) {
         lastSentAt = 0;
+        lastSentCoords = null;
         onFix(taskId, loc);
       }
     })
@@ -153,6 +193,8 @@ async function doStartTracking(taskId) {
 
 export function stopTracking() {
   watchGeneration += 1;
+  clearInterval(heartbeat);
+  heartbeat = null;
   clearTimeout(restartTimer);
   restartTimer = null;
   if (subscription) {

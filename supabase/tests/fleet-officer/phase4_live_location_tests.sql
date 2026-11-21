@@ -56,8 +56,9 @@ begin
   -- ---- officer 2 cannot send fixes for officer 1's trip ----
   perform set_config('request.jwt.claim.sub', v_off2::text, true);
   perform set_config('request.jwt.claims', json_build_object('sub', v_off2, 'role', 'authenticated')::text, true);
+  -- Refused, or (after 0184) told to stop sharing; either way nothing is stored.
   begin
-    perform officer_share_location(v_del, 1, 1); v_ok := false;
+    v_ok := not coalesce((officer_share_location(v_del, 1, 1) ->> 'sharing')::boolean, false);
   exception when others then v_ok := true; end;
   select count(*) into v_count from officer_locations where task_id = v_del;
   insert into fo_results (check_name, pass, detail) values ('Another officer cannot send or read locations for this trip', v_ok and v_count = 0, v_count || ' visible');

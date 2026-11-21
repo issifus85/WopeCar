@@ -13,6 +13,7 @@ export async function logCheckoutStep() {}
 export async function logSaveToCart() {}
 export async function logBookingCompleted() {}
 export async function logBookingCancelled() {}
+export async function logFleetEvent() {}
 export async function logWopecareSelected() {}
 export async function logVendorRegistered() {}
 export async function logCarListed() {}

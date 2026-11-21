@@ -9,7 +9,9 @@ import { useAuth } from '../../../contexts/AuthContext';
 import BadgeStatus from '../../../components/admin/BadgeStatus';
 import SectionHeading from '../../../components/SectionHeading';
 import { FLEET_OFFICER_ENABLED, TRIP_STATUS_LABELS, TRIP_STATUS_TONES, tripTypeLabel, formatTripTime } from '../../../constants/fleetOfficer';
-import { getMyTrip, respondToTrip, advanceTrip, sendQuickReply } from '../../../services/officerApi';
+import { getMyTrip, respondToTrip } from '../../../services/officerApi';
+import { runTripAction, subscribeQueue, isConnectionError } from '../../../services/officerActionQueue';
+import { logFleetEvent } from '../../../services/analytics';
 import { getInspection } from '../../../services/inspectionsApi';
 import { getRentalAgreement } from '../../../services/rentalAgreementApi';
 import { inspectionAvailability } from '../../../constants/inspectionAvailability';
@@ -59,6 +61,8 @@ export default function OfficerTripScreen() {
   // Phase 4: live position / ETA / sharing state of this trip, and this phone's location tracker.
   const [live, setLive] = useState(null);
   const [tracker, setTracker] = useState({ active: false });
+  // Phase 6: trip steps waiting on this phone for a connection.
+  const [pendingSteps, setPendingSteps] = useState(0);
 
   const isOfficer = FLEET_OFFICER_ENABLED && !!user?.isFleetOfficer;
 
@@ -74,8 +78,9 @@ export default function OfficerTripScreen() {
         ]);
         setPaperwork({ pre, post, agreement });
       }
-    } catch {
-      setTrip(null);
+    } catch (e) {
+      // Offline: keep showing what we had (and any step waiting to send) instead of "trip not found".
+      if (!isConnectionError(e)) setTrip(null);
     } finally {
       setIsLoading(false);
     }
@@ -86,6 +91,22 @@ export default function OfficerTripScreen() {
   }, [isOfficer, load]));
 
   useEffect(() => subscribeTracker(setTracker), []);
+
+  useEffect(() => {
+    let previous = 0;
+    return subscribeQueue(({ pending, dropped }) => {
+      const mine = pending.filter((p) => p.taskId === id).length;
+      setPendingSteps(mine);
+      if (dropped?.some((d) => d.taskId === id)) {
+        const first = dropped.find((d) => d.taskId === id);
+        Alert.alert('A step could not be sent', `${first.error} Your trip has been refreshed.`);
+        load();
+      } else if (previous > 0 && mine === 0) {
+        load(); // everything that was waiting has gone through
+      }
+      previous = mine;
+    });
+  }, [id, load]);
 
   // While the trip is On the way: refresh the ETA / route every 15 s, and pick sharing back up if the app was closed mid-trip.
   const tripStatus = trip?.status;
@@ -113,8 +134,9 @@ export default function OfficerTripScreen() {
   const run = useCallback(async (key, fn, { reload = true } = {}) => {
     setBusy(key);
     try {
-      await fn();
-      if (reload) await load();
+      const result = await fn();
+      // A step saved for later has already been shown on screen; reloading now would only fail while offline.
+      if (reload && !result?.queued) await load();
     } catch (e) {
       Alert.alert('Something went wrong', e?.message || 'Please try again.');
       await load();
@@ -170,7 +192,7 @@ export default function OfficerTripScreen() {
       : 'Only do this once the car has been handed over.',
     [
       { text: 'Not yet', style: 'cancel' },
-      { text: 'Complete', onPress: () => run('complete', () => advanceTrip(trip.id, 'completed')) },
+      { text: 'Complete', onPress: () => run('complete', () => step('completed', 'trip_completed')) },
     ]
   );
 
@@ -183,14 +205,25 @@ export default function OfficerTripScreen() {
       else router.push({ pathname: '/rental-agreement/[bookingId]', params: { bookingId, localId: bookingId, from: 'officer', taskId: trip.id } });
       return;
     }
+    if (!row.status) logFleetEvent('inspection_started_by_officer', { taskId: trip.id, bookingRef: trip.bookingRef, tripType: trip.type });
     if (row.status === 'submitted') router.push({ pathname: '/inspection/report', params: { bookingId, type: row.kind } });
     else router.push({ pathname: '/inspection/mileage', params: { bookingId, localId: bookingId, type: row.kind, from: 'officer', taskId: trip.id } });
   };
 
+  // Every trip step goes through the offline queue: sent now, or saved on the phone and sent when the connection is back. The screen
+  // moves on straight away either way.
+  const step = async (status, event) => {
+    const result = await runTripAction({ type: 'advance', taskId: trip.id, status });
+    if (result.queued) setTrip((prev) => (prev ? { ...prev, status } : prev));
+    if (event) logFleetEvent(event, { taskId: trip.id, bookingRef: trip.bookingRef, tripType: trip.type, queued: result.queued });
+    return result;
+  };
+
   // Start trip turns live location sharing on (the renter sees the map); arriving turns it off.
   const startTrip = async () => {
-    await advanceTrip(trip.id, 'en_route');
+    const result = await step('en_route', 'trip_started');
     const ok = await startTracking(trip.id);
+    if (ok) logFleetEvent('location_sharing_on', { taskId: trip.id, bookingRef: trip.bookingRef, tripType: trip.type });
     if (!ok) {
       Alert.alert(
         'Location is off',
@@ -198,10 +231,12 @@ export default function OfficerTripScreen() {
         [{ text: 'OK' }, { text: 'Open Settings', onPress: () => Linking.openSettings() }]
       );
     }
+    return result;
   };
   const arrive = async () => {
-    await advanceTrip(trip.id, 'arrived');
+    const result = await step('arrived', 'officer_arrived');
     stopTracking();
+    return result;
   };
   const toggleSharing = () => run('sharing', async () => {
     const on = !live?.sharing;
@@ -209,6 +244,7 @@ export default function OfficerTripScreen() {
     if (on) {
       await startTracking(trip.id);
       refreshTripEta(trip.id);
+      logFleetEvent('location_sharing_on', { taskId: trip.id, bookingRef: trip.bookingRef, tripType: trip.type });
     } else {
       stopTracking();
     }
@@ -245,6 +281,15 @@ export default function OfficerTripScreen() {
         </View>
       </View>
 
+      {pendingSteps > 0 && (
+        <View style={styles.offlineBanner}>
+          <Ionicons name="cloud-offline-outline" size={18} color={colors.warning} />
+          <Text style={styles.offlineText}>
+            No connection. {pendingSteps === 1 ? '1 step is' : `${pendingSteps} steps are`} saved on this phone and will send by themselves when you're back online.
+          </Text>
+        </View>
+      )}
+
       {showLive && (
         <View style={styles.section}>
           <LiveMap
@@ -274,6 +319,12 @@ export default function OfficerTripScreen() {
               )}
             </TouchableOpacity>
           </View>
+          {live.sharing && (
+            <Text style={styles.keepOpenText}>
+              Keep WopeCar open on your screen while you drive. If you switch to another app or lock the phone, sharing pauses until you
+              come back.
+            </Text>
+          )}
         </View>
       )}
 
@@ -355,7 +406,14 @@ export default function OfficerTripScreen() {
                 key={q.kind}
                 style={styles.chip}
                 disabled={!!busy}
-                onPress={() => run(`qr-${q.kind}`, () => sendQuickReply(trip.id, q.kind), { reload: false }).then(() => Alert.alert('Sent', `"${q.label}" was sent in the chat.`))}
+                onPress={() => run(`qr-${q.kind}`, async () => {
+                  const result = await runTripAction({ type: 'quick_reply', taskId: trip.id, kind: q.kind });
+                  Alert.alert(
+                    result.queued ? 'Saved' : 'Sent',
+                    result.queued ? `No connection. "${q.label}" will be sent in the chat as soon as you're back online.` : `"${q.label}" was sent in the chat.`
+                  );
+                  return result;
+                }, { reload: false })}
               >
                 {busy === `qr-${q.kind}` ? <ActivityIndicator size="small" color={COLORS.teal} /> : <Text style={styles.chipText}>{q.label}</Text>}
               </TouchableOpacity>
@@ -467,6 +525,12 @@ function createStyles(colors) {
     sharingDot: { width: 10, height: 10, borderRadius: 5 },
     sharingText: { flex: 1, fontFamily: FONTS.medium, fontSize: 13, color: colors.textPrimary },
     sharingAction: { fontFamily: FONTS.semiBold, fontSize: 13, color: COLORS.teal },
+    keepOpenText: { fontFamily: FONTS.regular, fontSize: 12, color: colors.textSubtle, marginTop: 6, lineHeight: 17 },
+    offlineBanner: {
+      flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 12, borderRadius: 12, marginBottom: 12,
+      backgroundColor: colors.warningBg, borderWidth: 1, borderColor: colors.warning,
+    },
+    offlineText: { flex: 1, fontFamily: FONTS.medium, fontSize: 13, color: colors.textPrimary, lineHeight: 18 },
     paperRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.divider },
     paperStatus: { fontFamily: FONTS.semiBold, fontSize: 13, color: COLORS.teal },
     chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
