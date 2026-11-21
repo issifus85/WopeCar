@@ -82,7 +82,49 @@ Deno.serve(async (req) => {
 
     let result: { eta: number; distance: number; source: string; polyline: string | null; destLat: number | null; destLng: number | null } | null = null;
 
+    // 1) Google Routes API (the current one, available to every Google Cloud project).
     if (googleKey) {
+      try {
+        const res = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': googleKey,
+            'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,routes.legs.endLocation',
+          },
+          body: JSON.stringify({
+            origin: { location: { latLng: { latitude: task.last_lat, longitude: task.last_lng } } },
+            destination: task.dest_lat != null && task.dest_lng != null
+              ? { location: { latLng: { latitude: task.dest_lat, longitude: task.dest_lng } } }
+              : { address: destination },
+            travelMode: 'DRIVE',
+            routingPreference: 'TRAFFIC_AWARE',
+            regionCode: 'gh',
+          }),
+          signal: AbortSignal.timeout(8000),
+        });
+        const json = await res.json();
+        const route = json?.routes?.[0];
+        if (res.ok && route?.duration) {
+          const end = route.legs?.[0]?.endLocation?.latLng;
+          result = {
+            eta: Math.round(parseFloat(String(route.duration))),
+            distance: Math.round(route.distanceMeters ?? 0),
+            source: 'google',
+            polyline: route.polyline?.encodedPolyline ?? null,
+            destLat: end?.latitude ?? null,
+            destLng: end?.longitude ?? null,
+          };
+        } else {
+          console.warn('fleet-trip-eta: Routes API returned', res.status, json?.error?.message);
+        }
+      } catch (e) {
+        console.warn('fleet-trip-eta: Routes API call failed', e);
+      }
+    }
+
+    // 2) The older Directions API, for projects that still have it switched on.
+    if (!result && googleKey) {
       try {
         const url = new URL('https://maps.googleapis.com/maps/api/directions/json');
         url.searchParams.set('origin', `${task.last_lat},${task.last_lng}`);
