@@ -32,7 +32,7 @@ async function persistPhoto(sourceUri, angle) {
 }
 
 export default function InspectionPhotosScreen() {
-  const { bookingId, localId, type, from } = useLocalSearchParams();
+  const { bookingId, localId, type, from, taskId } = useLocalSearchParams();
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -128,7 +128,7 @@ export default function InspectionPhotosScreen() {
   const isValid = capturedCount === PHOTO_ANGLES.length;
 
   const handleContinue = () => {
-    router.push({ pathname: '/inspection/signatures', params: { bookingId, localId, type, from } });
+    router.push({ pathname: '/inspection/signatures', params: { bookingId, localId, type, from, taskId } });
   };
 
   return (
