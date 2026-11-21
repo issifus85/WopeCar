@@ -14,8 +14,9 @@ declare
 begin
   select id into v_admin from users where role = 'admin' order by created_at limit 1;
   select b.id, b.renter_id into v_booking, v_renter
-    from bookings b join conversations c on c.booking_id = b.id
-    where b.status = 'confirmed' and b.renter_id is not null order by b.start_date desc limit 1;
+    from bookings b join conversations c on c.booking_id = b.id join users ru on ru.id = b.renter_id
+    -- The renter must be an ordinary account: an admin can see every officer's location anyway, which would hide what the renter rules allow.
+    where b.status = 'confirmed' and ru.role in ('renter', 'vendor') order by b.start_date desc limit 1;
   select v.user_id into v_vendor_user from bookings b join vendors v on v.id = b.vendor_id where b.id = v_booking;
   select id into v_off1 from users where role in ('renter', 'vendor') and id <> v_renter and id is distinct from v_vendor_user
     and not exists (select 1 from officer_profiles o where o.user_id = users.id) order by created_at limit 1;
@@ -24,7 +25,7 @@ begin
   select id into v_other from users where role in ('renter', 'vendor') and id not in (v_renter, v_off1, v_off2) and id is distinct from v_vendor_user
     and not exists (select 1 from officer_profiles o where o.user_id = users.id) order by created_at limit 1;
   if v_admin is null or v_booking is null or v_off1 is null or v_off2 is null or v_other is null then
-    raise exception 'Need an admin, a confirmed booking with a chat, and three other accounts to run the checks.';
+    raise exception 'Need an admin, a confirmed booking with a chat whose renter is not an admin, and three other accounts to run the checks.';
   end if;
   select id into v_conv from conversations where booking_id = v_booking;
 
