@@ -257,7 +257,7 @@ export default function OfficerTripScreen() {
           <View style={styles.etaRow}>
             <Ionicons name="time-outline" size={18} color={COLORS.teal} />
             <Text style={styles.etaText}>
-              {etaText ? `About ${etaText} away` : 'Working out the time to arrival...'}
+              {etaText ? `About ${etaText} away` : live.etaSource === 'unavailable' ? 'No driving route found to this address yet' : 'Working out the time to arrival...'}
               {live.etaDistance != null ? ` · ${formatDistance(live.etaDistance)}` : ''}
             </Text>
           </View>

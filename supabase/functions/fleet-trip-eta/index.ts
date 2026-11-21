@@ -157,7 +157,14 @@ Deno.serve(async (req) => {
       const distance = haversineMeters(task.last_lat, task.last_lng, task.dest_lat, task.dest_lng) * ROAD_FACTOR;
       result = { eta: Math.round(distance / CITY_SPEED_MPS), distance: Math.round(distance), source: 'straight_line', polyline: null, destLat: null, destLng: null };
     }
-    if (!result) return jsonResponse({ skipped: 'No ETA available (Directions failed and the destination is not located yet).' });
+    if (!result) {
+      // No route (e.g. the address can't be found, or the officer is far outside Ghana). Record that, so the app can say so instead of
+      // "working out..." forever; the 25-second limit above keeps this from calling Google on every fix.
+      await admin.rpc('fo_save_trip_eta', {
+        p_task_id: task.id, p_eta_seconds: null, p_distance_m: null, p_source: 'unavailable', p_polyline: null, p_dest_lat: null, p_dest_lng: null,
+      });
+      return jsonResponse({ skipped: 'No route found to the destination.' });
+    }
 
     const { error: saveError } = await admin.rpc('fo_save_trip_eta', {
       p_task_id: task.id,

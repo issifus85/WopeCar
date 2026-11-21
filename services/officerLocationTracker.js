@@ -14,7 +14,6 @@ let lastSentAt = 0;
 let inFlight = false;
 let restartTimer = null;
 let watchGeneration = 0;
-let starting = false;
 let watchStarting = false;
 const listeners = new Set();
 
@@ -111,27 +110,35 @@ async function startWatch(taskId) {
   subscription = sub;
 }
 
+let starting = null;
+
 /** Starts sharing for this trip. Returns false when location permission is refused. */
 export async function startTracking(taskId) {
   if (state.active && state.taskId === taskId) {
-    // Already sharing; restart the watch if it died and no restart is pending (called every 15 s by the trip screen).
+    // Already sharing; restart the watch if it died and no restart is already pending or under way (the trip screen calls this
+    // every 15 s, so a watch that died for any reason comes back).
     if (!subscription && !restartTimer && !watchStarting && !starting) startWatch(taskId).catch(() => {});
     return true;
   }
+  // Start trip and the screen's 15-second check can both ask at once; share one start instead of opening two location watchers.
+  if (starting?.taskId === taskId) return starting.promise;
+  const promise = doStartTracking(taskId).finally(() => {
+    if (starting?.promise === promise) starting = null;
+  });
+  starting = { taskId, promise };
+  return promise;
+}
+
+async function doStartTracking(taskId) {
   stopTracking();
-  starting = true;
-  try {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      emit({ taskId, active: false, error: 'Location permission is off' });
-      return false;
-    }
-    emit({ taskId, active: true, error: null });
-    lastSentAt = 0;
-    await startWatch(taskId);
-  } finally {
-    starting = false;
+  const { status } = await Location.requestForegroundPermissionsAsync();
+  if (status !== 'granted') {
+    emit({ taskId, active: false, error: 'Location permission is off' });
+    return false;
   }
+  emit({ taskId, active: true, error: null });
+  lastSentAt = 0;
+  await startWatch(taskId);
   // Send the first fix straight away instead of waiting for the phone to move.
   Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
     .then((loc) => {
