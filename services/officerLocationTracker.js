@@ -57,9 +57,21 @@ async function send(taskId, coords) {
   }
 }
 
+let starting = null;
+
 /** Starts sharing for this trip. Returns false when location permission is refused. */
 export async function startTracking(taskId) {
   if (state.active && state.taskId === taskId) return true;
+  // Start trip and the screen's 15-second check can both ask at once; share one start instead of opening two location watchers.
+  if (starting?.taskId === taskId) return starting.promise;
+  const promise = doStartTracking(taskId).finally(() => {
+    if (starting?.promise === promise) starting = null;
+  });
+  starting = { taskId, promise };
+  return promise;
+}
+
+async function doStartTracking(taskId) {
   stopTracking();
   const { status } = await Location.requestForegroundPermissionsAsync();
   if (status !== 'granted') {
