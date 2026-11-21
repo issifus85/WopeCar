@@ -104,6 +104,27 @@ begin
   execute 'reset role';
   insert into fo_results (check_name, pass, detail) values ('The renter no longer sees a live map for the old officer', v_count = 0, v_count || ' live trip(s)');
 
+  -- ---- an officer is deactivated while on the way ----
+  perform set_config('request.jwt.claim.sub', v_off1::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_off1, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  perform officer_advance_trip_task(v_pick, 'en_route');
+  perform officer_share_location(v_pick, 5.6037, -0.1870);
+  execute 'reset role';
+  perform set_config('request.jwt.claim.sub', v_admin::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_admin, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  perform admin_set_fleet_officer_active(v_off1, false);
+  execute 'reset role';
+  select * into t from trip_tasks where id = v_pick;
+  select count(*) into v_count from notifications where user_id = v_renter and type = 'fleet_trip' and title ilike '%officer has changed%'
+    and created_at >= now() - interval '1 minute';
+  insert into fo_results (check_name, pass, detail) values ('Deactivating an officer mid-trip hands the trip back, clears their position and tells the renter',
+    t.officer_id is null and t.status = 'unassigned' and t.last_lat is null and t.sharing_stopped_at is not null and v_count = 2
+      and not exists (select 1 from conversation_participants p join conversations c on c.id = p.conversation_id
+                      where c.booking_id = v_booking and p.user_id = v_off1),
+    t.status || ', ' || v_count || ' renter push(es)');
+
   -- ---- the booking is cancelled while officer 2 is on the way ----
   perform set_config('request.jwt.claim.sub', v_off2::text, true);
   perform set_config('request.jwt.claims', json_build_object('sub', v_off2, 'role', 'authenticated')::text, true);

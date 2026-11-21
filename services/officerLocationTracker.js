@@ -79,6 +79,11 @@ async function send(taskId, coords) {
     if (etaDue) refreshTripEta(taskId);
     if (state.error) emit({ error: null });
   } catch (e) {
+    // Not an officer any more (deactivated): stop instead of retrying forever.
+    if (e?.code === '42501') {
+      stopTracking();
+      return;
+    }
     // A dropped request is fine - the next fix (5 s later) tries again.
     emit({ error: e?.message || 'Could not send your location' });
   } finally {

@@ -10,6 +10,7 @@
 --     on every fix.
 --   * admin_assign_trip_task: reassigning or unassigning a trip that is under way clears the old officer's live position, ETA and
 --     route, stops sharing, and tells the renter their officer changed.
+--   * admin_set_fleet_officer_active: deactivating an officer hands back all their open trips, including one under way, the same way.
 
 -- ---- officer_advance_trip_task --------------------------------------------------------------------------------------------------
 create or replace function public.officer_advance_trip_task(p_task_id uuid, p_status text)
@@ -251,3 +252,43 @@ end;
 $$;
 revoke all on function public.admin_assign_trip_task(uuid, uuid) from public, anon;
 grant execute on function public.admin_assign_trip_task(uuid, uuid) to authenticated;
+
+-- ---- admin_set_fleet_officer_active ---------------------------------------------------------------------------------------------
+-- Deactivating an officer now hands back every open trip, including one under way, through the same path as unassigning from
+-- Dispatch: out of the chat, live position cleared, sharing stopped, renter told. (0179 only released trips not yet started, so a
+-- renter could keep watching a deactivated officer's last position.)
+create or replace function public.admin_set_fleet_officer_active(p_user_id uuid, p_active boolean)
+returns public.officer_profiles
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+declare
+  v_row officer_profiles%rowtype;
+  v_task uuid;
+begin
+  if not is_admin() then
+    raise exception 'Only admins can manage fleet officers' using errcode = '42501';
+  end if;
+  update officer_profiles
+     set is_active = p_active,
+         deactivated_at = case when p_active then null else now() end,
+         updated_at = now()
+   where user_id = p_user_id
+  returning * into v_row;
+  if not found then
+    raise exception 'That account is not a fleet officer.' using errcode = 'P0001';
+  end if;
+
+  if not p_active then
+    for v_task in
+      select id from trip_tasks where officer_id = p_user_id and status in ('assigned', 'accepted', 'en_route', 'arrived', 'inspecting')
+    loop
+      perform admin_assign_trip_task(v_task, null);
+    end loop;
+  end if;
+  return v_row;
+end;
+$$;
+revoke all on function public.admin_set_fleet_officer_active(uuid, boolean) from public, anon;
+grant execute on function public.admin_set_fleet_officer_active(uuid, boolean) to authenticated;
