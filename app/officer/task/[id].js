@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Linking } from 'react-native';
 import { Image } from 'expo-image';
 import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -13,6 +13,10 @@ import { getMyTrip, respondToTrip, advanceTrip, sendQuickReply } from '../../../
 import { getInspection } from '../../../services/inspectionsApi';
 import { getRentalAgreement } from '../../../services/rentalAgreementApi';
 import { inspectionAvailability } from '../../../constants/inspectionAvailability';
+import LiveMap from '../../../components/LiveMap';
+import { getOfficerTripLive, setLocationSharing, refreshTripEta } from '../../../services/liveTripApi';
+import { startTracking, stopTracking, subscribeTracker } from '../../../services/officerLocationTracker';
+import { formatEta, formatDistance } from '../../../utils/polyline';
 
 const QUICK_REPLIES = [
   { kind: 'on_my_way', label: 'On my way' },
@@ -52,6 +56,10 @@ export default function OfficerTripScreen() {
   // the saved draft or the submitted state.
   const [paperwork, setPaperwork] = useState(null);
 
+  // Phase 4: live position / ETA / sharing state of this trip, and this phone's location tracker.
+  const [live, setLive] = useState(null);
+  const [tracker, setTracker] = useState({ active: false });
+
   const isOfficer = FLEET_OFFICER_ENABLED && !!user?.isFleetOfficer;
 
   const load = useCallback(async () => {
@@ -76,6 +84,31 @@ export default function OfficerTripScreen() {
   useFocusEffect(useCallback(() => {
     if (isOfficer) load();
   }, [isOfficer, load]));
+
+  useEffect(() => subscribeTracker(setTracker), []);
+
+  // While the trip is On the way: refresh the ETA / route every 15 s, and pick sharing back up if the app was closed mid-trip.
+  const tripStatus = trip?.status;
+  useEffect(() => {
+    if (!isOfficer || !trip?.id || !['en_route', 'arrived'].includes(tripStatus)) {
+      setLive(null);
+      return undefined;
+    }
+    let cancelled = false;
+    const tick = async () => {
+      const next = await getOfficerTripLive(trip.id).catch(() => null);
+      if (cancelled || !next) return;
+      setLive(next);
+      if (next.sharing) startTracking(trip.id);
+      else stopTracking();
+    };
+    tick();
+    const timer = setInterval(tick, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [isOfficer, trip?.id, tripStatus]);
 
   const run = useCallback(async (key, fn, { reload = true } = {}) => {
     setBusy(key);
@@ -154,10 +187,42 @@ export default function OfficerTripScreen() {
     else router.push({ pathname: '/inspection/mileage', params: { bookingId, localId: bookingId, type: row.kind, from: 'officer', taskId: trip.id } });
   };
 
+  // Start trip turns live location sharing on (the renter sees the map); arriving turns it off.
+  const startTrip = async () => {
+    await advanceTrip(trip.id, 'en_route');
+    const ok = await startTracking(trip.id);
+    if (!ok) {
+      Alert.alert(
+        'Location is off',
+        'The trip has started, but the renter cannot see where you are. Allow location for WopeCar in Settings, then tap Resume sharing.',
+        [{ text: 'OK' }, { text: 'Open Settings', onPress: () => Linking.openSettings() }]
+      );
+    }
+  };
+  const arrive = async () => {
+    await advanceTrip(trip.id, 'arrived');
+    stopTracking();
+  };
+  const toggleSharing = () => run('sharing', async () => {
+    const on = !live?.sharing;
+    await setLocationSharing(trip.id, on);
+    if (on) {
+      await startTracking(trip.id);
+      refreshTripEta(trip.id);
+    } else {
+      stopTracking();
+    }
+    setLive((prev) => (prev ? { ...prev, sharing: on } : prev));
+  }, { reload: false });
+
+  const showLive = trip.status === 'en_route' && !!live;
+  const myPosition = tracker.active && tracker.taskId === trip.id && tracker.lastFix ? tracker.lastFix : live?.officer;
+  const etaText = live?.etaSeconds != null ? formatEta(live.etaSeconds) : null;
+
   let primary = null;
   if (trip.status === 'assigned') primary = { key: 'accept', label: 'Accept trip', icon: 'checkmark-circle-outline', onPress: () => run('accept', () => respondToTrip(trip.id, true)) };
-  else if (trip.status === 'accepted') primary = { key: 'start', label: 'Start trip', icon: 'navigate-outline', onPress: () => run('start', () => advanceTrip(trip.id, 'en_route')) };
-  else if (trip.status === 'en_route') primary = { key: 'arrive', label: "I've arrived", icon: 'location-outline', onPress: () => run('arrive', () => advanceTrip(trip.id, 'arrived')) };
+  else if (trip.status === 'accepted') primary = { key: 'start', label: 'Start trip', icon: 'navigate-outline', onPress: () => run('start', startTrip) };
+  else if (trip.status === 'en_route') primary = { key: 'arrive', label: "I've arrived", icon: 'location-outline', onPress: () => run('arrive', arrive) };
   else if (trip.status === 'arrived' || trip.status === 'inspecting') primary = { key: 'complete', label: `Complete ${typeLabel.toLowerCase()}`, icon: 'flag-outline', onPress: confirmComplete };
 
   return (
@@ -179,6 +244,38 @@ export default function OfficerTripScreen() {
           </View>
         </View>
       </View>
+
+      {showLive && (
+        <View style={styles.section}>
+          <LiveMap
+            officer={myPosition}
+            destination={live.destination}
+            routePolyline={live.routePolyline}
+            officerLabel="You"
+            destinationLabel={trip.type === 'delivery' ? trip.toAddress : trip.fromAddress}
+          />
+          <View style={styles.etaRow}>
+            <Ionicons name="time-outline" size={18} color={COLORS.teal} />
+            <Text style={styles.etaText}>
+              {etaText ? `About ${etaText} away` : 'Working out the time to arrival...'}
+              {live.etaDistance != null ? ` · ${formatDistance(live.etaDistance)}` : ''}
+            </Text>
+          </View>
+          <View style={[styles.sharingRow, !live.sharing && styles.sharingRowOff]}>
+            <View style={[styles.sharingDot, { backgroundColor: live.sharing ? colors.success : colors.textSubtle }]} />
+            <Text style={styles.sharingText}>
+              {live.sharing
+                ? (tracker.error ? `Sharing live location (${tracker.error})` : 'Sharing live location with the renter')
+                : 'Location sharing is off'}
+            </Text>
+            <TouchableOpacity onPress={toggleSharing} disabled={busy === 'sharing'} hitSlop={8}>
+              {busy === 'sharing' ? <ActivityIndicator size="small" color={COLORS.teal} /> : (
+                <Text style={styles.sharingAction}>{live.sharing ? 'Stop' : 'Resume sharing'}</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       <View style={styles.section}>
         <SectionHeading>When & where</SectionHeading>
@@ -363,6 +460,13 @@ function createStyles(colors) {
     contactName: { fontFamily: FONTS.semiBold, fontSize: 15, color: colors.textPrimary },
     contactActions: { flexDirection: 'row', gap: 8 },
     iconButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.highlight, alignItems: 'center', justifyContent: 'center' },
+    etaRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    etaText: { flex: 1, fontFamily: FONTS.semiBold, fontSize: 15, color: colors.textPrimary },
+    sharingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 10, backgroundColor: colors.successBg },
+    sharingRowOff: { backgroundColor: colors.divider },
+    sharingDot: { width: 10, height: 10, borderRadius: 5 },
+    sharingText: { flex: 1, fontFamily: FONTS.medium, fontSize: 13, color: colors.textPrimary },
+    sharingAction: { fontFamily: FONTS.semiBold, fontSize: 13, color: COLORS.teal },
     paperRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.divider },
     paperStatus: { fontFamily: FONTS.semiBold, fontSize: 13, color: COLORS.teal },
     chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

@@ -444,6 +444,10 @@ function RootNavigator({ authRedirectType }) {
             options={{ headerShown: true, title: 'Trip', headerBackTitle: 'My trips', ...themedHeader }}
           />
           <Stack.Screen
+            name="live-trip/[bookingId]"
+            options={{ headerShown: true, title: 'Live trip', headerBackTitle: 'Back', ...themedHeader }}
+          />
+          <Stack.Screen
             name="documents"
             options={{ headerShown: true, title: 'Documents', ...themedHeader }}
           />

@@ -7,6 +7,7 @@ import { FONTS } from '../../constants/theme';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useInbox } from '../../contexts/InboxContext';
 import MessageThread from '../../components/MessageThread';
+import LiveTripCard from '../../components/LiveTripCard';
 import { setActiveChatUrl } from '../../services/pushNotifications';
 import { pickAndUploadChatImage, pickAndUploadChatDocument, getCurrentLocationForChat } from '../../services/chatAttachmentsApi';
 import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
@@ -149,6 +150,8 @@ export default function ConversationScreen() {
           <Text style={styles.participantRole}>{conversation.participant.role}</Text>
         </View>
       </View>
+
+      {isServerConversation && <LiveTripCard conversationId={id.slice('booking-'.length)} />}
 
       <MessageThread
         messages={messages}

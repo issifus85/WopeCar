@@ -49,7 +49,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "WopeCar uses your location to tag inspection photos and let you share your location in chat."
+          "locationWhenInUsePermission": "WopeCar uses your location to tag inspection photos, let you share your location in chat, and show the renter where you are while you deliver or collect a WopeCar car."
         }
       ],
       "expo-video",
