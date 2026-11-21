@@ -12,6 +12,10 @@ let state = { taskId: null, active: false, lastFix: null, error: null };
 let subscription = null;
 let lastSentAt = 0;
 let inFlight = false;
+let restartTimer = null;
+let watchGeneration = 0;
+let starting = false;
+let watchStarting = false;
 const listeners = new Set();
 
 function emit(patch) {
@@ -57,31 +61,83 @@ async function send(taskId, coords) {
   }
 }
 
+function onFix(taskId, loc) {
+  emit({ lastFix: { latitude: loc.coords.latitude, longitude: loc.coords.longitude, heading: loc.coords.heading } });
+  send(taskId, loc.coords);
+}
+
+// iOS reports a transient "location unknown" error whenever GPS briefly drops (tunnel, indoors, or the simulator switching routes), and
+// expo-location ends the watch for good on any error. So on an error the dead watch is removed and a fresh one started a few seconds
+// later, for as long as this trip is still being shared. Without this the map froze on the last fix while the screen still said
+// "Sharing".
+async function startWatch(taskId) {
+  clearTimeout(restartTimer);
+  restartTimer = null;
+  if (subscription) {
+    subscription.remove();
+    subscription = null;
+  }
+  const generation = ++watchGeneration;
+  let failed = false;
+  const scheduleRestart = () => {
+    if (generation !== watchGeneration || !(state.active && state.taskId === taskId)) return;
+    clearTimeout(restartTimer);
+    restartTimer = setTimeout(() => {
+      restartTimer = null;
+      if (generation === watchGeneration && state.active && state.taskId === taskId) startWatch(taskId).catch(scheduleRestart);
+    }, 3000);
+  };
+  watchStarting = true;
+  let sub;
+  try {
+    sub = await Location.watchPositionAsync(
+      { accuracy: Location.Accuracy.High, timeInterval: 5000, distanceInterval: 10 },
+      (loc) => onFix(taskId, loc),
+      () => {
+        failed = true;
+        if (sub) sub.remove();
+        if (subscription === sub) subscription = null;
+        scheduleRestart();
+      }
+    );
+  } finally {
+    watchStarting = false;
+  }
+  // Tracking may have been stopped, another watch started, or this one already failed while it was starting up.
+  if (failed || generation !== watchGeneration || !(state.active && state.taskId === taskId)) {
+    sub.remove();
+    return;
+  }
+  subscription = sub;
+}
+
 /** Starts sharing for this trip. Returns false when location permission is refused. */
 export async function startTracking(taskId) {
-  if (state.active && state.taskId === taskId) return true;
-  stopTracking();
-  const { status } = await Location.requestForegroundPermissionsAsync();
-  if (status !== 'granted') {
-    emit({ taskId, active: false, error: 'Location permission is off' });
-    return false;
+  if (state.active && state.taskId === taskId) {
+    // Already sharing; restart the watch if it died and no restart is pending (called every 15 s by the trip screen).
+    if (!subscription && !restartTimer && !watchStarting && !starting) startWatch(taskId).catch(() => {});
+    return true;
   }
-  emit({ taskId, active: true, error: null });
-  lastSentAt = 0;
-  subscription = await Location.watchPositionAsync(
-    { accuracy: Location.Accuracy.High, timeInterval: 5000, distanceInterval: 10 },
-    (loc) => {
-      emit({ lastFix: { latitude: loc.coords.latitude, longitude: loc.coords.longitude, heading: loc.coords.heading } });
-      send(taskId, loc.coords);
+  stopTracking();
+  starting = true;
+  try {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      emit({ taskId, active: false, error: 'Location permission is off' });
+      return false;
     }
-  );
+    emit({ taskId, active: true, error: null });
+    lastSentAt = 0;
+    await startWatch(taskId);
+  } finally {
+    starting = false;
+  }
   // Send the first fix straight away instead of waiting for the phone to move.
   Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
     .then((loc) => {
       if (state.active && state.taskId === taskId) {
-        emit({ lastFix: { latitude: loc.coords.latitude, longitude: loc.coords.longitude, heading: loc.coords.heading } });
         lastSentAt = 0;
-        send(taskId, loc.coords);
+        onFix(taskId, loc);
       }
     })
     .catch(() => {});
@@ -89,6 +145,9 @@ export async function startTracking(taskId) {
 }
 
 export function stopTracking() {
+  watchGeneration += 1;
+  clearTimeout(restartTimer);
+  restartTimer = null;
   if (subscription) {
     subscription.remove();
     subscription = null;
