@@ -37,10 +37,16 @@ begin
   end if;
 
   -- One live trip at a time: the phone shares one location, so a second trip can't start while another is still on the way.
-  if p_status = 'en_route' and exists (
-    select 1 from trip_tasks o where o.officer_id = auth.uid() and o.id <> t.id and o.status = 'en_route'
-  ) then
-    raise exception 'You already have a trip on the way. Mark it arrived before starting another.' using errcode = 'P0001';
+  if p_status = 'en_route' then
+    -- (WopeDriver trips have no booking here; driver_bookings isn't on every database, so it isn't joined.)
+    select coalesce(b.booking_ref, 'another trip') into v_name
+      from trip_tasks o left join bookings b on b.id = o.booking_id
+     where o.officer_id = auth.uid() and o.id <> t.id and o.status = 'en_route'
+     order by o.started_at desc nulls last limit 1;
+    if found then
+      raise exception 'You''re still on the way for %. Open that trip and tap I''ve arrived (or ask WopeCar to reassign it) before starting this one.', v_name
+        using errcode = 'P0001';
+    end if;
   end if;
 
   v_ok := (t.status, p_status) in (
