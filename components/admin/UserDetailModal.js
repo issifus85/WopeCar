@@ -9,6 +9,7 @@ import ReasonModal from './ReasonModal';
 import OptionPickerModal from '../OptionPickerModal';
 import { getUserDetail, verifyUser, suspendUser, changeUserRole, setUserVerificationStatus } from '../../services/adminUsersApi';
 import { getUserVerificationDocuments } from '../../services/adminDocumentsApi';
+import { personNamesMatch } from '../../utils/idName';
 
 const ROLE_TONE = { admin: 'success', vendor: 'warning', renter: 'neutral', suspended: 'error' };
 const ROLE_OPTIONS = ['renter', 'vendor', 'admin'];
@@ -26,6 +27,65 @@ function Field({ label, value, styles }) {
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <Text style={styles.fieldValue}>{value}</Text>
+    </View>
+  );
+}
+
+/**
+ * Profile name vs the name on the renter's ID, with the verdict already
+ * worked out.
+ *
+ * Three states rather than two, because "we were never told" and "we were
+ * told and it disagrees" call for completely different things from whoever
+ * is reviewing: the first needs chasing, the second needs looking at. The
+ * matching rule is the shared one (utils/idName.js, mirrored by
+ * person_names_match() in SQL), so word order and an extra middle name do
+ * not read as a mismatch.
+ */
+function IdNameCheck({ detail, styles, colors }) {
+  const profileName = (detail.full_name ?? '').trim();
+  const idName = (detail.id_document_name ?? '').trim();
+
+  if (!idName) {
+    return (
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>Name on ID</Text>
+        <Text style={styles.idCheckMuted}>Not provided by the renter yet</Text>
+      </View>
+    );
+  }
+
+  const matches = personNamesMatch(profileName, idName);
+  const tone = matches ? colors.success : colors.warning;
+  const confirmedAt = detail.id_name_confirmed_at
+    ? new Date(detail.id_name_confirmed_at).toLocaleDateString()
+    : null;
+
+  return (
+    <View style={[styles.idCheckBox, { borderColor: tone }]}>
+      <View style={styles.idCheckHeader}>
+        <Ionicons
+          name={matches ? 'checkmark-circle' : 'alert-circle'}
+          size={16}
+          color={tone}
+        />
+        <Text style={[styles.idCheckTitle, { color: tone }]}>
+          {matches ? 'Name matches the ID' : 'Name does NOT match the ID'}
+        </Text>
+      </View>
+      <Text style={styles.idCheckLine}>
+        <Text style={styles.idCheckKey}>Account: </Text>
+        {profileName || '—'}
+      </Text>
+      <Text style={styles.idCheckLine}>
+        <Text style={styles.idCheckKey}>On the ID: </Text>
+        {idName}
+      </Text>
+      <Text style={styles.idCheckMuted}>
+        {confirmedAt
+          ? `Renter confirmed this on ${confirmedAt}.`
+          : 'The renter has not confirmed this themselves.'}
+      </Text>
     </View>
   );
 }
@@ -150,6 +210,12 @@ export default function UserDetailModal({ visible, userId, onClose, onChanged })
               <Field label="Email" value={detail.email} styles={styles} />
               <Field label="Phone" value={detail.phone} styles={styles} />
               <Field label="Address" value={[detail.address, detail.city, detail.country].filter(Boolean).join(', ')} styles={styles} />
+              {/* The whole point of migration 0185: put the name the renter
+                  typed off their document next to the name on the account,
+                  with the verdict already worked out, so verifying is a
+                  glance rather than a judgement call against a photo. */}
+              <IdNameCheck detail={detail} styles={styles} colors={colors} />
+
               <Field label="Driver's License" value={detail.driver_license_number} styles={styles} />
               <Field label="License Expiry" value={detail.driver_license_expiry} styles={styles} />
               <Field label="License Country" value={detail.driver_license_country} styles={styles} />
@@ -415,6 +481,38 @@ function createStyles(colors) {
       fontFamily: FONTS.medium,
       fontSize: 14,
       color: colors.textPrimary,
+    },
+    idCheckBox: {
+      borderWidth: 1,
+      borderRadius: 10,
+      padding: 12,
+      marginBottom: 12,
+      gap: 3,
+    },
+    idCheckHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 3,
+    },
+    idCheckTitle: {
+      fontFamily: FONTS.semiBold,
+      fontSize: 13,
+    },
+    idCheckLine: {
+      fontFamily: FONTS.medium,
+      fontSize: 14,
+      color: colors.textPrimary,
+    },
+    idCheckKey: {
+      fontFamily: FONTS.regular,
+      color: colors.textSubtle,
+    },
+    idCheckMuted: {
+      fontFamily: FONTS.regular,
+      fontSize: 12,
+      color: colors.textSubtle,
+      marginTop: 2,
     },
     errorText: {
       fontFamily: FONTS.regular,
