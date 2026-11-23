@@ -35,10 +35,18 @@
 //     paid by hand (admin "Mark as Paid") carries a bank / mobile money
 //     reference there instead, which Paystack knows nothing about: those are
 //     skipped and reported as a manual follow-up. If the call itself
-//     fails (e.g. Paystack outage, already-refunded transaction), the
-//     booking still gets cancelled - the failure is reported back and
-//     surfaced to the renter so a human can follow up manually. A refund
-//     amount owed should never silently block the cancellation itself.
+//     fails (e.g. Paystack outage, an insufficient Paystack balance, an
+//     already-refunded transaction), the booking still gets cancelled - a
+//     refund owed should never block the cancellation itself.
+//   - Whatever Paystack would not take is RECORDED, not just reported:
+//     bookings.refund_owed / refund_plan (migration 0179) hand it to the
+//     paystack-refund-retry sweep, and the team is emailed at once. Before
+//     that existed, a refused refund lived only in this function's HTTP
+//     response - seen once in the cancel dialog, then gone, with nothing
+//     retrying it. Two live cancellations on 2026-11-19 were lost that way
+//     (GH₵14,783.70 and GH₵6,011.00, both refused over a GH₵0.78 Paystack
+//     balance). The refund maths itself moved to _shared/cancellationRefund.ts
+//     so the sweep can never price a refund differently than this did.
 //
 // Notifications: in-app (notifications table) + push (send-push-notification
 // Edge Function) for the renter, the vendor (if one is assigned), and every
@@ -54,7 +62,8 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getInternalSecret } from '../_shared/cronAuth.ts';
-import { combineDateAndTime } from '../_shared/time.ts';
+import { executeRefundPlan, planCancellationRefund } from '../_shared/cancellationRefund.ts';
+import { raisePaymentAlert } from '../_shared/alerts.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -67,10 +76,6 @@ function jsonResponse(body: unknown, status = 200) {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 }
-
-const DEFAULT_FULL_REFUND_HOURS = 48; // matches the configured app_settings value and the website fallback
-const DEFAULT_PARTIAL_REFUND_HOURS = 24;
-const DEFAULT_PARTIAL_REFUND_PERCENTAGE = 0.5;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -133,111 +138,27 @@ Deno.serve(async (req) => {
     let inTrip = false; // the scheduled pickup time has passed: Terms of Service 5.2 - nothing is refunded automatically
     let refundedSoFar = 0; // what Paystack actually accepted (can be less than refundAmount if one of several refunds failed)
     let refundError: string | null = null;
+    let refundOwed = 0; // left for paystack-refund-retry (and visible in the admin) when Paystack refused
+    let refundPlan: { ref: string | null; cap: number }[] = [];
 
     if (booking.payment_status === 'paid') {
-      const { data: settingsRows } = await adminClient
-        .from('app_settings')
-        .select('key, value')
-        .in('key', ['cancellation_full_refund_hours', 'cancellation_partial_refund_hours', 'cancellation_partial_refund_percentage']);
-      const settingsMap = Object.fromEntries((settingsRows ?? []).map((r: { key: string; value: unknown }) => [r.key, r.value]));
-      const fullHours = Number(settingsMap.cancellation_full_refund_hours ?? DEFAULT_FULL_REFUND_HOURS);
-      const partialHours = Number(settingsMap.cancellation_partial_refund_hours ?? DEFAULT_PARTIAL_REFUND_HOURS);
-      const partialPct = Number(settingsMap.cancellation_partial_refund_percentage ?? DEFAULT_PARTIAL_REFUND_PERCENTAGE);
+      // What is owed, and out of which Paystack transactions. Worked out HERE and only here: the
+      // tier depends on hours-until-pickup right now, so a retry hours or days later must replay
+      // this decision rather than make its own (see _shared/cancellationRefund.ts).
+      const plan = await planCancellationRefund(adminClient, booking);
+      refundAmount = plan.amount;
+      refundPercentage = plan.percentage;
+      inTrip = plan.inTrip;
 
-      // The pickup time is "9:00 AM" for app bookings and "09:00" for website ones - read both (slicing the string left app bookings with an
-      // Invalid Date, so hoursUntilPickup was NaN and every cancellation fell into the 0% tier).
-      const pickupAt = combineDateAndTime(booking.start_date, booking.pickup_time, '10:00');
-      const hoursUntilPickup = (pickupAt.getTime() - Date.now()) / 3600000;
-
-      inTrip = hoursUntilPickup < 0;
-      if (hoursUntilPickup >= fullHours) refundPercentage = 1;
-      else if (hoursUntilPickup >= partialHours) refundPercentage = partialPct;
-      else refundPercentage = 0;
-
-      // The cancellation tiers apply to what the renter has ACTUALLY PAID for this booking - not to its current total_cost. They differ
-      // once the booking was modified: a change that lowered the total never returned the difference (the team follows up on it), so the
-      // renter paid more than total_cost, and a change that raised it can have been paid in a separate Paystack transaction. Paid =
-      //   the total the booking had before its first modification (or total_cost if it was never modified)
-      //   + every amount charged with a later modification (positive amounts only: a reduction returns nothing by itself, and a
-      //     staff-raised total that was never collected has amount_charged 0).
-      const { data: mods } = await adminClient
-        .from('booking_modifications')
-        .select('old_total_cost, old_security_deposit, amount_charged, payment_ref, created_at')
-        .eq('booking_id', booking.id)
-        .order('created_at', { ascending: true });
-      const originalPaid = mods && mods.length > 0 ? Number(mods[0].old_total_cost) : Number(booking.total_cost);
-      // A payment recorded by hand (admin "Mark as Paid") writes the reference the admin was given onto the booking too - a bank,
-      // mobile money or Wise reference, not a Paystack transaction. Paystack cannot refund against it, so the original payment counts
-      // as having no reference here: the refund due is still worked out and reported, for the team to return the money the same way it
-      // came in. "Paystack (seen in the dashboard)" is the exception - that reference was verified with Paystack when it was recorded.
-      const { data: manualPayments } = await adminClient
-        .from('booking_manual_payments')
-        .select('method')
-        .eq('booking_id', booking.id);
-      const paidOffPaystack = (manualPayments ?? []).some((m: { method: string }) => m.method !== 'paystack_dashboard');
-      const originalRef = paidOffPaystack ? null : booking.payment_ref;
-      // Each part is refunded against the Paystack transaction that took the money (a refund can't exceed its own transaction).
-      const parts: { ref: string | null; cap: number }[] = [{ ref: originalRef, cap: originalPaid }];
-      for (const m of mods ?? []) {
-        const charged = Number(m.amount_charged);
-        if (charged > 0) {
-          if (m.payment_ref && m.payment_ref !== originalRef) parts.push({ ref: m.payment_ref, cap: charged });
-          else parts[0].cap += charged;
-        }
-      }
-      const paidBase = Math.round(parts.reduce((sum, part) => sum + part.cap, 0) * 100) / 100;
-      // The security deposit is refundable by definition - it is only ever kept if the car comes back damaged - so cancelling before
-      // the trip returns it in FULL at every tier, even inside the no-refund window. The tiers apply to the rest (rental, add-ons,
-      // delivery, WopeCare, driver). The deposit paid is the one the booking had before its first modification (or its current one).
-      const depositPaid = Math.min(
-        paidBase,
-        Math.max(0, mods && mods.length > 0 ? Number(mods[0].old_security_deposit ?? booking.security_deposit) : Number(booking.security_deposit))
-      );
-      refundAmount = Math.round((depositPaid + (paidBase - depositPaid) * refundPercentage) * 100) / 100;
-      // Once the trip has started (Terms of Service 5.2) a cancellation is strictly non-refundable: no Paystack refund is triggered for unused days.
-      // The security deposit is NOT refunded here either - it is returned by the team after the vehicle has been inspected.
-      if (inTrip) {
-        refundAmount = 0;
-        refundPercentage = 0;
-      }
-
-      let processedTotal = 0;
-      let remaining = refundAmount;
-      if (refundAmount > 0) {
-        if (!paystackSecretKey) {
-          refundError = 'Refunds are not configured for this project yet — process this refund manually.';
-        } else {
-          for (const part of parts) {
-            if (remaining <= 0.001) break;
-            const take = Math.round(Math.min(remaining, part.cap) * 100) / 100;
-            if (take <= 0) continue;
-            if (!part.ref) {
-              refundError = paidOffPaystack
-                ? 'This booking was paid outside Paystack, so the refund cannot be processed automatically — return it the way the money came in.'
-                : 'A payment on this booking has no Paystack reference — process the rest of the refund manually.';
-              continue;
-            }
-            try {
-              const paystackRes = await fetch('https://api.paystack.co/refund', {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${paystackSecretKey}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ transaction: part.ref, amount: Math.round(take * 100) }),
-              });
-              const paystackJson = await paystackRes.json();
-              if (paystackRes.ok && paystackJson.status) {
-                processedTotal = Math.round((processedTotal + take) * 100) / 100;
-                remaining = Math.round((remaining - take) * 100) / 100;
-              } else {
-                refundError = paystackJson.message || 'Paystack refund request failed — process this refund manually.';
-              }
-            } catch {
-              refundError = 'Could not reach Paystack to process the refund — process it manually.';
-            }
-          }
-        }
-      }
-      refundProcessed = refundAmount > 0 && processedTotal >= refundAmount - 0.01;
-      refundedSoFar = processedTotal;
+      const attempt = await executeRefundPlan(paystackSecretKey, plan.parts, refundAmount, { paidOffPaystack: plan.paidOffPaystack });
+      refundedSoFar = attempt.processed;
+      refundError = attempt.error;
+      refundProcessed = refundAmount > 0 && attempt.remaining <= 0.01;
+      // Anything Paystack would not take is remembered rather than lost with the HTTP response.
+      // paystack-refund-retry works through this every 15 minutes and escalates by email if it
+      // stays stuck; the admin's Refunds Outstanding page shows it the whole time.
+      refundOwed = refundProcessed ? 0 : attempt.remaining;
+      refundPlan = refundProcessed ? [] : attempt.remainingParts;
     }
 
     const updatePatch: Record<string, unknown> = { status: 'cancelled', cancellation_reason: reason || null };
@@ -248,11 +169,31 @@ Deno.serve(async (req) => {
       updatePatch.payment_status = 'refunded';
       updatePatch.refund_amount = refundAmount;
     } else if (refundedSoFar > 0) {
-      updatePatch.refund_amount = refundedSoFar; // partly refunded - the rest is a manual follow-up (see refundError)
+      updatePatch.refund_amount = refundedSoFar; // partly refunded - the rest is owed (refundOwed below)
+    }
+    // Hand anything Paystack refused to the retry sweep instead of losing it with this response.
+    if (refundOwed > 0) {
+      updatePatch.refund_owed = refundOwed;
+      updatePatch.refund_plan = refundPlan;
+      updatePatch.refund_error = refundError;
+      updatePatch.refund_attempts = 1;
+      updatePatch.refund_last_attempt_at = new Date().toISOString();
     }
     const { error: updateError } = await adminClient.from('bookings').update(updatePatch).eq('id', bookingId);
     if (updateError) {
       return jsonResponse({ error: updateError.message }, 500);
+    }
+
+    // Tell the team the moment money is owed and did not move. Until this existed, the only trace
+    // of a refused refund was the sentence in the cancel dialog, seen once by whoever clicked it.
+    if (refundOwed > 0) {
+      await raisePaymentAlert(
+        adminClient,
+        'refund_not_processed',
+        `refund of GH₵${refundOwed.toFixed(2)} could not be paid - ${booking.booking_ref}`,
+        `Booking ${booking.booking_ref} was cancelled by ${isAdmin ? 'WopeCar Support' : isOwner ? 'the renter' : 'the vendor'} and GH₵${refundOwed.toFixed(2)} is owed to the renter, but Paystack would not process it. It is now in the automatic retry queue (every 15 minutes) and on the Refunds Outstanding page in the admin. If the cause is the Paystack balance - refunds are funded from the available balance - a top-up clears it with no further action.`,
+        refundError ?? undefined
+      );
     }
 
     // Who did it, in the words a recipient should read. Admin/support is
@@ -346,7 +287,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    return jsonResponse({ success: true, refunded: refundProcessed, refundAmount, refundPercentage, refundError, inTrip });
+    return jsonResponse({ success: true, refunded: refundProcessed, refundAmount, refundPercentage, refundError, inTrip, refundOwed, refundedSoFar });
   } catch (e) {
     return jsonResponse({ error: e instanceof Error ? e.message : 'Unexpected error.' }, 500);
   }
