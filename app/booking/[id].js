@@ -1040,16 +1040,36 @@ export default function BookingDetailScreen() {
                 const isSelected = addon.name in editAddons;
                 const isPerDay = addon.type === 'per_day';
                 const addonDays = Math.min(editAddons[addon.name] ?? 1, addonCap);
+                // Already on the booking: a plain checkbox here is pre-checked, so tapping it meaning
+                // to add/confirm it actually REMOVES it instead (exactly what happened on booking
+                // WC-2026-3734, which silently dropped its Volta add-on this way). Shown as a labelled
+                // row with an explicit Remove action instead, so removing it is a deliberate choice.
+                const wasOnBooking = originalAddonNames.includes(addon.name);
                 return (
                   <View key={addon.name} style={{ marginBottom: 6 }}>
-                    <TouchableOpacity style={styles.checkboxRow} onPress={() => toggleEditAddon(addon)}>
-                      <View style={[styles.checkbox, isSelected && styles.checkboxChecked]}>
-                        {isSelected && <Ionicons name="checkmark" size={14} color={colors.white} />}
+                    {wasOnBooking ? (
+                      <View style={styles.addonExistingRow}>
+                        <Ionicons name="checkmark-circle" size={20} color={colors.teal} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.checkboxLabel}>
+                            {addon.name} (+{formatCurrency(addon.price, activeCurrency)}{isPerDay ? '/day' : ''})
+                          </Text>
+                          <Text style={styles.addonExistingSubtext}>Already on your trip</Text>
+                        </View>
+                        <TouchableOpacity onPress={() => toggleEditAddon(addon)} hitSlop={8}>
+                          <Text style={styles.addonRemoveText}>{isSelected ? 'Remove' : 'Removed'}</Text>
+                        </TouchableOpacity>
                       </View>
-                      <Text style={[styles.checkboxLabel, { flex: 1 }]}>
-                        {addon.name} (+{formatCurrency(addon.price, activeCurrency)}{isPerDay ? '/day' : ''})
-                      </Text>
-                    </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity style={styles.checkboxRow} onPress={() => toggleEditAddon(addon)}>
+                        <View style={[styles.checkbox, isSelected && styles.checkboxChecked]}>
+                          {isSelected && <Ionicons name="checkmark" size={14} color={colors.white} />}
+                        </View>
+                        <Text style={[styles.checkboxLabel, { flex: 1 }]}>
+                          {addon.name} (+{formatCurrency(addon.price, activeCurrency)}{isPerDay ? '/day' : ''})
+                        </Text>
+                      </TouchableOpacity>
+                    )}
                     {isSelected && isPerDay && (
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, marginLeft: 32, marginBottom: 8 }}>
                         <Text style={styles.noPaymentNote}>Days in this region</Text>
@@ -1804,6 +1824,23 @@ function createStyles(colors) {
     fontFamily: FONTS.regular,
     fontSize: 13,
     color: colors.textPrimary,
+  },
+  addonExistingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 18,
+  },
+  addonExistingSubtext: {
+    fontFamily: FONTS.regular,
+    fontSize: 11.5,
+    color: colors.textSubtle,
+    marginTop: 2,
+  },
+  addonRemoveText: {
+    fontFamily: FONTS.medium || FONTS.regular,
+    fontSize: 12.5,
+    color: colors.error,
   },
   promoInputRow: {
     flexDirection: 'row',
