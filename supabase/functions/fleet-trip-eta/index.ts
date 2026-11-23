@@ -22,6 +22,33 @@ const MIN_REFRESH_MS = 25_000;
 const ROAD_FACTOR = 1.4;
 const CITY_SPEED_MPS = 22_000 / 3600;
 
+// The straight-line estimate only makes sense across a city; beyond this the officer isn't really on the way (or is testing from abroad).
+const MAX_STRAIGHT_LINE_M = 200_000;
+
+// Finds the destination's coordinates from its address, so the destination pin shows on the map even when no driving route can be
+// found. Uses the same Places API the app's address search already uses (GOOGLE_PLACES_API_KEY), limited to Ghana.
+async function geocodeAddress(address: string, keys: (string | undefined)[]): Promise<{ lat: number; lng: number } | null> {
+  for (const key of keys) {
+    if (!key) continue;
+    try {
+      const url = new URL('https://maps.googleapis.com/maps/api/place/findplacefromtext/json');
+      url.searchParams.set('input', /ghana/i.test(address) ? address : `${address}, Ghana`);
+      url.searchParams.set('inputtype', 'textquery');
+      url.searchParams.set('fields', 'geometry');
+      url.searchParams.set('locationbias', 'rectangle:4.5,-3.3|11.2,1.3');
+      url.searchParams.set('key', key);
+      const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+      const json = await res.json();
+      const loc = json?.candidates?.[0]?.geometry?.location;
+      if (json?.status === 'OK' && typeof loc?.lat === 'number' && typeof loc?.lng === 'number') return { lat: loc.lat, lng: loc.lng };
+      console.warn('fleet-trip-eta: place lookup returned', json?.status, json?.error_message);
+    } catch (e) {
+      console.warn('fleet-trip-eta: place lookup failed', e);
+    }
+  }
+  return null;
+}
+
 function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
   const toRad = (d: number) => (d * Math.PI) / 180;
   const dLat = toRad(lat2 - lat1);
@@ -42,7 +69,8 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const googleKey = Deno.env.get('GOOGLE_DIRECTIONS_API_KEY') ?? Deno.env.get('GOOGLE_PLACES_API_KEY');
+    const placesKey = Deno.env.get('GOOGLE_PLACES_API_KEY');
+    const googleKey = Deno.env.get('GOOGLE_DIRECTIONS_API_KEY') ?? placesKey;
 
     const callerClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
     const { data: { user: caller }, error: authError } = await callerClient.auth.getUser();
@@ -75,6 +103,15 @@ Deno.serve(async (req) => {
 
     // Where the officer is heading: the renter's delivery address, or (return pickup) where the renter hands the car back.
     const destinationAddress = task.type === 'delivery' ? task.to_address : task.from_address;
+    // No coordinates yet: look the address up once, so the pin shows even if no route is found. Saved below and reused after that.
+    let geocoded: { lat: number; lng: number } | null = null;
+    if ((task.dest_lat == null || task.dest_lng == null) && destinationAddress) {
+      geocoded = await geocodeAddress(destinationAddress, [placesKey, googleKey]);
+      if (geocoded) {
+        task.dest_lat = geocoded.lat;
+        task.dest_lng = geocoded.lng;
+      }
+    }
     const destination = task.dest_lat != null && task.dest_lng != null
       ? `${task.dest_lat},${task.dest_lng}`
       : destinationAddress ? `${destinationAddress}, Ghana` : null;
@@ -154,14 +191,21 @@ Deno.serve(async (req) => {
     }
 
     if (!result && task.dest_lat != null && task.dest_lng != null) {
-      const distance = haversineMeters(task.last_lat, task.last_lng, task.dest_lat, task.dest_lng) * ROAD_FACTOR;
-      result = { eta: Math.round(distance / CITY_SPEED_MPS), distance: Math.round(distance), source: 'straight_line', polyline: null, destLat: null, destLng: null };
+      const crow = haversineMeters(task.last_lat, task.last_lng, task.dest_lat, task.dest_lng);
+      if (crow <= MAX_STRAIGHT_LINE_M) {
+        const distance = crow * ROAD_FACTOR;
+        result = {
+          eta: Math.round(distance / CITY_SPEED_MPS), distance: Math.round(distance), source: 'straight_line', polyline: null,
+          destLat: geocoded?.lat ?? null, destLng: geocoded?.lng ?? null,
+        };
+      }
     }
     if (!result) {
       // No route (e.g. the address can't be found, or the officer is far outside Ghana). Record that, so the app can say so instead of
       // "working out..." forever; the 25-second limit above keeps this from calling Google on every fix.
       await admin.rpc('fo_save_trip_eta', {
-        p_task_id: task.id, p_eta_seconds: null, p_distance_m: null, p_source: 'unavailable', p_polyline: null, p_dest_lat: null, p_dest_lng: null,
+        p_task_id: task.id, p_eta_seconds: null, p_distance_m: null, p_source: 'unavailable', p_polyline: null,
+        p_dest_lat: geocoded?.lat ?? null, p_dest_lng: geocoded?.lng ?? null,
       });
       return jsonResponse({ skipped: 'No route found to the destination.' });
     }
@@ -172,8 +216,8 @@ Deno.serve(async (req) => {
       p_distance_m: result.distance,
       p_source: result.source,
       p_polyline: result.polyline,
-      p_dest_lat: result.destLat,
-      p_dest_lng: result.destLng,
+      p_dest_lat: result.destLat ?? geocoded?.lat ?? null,
+      p_dest_lng: result.destLng ?? geocoded?.lng ?? null,
     });
     if (saveError) return jsonResponse({ error: saveError.message }, 500);
 
