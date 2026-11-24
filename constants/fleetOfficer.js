@@ -5,7 +5,7 @@ import Constants from 'expo-constants';
 // tables yet. Same pattern as the WopeDriver gate.
 export const FLEET_OFFICER_ENABLED = Constants.expoConfig?.extra?.APP_ENV !== 'production';
 
-// Trip task statuses (migration 0179/0180) as the officer and admin screens show them.
+// Trip task statuses (migration 0188/0189) as the officer and admin screens show them.
 export const TRIP_STATUS_LABELS = {
   unassigned: 'Needs officer',
   assigned: 'Assigned',

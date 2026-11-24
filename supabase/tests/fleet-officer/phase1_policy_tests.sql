@@ -1,4 +1,4 @@
--- Fleet Officer Phase 1 - security checks. Run on Wopecar-PREPROD after 0179 (Supabase dashboard > SQL editor, paste all, Run).
+-- Fleet Officer Phase 1 - security checks. Run on Wopecar-PREPROD after 0188 (Supabase dashboard > SQL editor, paste all, Run).
 -- Self-contained and NOTHING is kept: it picks two ordinary accounts and one booking, makes the two accounts officers, assigns one
 -- of them to the booking, runs each check as that person (role authenticated + their user id, exactly like the app), shows a
 -- PASS/FAIL table, and then ROLLS BACK every change.

@@ -120,7 +120,7 @@ export async function startRentalAgreementForBooking(bookingId) {
 }
 
 /**
- * The Fleet officer's "Start" (migration 0181): same prefilled draft as startRentalAgreementForBooking, but created on the server because an
+ * The Fleet officer's "Start" (migration 0190): same prefilled draft as startRentalAgreementForBooking, but created on the server because an
  * officer cannot read the bookings table. Only the officer on the booking's open delivery trip may start it; returns the existing agreement
  * when there already is one.
  */

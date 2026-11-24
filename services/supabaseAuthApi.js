@@ -421,7 +421,7 @@ export async function getCurrentUser() {
 }
 
 /**
- * The signed-in user's own Fleet officer row (admin-managed, migration 0179), or null. Being an officer is separate from
+ * The signed-in user's own Fleet officer row (admin-managed, migration 0188), or null. Being an officer is separate from
  * users.role, so an officer keeps their normal renter / vendor access. Never throws: a missing table (production, before the
  * Fleet Officer release) or a network hiccup just means "not an officer" - it must never block sign-in.
  */

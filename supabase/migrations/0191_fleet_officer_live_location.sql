@@ -10,7 +10,7 @@
 --   renter_trip_live(...)          what the renter's chat card and full-screen map read: officer name + photo, position, ETA, state.
 --   fo_save_trip_eta(...)          used by the fleet-trip-eta Edge Function (service role) to store the ETA it computed with Google
 --                                  Directions (key held server-side only), or a straight-line estimate when that call fails.
---   officer_advance_trip_task       redefined (same rules as 0180): the renter's "on the way" / "arrived" pushes now open the live map,
+--   officer_advance_trip_task       redefined (same rules as 0189): the renter's "on the way" / "arrived" pushes now open the live map,
 --                                  and starting / ending the trip turns sharing on / off.
 -- Safe to run more than once.
 
@@ -234,7 +234,7 @@ begin
   end if;
 end $$;
 
--- ---- officer_advance_trip_task: same rules as 0180; pushes open the live map; sharing follows the status --------------------------------
+-- ---- officer_advance_trip_task: same rules as 0189; pushes open the live map; sharing follows the status --------------------------------
 
 create or replace function public.officer_advance_trip_task(p_task_id uuid, p_status text)
 returns public.trip_tasks

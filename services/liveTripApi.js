@@ -1,6 +1,6 @@
 import supabase from './supabase';
 
-// Fleet Officer Phase 4 (migration 0182 + Edge Function fleet-trip-eta): live location and ETA while an officer is on the way.
+// Fleet Officer Phase 4 (migration 0191 + Edge Function fleet-trip-eta): live location and ETA while an officer is on the way.
 
 /** Officer: send one location fix. Returns { sharing, etaDue } - sharing false means the trip is no longer En route or was stopped. */
 export async function shareLocation(taskId, { latitude, longitude, heading = null, speed = null, accuracy = null }) {

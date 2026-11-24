@@ -6,7 +6,7 @@
 --   * admin_officer_availability(day): each officer's availability today - Off (deactivated), On a trip, or Available - with their
 --     current trip and last position, for the officer list and the active-officer map.
 --   * admin_edit_handover_record(table, id, changes, reason): edits a submitted inspection or rental agreement. Only listed fields
---     can change, a reason is required, and the existing record_edits log (0181) records before / after / reason / who.
+--     can change, a reason is required, and the existing record_edits log (0190) records before / after / reason / who.
 --   * trip_tasks joins the Realtime publication so the board updates within seconds of an officer status change. Realtime applies the
 --     existing row-level rules, so admins see every trip, officers only their own and renters none.
 --
@@ -162,7 +162,7 @@ begin
     v_sets := v_sets || format('%I = (jsonb_populate_record(null::public.%I, $1)).%I', v_key, p_table, v_key);
   end loop;
 
-  -- The record_edits trigger (0181) picks the reason up from here.
+  -- The record_edits trigger (0190) picks the reason up from here.
   perform set_config('app.edit_reason', trim(p_reason), true);
   execute format('update public.%I set %s where id = $2 returning to_jsonb(%I.*)', p_table, array_to_string(v_sets, ', '), p_table)
     into v_row using p_changes, p_record_id;

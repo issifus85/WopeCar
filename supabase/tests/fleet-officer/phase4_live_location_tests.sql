@@ -1,4 +1,4 @@
--- Fleet Officer Phase 4 - live location and ETA checks. Run on Wopecar-PREPROD after 0182 (SQL editor, paste all, Run).
+-- Fleet Officer Phase 4 - live location and ETA checks. Run on Wopecar-PREPROD after 0191 (SQL editor, paste all, Run).
 -- Self-contained and NOTHING is kept: it picks an admin, three ordinary accounts and one confirmed booking, runs every check as the right
 -- person (role authenticated + their user id, like the app), shows a PASS/FAIL table and ROLLS BACK every change.
 begin;
@@ -56,7 +56,7 @@ begin
   -- ---- officer 2 cannot send fixes for officer 1's trip ----
   perform set_config('request.jwt.claim.sub', v_off2::text, true);
   perform set_config('request.jwt.claims', json_build_object('sub', v_off2, 'role', 'authenticated')::text, true);
-  -- Refused, or (after 0184) told to stop sharing; either way nothing is stored.
+  -- Refused, or (after 0193) told to stop sharing; either way nothing is stored.
   begin
     v_ok := not coalesce((officer_share_location(v_del, 1, 1) ->> 'sharing')::boolean, false);
   exception when others then v_ok := true; end;

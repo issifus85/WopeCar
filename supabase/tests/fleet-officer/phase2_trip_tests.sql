@@ -1,4 +1,4 @@
--- Fleet Officer Phase 2 - trip tasks, assignment, chat access and status flow checks. Run on Wopecar-PREPROD after 0180
+-- Fleet Officer Phase 2 - trip tasks, assignment, chat access and status flow checks. Run on Wopecar-PREPROD after 0189
 -- (SQL editor, paste all, Run). Self-contained and NOTHING is kept: it picks an admin, two ordinary accounts and one confirmed
 -- booking, runs every check as the right person (role authenticated + their user id, like the app), shows a PASS/FAIL table and
 -- ROLLS BACK every change (tasks, chat messages, notifications and queued pushes included).

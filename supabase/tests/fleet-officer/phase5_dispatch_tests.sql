@@ -1,4 +1,4 @@
--- Fleet Officer Phase 5 - admin dispatch board checks. Run on Wopecar-PREPROD after 0183 (SQL editor, paste all, Run).
+-- Fleet Officer Phase 5 - admin dispatch board checks. Run on Wopecar-PREPROD after 0192 (SQL editor, paste all, Run).
 -- Self-contained and NOTHING is kept: it picks an admin, two ordinary accounts and one confirmed booking whose renter is an ordinary
 -- account, runs every check as the right person (role authenticated + their user id, like the app), shows a PASS/FAIL table and
 -- ROLLS BACK every change.

@@ -1,5 +1,5 @@
 -- Fleet Officer, Phase 2: trip tasks, assignment, chat access, status flow, quick replies and notifications. PREPROD FIRST
--- (Wopecar-preprod). Needs 0179. Not for production until the Fleet Officer release gate passes.
+-- (Wopecar-preprod). Needs 0188. Not for production until the Fleet Officer release gate passes.
 --
 -- What it does
 --   * Every CONFIRMED rental booking (self-drive or chauffeur) gets two trip_tasks: a delivery (start of the rental, to the
@@ -11,7 +11,7 @@
 --     WopeDriver task also fills the request's assigned driver name / phone, which the customer already sees.
 --   * The officer accepts / declines (officer_respond_trip_task) and moves the task forward ONLY in this order:
 --     assigned -> accepted -> en_route -> arrived -> inspecting -> completed (officer_advance_trip_task; arrived -> completed is
---     allowed until Phase 3 wires the inspection in). Every change is logged in trip_events (0179 trigger).
+--     allowed until Phase 3 wires the inspection in). Every change is logged in trip_events (0188 trigger).
 --   * Quick replies ("On my way", "Running 10 min late", "I have arrived") post a chat message as the officer and log an event.
 --   * Pushes (existing send-push-notification function, same internal_secrets pattern as 0148): officer on assignment,
 --     reassignment away and cancellation; renter when the officer starts the trip and when they arrive; admins when an officer
@@ -377,7 +377,7 @@ begin
     assigned_at = case when p_officer_id is null then null else now() end,
     started_at = null, arrived_at = null, declined_at = null, late_notified_at = null
   where id = p_task_id
-  returning * into t; -- trip_tasks_check_officer (0179) refuses anyone who isn't an active officer
+  returning * into t; -- trip_tasks_check_officer (0188) refuses anyone who isn't an active officer
 
   if t.booking_id is not null then
     select booking_ref into v_ref from bookings where id = t.booking_id;

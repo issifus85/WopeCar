@@ -5,7 +5,7 @@ import { advanceTrip, sendQuickReply } from './officerApi';
 // Fleet Officer Phase 6: the officer's trip taps (Start trip, I've arrived, Complete, quick replies) keep working with a weak or no
 // connection. A tap that can't reach the server is saved on the phone and sent again, in the order it was made, every 15 seconds and
 // whenever the app comes back to the screen. The server treats a repeated step as a no-op and doesn't post the same quick reply twice
-// within 2 minutes (0184), so a tap that did go through before the connection dropped can't create a duplicate.
+// within 2 minutes (0193), so a tap that did go through before the connection dropped can't create a duplicate.
 //
 // A tap the server refuses (for example the trip was reassigned or cancelled meanwhile) is dropped and reported, not retried.
 //

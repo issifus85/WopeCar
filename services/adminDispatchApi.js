@@ -1,6 +1,6 @@
 import supabase from './supabase';
 
-// Fleet Officer Phase 5: admin dispatch board (migration 0183). Admin-only RPCs; trip changes stream in through Supabase Realtime.
+// Fleet Officer Phase 5: admin dispatch board (migration 0192). Admin-only RPCs; trip changes stream in through Supabase Realtime.
 
 /** YYYY-MM-DD for today (offset days) in Accra. */
 export function accraDay(offsetDays = 0) {

@@ -1,7 +1,7 @@
 -- Fleet Officer Phase 6 - hardening (PREPROD ONLY until the release gate).
 --
 -- Edge cases and offline safety. Nothing here changes existing tables, roles or policies; it only redefines Fleet Officer functions
--- from 0180 / 0182. Safe to re-run.
+-- from 0189 / 0191. Safe to re-run.
 --
 --   * officer_advance_trip_task: repeating a step that already happened is a no-op (the offline queue can safely resend a tap), and an
 --     officer can't start a second trip while another is still on the way.
@@ -217,7 +217,7 @@ begin
     eta_seconds = null, eta_distance_m = null, eta_source = null, eta_updated_at = null, route_polyline = null,
     sharing_stopped_at = case when v_was_live then now() else sharing_stopped_at end
   where id = p_task_id
-  returning * into t; -- trip_tasks_check_officer (0179) refuses anyone who isn't an active officer
+  returning * into t; -- trip_tasks_check_officer (0188) refuses anyone who isn't an active officer
 
   if t.booking_id is not null then
     select booking_ref, renter_id into v_ref, v_renter from bookings where id = t.booking_id;
@@ -261,7 +261,7 @@ grant execute on function public.admin_assign_trip_task(uuid, uuid) to authentic
 
 -- ---- admin_set_fleet_officer_active ---------------------------------------------------------------------------------------------
 -- Deactivating an officer now hands back every open trip, including one under way, through the same path as unassigning from
--- Dispatch: out of the chat, live position cleared, sharing stopped, renter told. (0179 only released trips not yet started, so a
+-- Dispatch: out of the chat, live position cleared, sharing stopped, renter told. (0188 only released trips not yet started, so a
 -- renter could keep watching a deactivated officer's last position.)
 create or replace function public.admin_set_fleet_officer_active(p_user_id uuid, p_active boolean)
 returns public.officer_profiles

@@ -372,7 +372,7 @@ async function buildReportPdf(inspection: any, booking: any, adminClient: Return
   return pdfDoc.save();
 }
 
-// Fleet Officer (WopeCar migrations 0179-0181, preprod until its release gate): the officer assigned to a trip on this booking runs the
+// Fleet Officer (WopeCar migrations 0188-0190, preprod until its release gate): the officer assigned to a trip on this booking runs the
 // inspection / agreement as WopeCar, so they may generate the copy like an admin. Where the Fleet Officer tables don't exist (production
 // today) the lookup simply fails and this returns false - nothing changes there.
 async function isAssignedFleetOfficer(adminClient: any, bookingId: string, userId: string): Promise<boolean> {

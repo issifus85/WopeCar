@@ -1,5 +1,5 @@
 -- Fleet Officer Phase 1 - make two PREPROD test accounts fleet officers, so you can sign in as them in a preprod app build.
--- Wopecar-PREPROD only. Run after 0179. Replace the two emails with real preprod accounts (sign them up in a preprod build first
+-- Wopecar-PREPROD only. Run after 0188. Replace the two emails with real preprod accounts (sign them up in a preprod build first
 -- if needed). Their normal renter / vendor access does not change. Safe to run again.
 with wanted (email, vehicle_note) as (
   values

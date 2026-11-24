@@ -1,7 +1,7 @@
 import supabase from './supabase';
 import { logFleetEvent } from './analytics';
 
-// Admin management of Fleet officers (migration 0179). Every call goes through an admin-only SECURITY DEFINER RPC, so the rules
+// Admin management of Fleet officers (migration 0188). Every call goes through an admin-only SECURITY DEFINER RPC, so the rules
 // (existing accounts only, no suspended accounts, deactivating unassigns open tasks) live in the database, not here.
 
 export async function listFleetOfficers() {
@@ -27,7 +27,7 @@ export async function setFleetOfficerActive(userId, active) {
   return data;
 }
 
-// ---- trip tasks (migration 0180) ----
+// ---- trip tasks (migration 0189) ----
 
 export async function listTripTasks({ bookingId = null, from = null, to = null } = {}) {
   const { data, error } = await supabase.rpc('admin_list_trip_tasks', { p_booking_id: bookingId, p_from: from, p_to: to });

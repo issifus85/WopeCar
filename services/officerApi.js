@@ -1,6 +1,6 @@
 import supabase from './supabase';
 
-// Fleet officer side of trip tasks (migration 0180). Every call is an RPC that checks, in the database, that the task is the
+// Fleet officer side of trip tasks (migration 0189). Every call is an RPC that checks, in the database, that the task is the
 // caller's and that the status only moves forward - the app never writes trip_tasks directly.
 
 function normalizeTask(raw) {
