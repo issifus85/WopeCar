@@ -133,17 +133,21 @@ function normalizeCar(raw) {
 }
 
 /**
- * Attaches each car's live average rating (published reviews only) - reviews
- * live in their own table (see supabase/migrations' add_reviews_table), not
- * a column on `cars`. One extra query for the whole result set's review rows
- * (not N+1 - a single `.in('car_id', ids)` covers every car already
- * fetched). Called unconditionally by fetchCars (not just for the
- * 'rate_high_low' sort) since CarTileCard/CarListCard now show a rating
- * badge on every card, not only when sorted by rating.
+ * car_id -> { rating, reviewCount } for the given ids, averaged over
+ * published reviews only - reviews live in their own table (see
+ * supabase/migrations' add_reviews_table), not a column on `cars`. One
+ * query for the whole set, not N+1.
+ *
+ * Both read paths must use this, not just the list one: fetchCars feeds the
+ * browse/home grid, but Favorites and Cart build their cards from
+ * fetchCarById instead, and before 2026-11-20 that path attached no rating
+ * at all - so a car showing 5.0 on the browse list and on its own detail
+ * page showed no rating badge once saved or added to the cart. Any new
+ * single-car read path needs this too.
  */
-async function attachRatings(cars) {
-  const carIds = cars.map((c) => c.id);
-  if (carIds.length === 0) return cars;
+async function fetchRatingsByCarId(carIds) {
+  const byCarId = new Map();
+  if (carIds.length === 0) return byCarId;
 
   const { data: reviewRows, error } = await supabase
     .from('reviews')
@@ -159,11 +163,20 @@ async function attachRatings(cars) {
     counts[row.car_id] = (counts[row.car_id] ?? 0) + 1;
   });
 
-  return cars.map((car) => ({
-    ...car,
-    rating: counts[car.id] ? sums[car.id] / counts[car.id] : null,
-    reviewCount: counts[car.id] ?? 0,
-  }));
+  carIds.forEach((id) => {
+    byCarId.set(id, {
+      rating: counts[id] ? sums[id] / counts[id] : null,
+      reviewCount: counts[id] ?? 0,
+    });
+  });
+  return byCarId;
+}
+
+const NO_RATING = { rating: null, reviewCount: 0 };
+
+async function attachRatings(cars) {
+  const byCarId = await fetchRatingsByCarId(cars.map((c) => c.id));
+  return cars.map((car) => ({ ...car, ...(byCarId.get(car.id) ?? NO_RATING) }));
 }
 
 /**
@@ -466,9 +479,17 @@ export async function fetchCarById(id) {
 
   const normalized = normalizeCar({ ...car, vendor });
 
-  const availabilityMap = await getAvailabilityInfo([car.id]);
+  // Rating is fetched here as well as in fetchCars: Favorites and Cart render
+  // their cards straight off this function, so without it a rated car loses
+  // its star badge the moment it is saved or added to the cart.
+  const [availabilityMap, ratingsByCarId] = await Promise.all([
+    getAvailabilityInfo([car.id]),
+    fetchRatingsByCarId([car.id]),
+  ]);
+  const rated = { ...normalized, ...(ratingsByCarId.get(car.id) ?? NO_RATING) };
+
   const availability = availabilityMap.get(car.id);
-  return availability ? { ...normalized, isAvailableToday: availability.isAvailableToday, availableFrom: availability.availableFrom } : normalized;
+  return availability ? { ...rated, isAvailableToday: availability.isAvailableToday, availableFrom: availability.availableFrom } : rated;
 }
 
 /**

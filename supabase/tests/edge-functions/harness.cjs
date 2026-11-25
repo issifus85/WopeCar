@@ -79,7 +79,11 @@ function loadFunction(rel, deps) {
     if (spec.endsWith('_shared/modifyPricing.ts')) return loadShared('_shared/modifyPricing.ts');
     if (spec.endsWith('_shared/time.ts')) return loadShared('_shared/time.ts');
     if (spec.endsWith('_shared/cronAuth.ts')) return { getInternalSecret: async () => 'internal-secret', isTrustedInternalCaller: async (r) => r.headers.get('x-cron-secret') === 'internal-secret' };
-    if (spec.endsWith('_shared/balancePayment.ts') || spec.endsWith('_shared/confirmPayment.ts')) return loadWithFetch(spec.split('/').pop(), deps);
+    if (spec.endsWith('_shared/balancePayment.ts') || spec.endsWith('_shared/confirmPayment.ts') || spec.endsWith('_shared/cancellationRefund.ts')) return loadWithFetch(spec.split('/').pop(), deps);
+    // Alerts are recorded, not sent: tests assert on deps.alerts that a refused refund raised one.
+    if (spec.endsWith('_shared/alerts.ts')) {
+      return { raisePaymentAlert: async (_client, kind, subject, message, detail) => { (deps.alerts ||= []).push({ kind, subject, message, detail }); } };
+    }
     return {};
   };
   let handler;
@@ -102,7 +106,11 @@ function loadWithFetch(file, deps) {
   const src = fs.readFileSync(path.join(FN, '_shared', file), 'utf8');
   const js = ts.transpileModule(src, { compilerOptions: { module: 'CommonJS', target: 'ES2022' } }).outputText;
   const m = { exports: {} };
-  const req = (spec) => (spec.endsWith('confirmPayment.ts') ? loadWithFetch('confirmPayment.ts', deps) : {});
+  const req = (spec) => {
+    if (spec.endsWith('confirmPayment.ts')) return loadWithFetch('confirmPayment.ts', deps);
+    if (spec.endsWith('time.ts')) return loadShared('_shared/time.ts');
+    return {};
+  };
   new Function('module', 'exports', 'require', 'fetch', js)(m, m.exports, req, deps.fetch);
   return m.exports;
 }

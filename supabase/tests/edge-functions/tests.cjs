@@ -15,23 +15,29 @@ function when(hoursFromNow) {
 const req = (body, auth = 'Bearer x') => new Request('https://x/fn', { method: 'POST', headers: { Authorization: auth, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 // ============================== cancel-booking ==============================
-async function runCancel({ pickup, total = 3000, deposit = 600, status = 'pending', callerId = 'R', mods = [] }) {
+async function runCancel({ pickup, total = 3000, deposit = 600, status = 'pending', callerId = 'R', mods = [], refundRefusal = null, manualPayments = [] }) {
   const tables = {
     users: [{ id: 'R', role: 'renter' }, { id: 'A', role: 'admin' }],
     vendors: [{ id: 'V', user_id: 'VU' }],
     bookings: [{ id: 'B1', booking_ref: 'WC-T-1', renter_id: 'R', vendor_id: 'V', status, payment_status: 'paid', payment_ref: 'ps_main', total_cost: total, security_deposit: deposit, start_date: pickup.date, pickup_time: pickup.time }],
     app_settings: [{ key: 'cancellation_full_refund_hours', value: 48 }, { key: 'cancellation_partial_refund_hours', value: 24 }, { key: 'cancellation_partial_refund_percentage', value: 0.5 }],
-    booking_modifications: mods, notifications: [],
+    booking_modifications: mods, notifications: [], booking_manual_payments: manualPayments, integration_alerts: [], app_settings_support: [],
   };
   const { client, log } = makeDb(tables);
   const refunds = [];
   const fetchStub = async (url, opts) => {
-    if (String(url).includes('api.paystack.co/refund')) { refunds.push(JSON.parse(opts.body)); return { ok: true, json: async () => ({ status: true }) }; }
+    if (String(url).includes('api.paystack.co/refund')) {
+      refunds.push(JSON.parse(opts.body));
+      // refundRefusal mimics a real Paystack refusal, e.g. "Your balance is not enough to fulfil this request".
+      if (refundRefusal) return { ok: false, json: async () => ({ status: false, message: refundRefusal }) };
+      return { ok: true, json: async () => ({ status: true }) };
+    }
     return { ok: true, json: async () => ({}) };
   };
-  const handler = loadFunction('cancel-booking/index.ts', { createClient: (url, key, o) => client(o?.global ? callerId : null), env: { SUPABASE_URL: 'u', SUPABASE_ANON_KEY: 'a', SUPABASE_SERVICE_ROLE_KEY: 's', PAYSTACK_SECRET_KEY: 'k' }, fetch: fetchStub });
+  const deps = { createClient: (url, key, o) => client(o?.global ? callerId : null), env: { SUPABASE_URL: 'u', SUPABASE_ANON_KEY: 'a', SUPABASE_SERVICE_ROLE_KEY: 's', PAYSTACK_SECRET_KEY: 'k' }, fetch: fetchStub };
+  const handler = loadFunction('cancel-booking/index.ts', deps);
   const res = await handler(req({ bookingId: 'B1', reason: 't' }));
-  return { status: res.status, body: await res.json(), refunds, tables };
+  return { status: res.status, body: await res.json(), refunds, tables, booking: tables.bookings[0], alerts: deps.alerts ?? [], log };
 }
 
 (async () => {
@@ -64,6 +70,68 @@ async function runCancel({ pickup, total = 3000, deposit = 600, status = 'pendin
   // renter cannot cancel a confirmed booking; other user cannot cancel
   { const w = when(100); const r = await runCancel({ pickup: { date: w.date, time: w.t12 }, status: 'confirmed' }); check('renter cannot cancel a confirmed booking (403)', r.status === 403, JSON.stringify(r.body)); }
   { const w = when(100); const r = await runCancel({ pickup: { date: w.date, time: w.t12 }, callerId: 'STRANGER' }); check('a stranger cannot cancel (403)', r.status === 403, JSON.stringify(r.body)); }
+
+  // ---- a refund Paystack refuses is REMEMBERED, not lost (migration 0179 / paystack-refund-retry) ----
+  {
+    const w = when(240); // 10 days out: the 100% tier, so the whole 3000 is due back
+    const r = await runCancel({ pickup: { date: w.date, time: w.t12 }, refundRefusal: 'Your balance is not enough to fulfil this request' });
+    check('a refused refund still cancels the booking', r.body.success === true && r.booking.status === 'cancelled', JSON.stringify(r.body));
+    check('a refused refund is recorded as owed, with Paystack\u2019s own reason', r.body.refundOwed === 3000 && r.booking.refund_owed === 3000 && r.booking.refund_error === 'Your balance is not enough to fulfil this request', JSON.stringify([r.body, r.booking.refund_owed, r.booking.refund_error]));
+    check('a refused refund saves the plan to replay (the transaction + how much may come off it)', Array.isArray(r.booking.refund_plan) && r.booking.refund_plan.length === 1 && r.booking.refund_plan[0].ref === 'ps_main' && r.booking.refund_plan[0].cap === 3000, JSON.stringify(r.booking.refund_plan));
+    check('a refused refund counts as attempt 1 and is timestamped, so the sweep spaces the next one out', r.booking.refund_attempts === 1 && typeof r.booking.refund_last_attempt_at === 'string', JSON.stringify([r.booking.refund_attempts, r.booking.refund_last_attempt_at]));
+    check('a refused refund does NOT mark the booking refunded', r.booking.payment_status === 'paid' && r.body.refunded === false, JSON.stringify([r.booking.payment_status, r.body.refunded]));
+    check('a refused refund alerts the team at once', r.alerts.length === 1 && r.alerts[0].kind === 'refund_not_processed' && r.alerts[0].subject.includes('WC-T-1'), JSON.stringify(r.alerts));
+    check('the renter is still told a refund is due', (r.tables.notifications[0]?.body ?? '').includes('could not be processed automatically'), JSON.stringify(r.tables.notifications[0]));
+  }
+  // A refund that goes through leaves nothing owed and raises no alert.
+  {
+    const w = when(240);
+    const r = await runCancel({ pickup: { date: w.date, time: w.t12 } });
+    check('a refund that succeeds owes nothing, stores no plan and raises no alert', r.body.refundOwed === 0 && (r.booking.refund_owed ?? 0) === 0 && !r.booking.refund_plan && r.alerts.length === 0 && r.booking.payment_status === 'refunded', JSON.stringify([r.body, r.booking.refund_owed, r.booking.refund_plan, r.alerts]));
+  }
+  // Money that never came through Paystack cannot be refunded by API at all - it is owed, with no replayable reference.
+  {
+    const w = when(240);
+    const r = await runCancel({ pickup: { date: w.date, time: w.t12 }, manualPayments: [{ booking_id: 'B1', method: 'bank_transfer' }] });
+    check('a booking paid outside Paystack owes the refund with no Paystack call made', r.refunds.length === 0 && r.body.refundOwed === 3000 && r.booking.refund_plan[0].ref === null, JSON.stringify([r.refunds, r.body.refundOwed, r.booking.refund_plan]));
+    check('...and says to return it the way the money came in', (r.booking.refund_error ?? '').includes('the way the money came in'), r.booking.refund_error);
+  }
+  // Nothing due (in-trip) must not create a phantom debt.
+  {
+    const w = when(-5);
+    const r = await runCancel({ pickup: { date: w.date, time: w.t12 }, status: 'confirmed', callerId: 'A' });
+    check('an in-trip cancellation owes nothing and raises no alert', r.body.refundOwed === 0 && (r.booking.refund_owed ?? 0) === 0 && r.alerts.length === 0, JSON.stringify([r.body.refundOwed, r.booking.refund_owed, r.alerts]));
+  }
+  // A part-paid refund: only the unpaid remainder is carried forward.
+  {
+    const w = when(240);
+    let calls = 0;
+    const tables = {
+      users: [{ id: 'R', role: 'renter' }, { id: 'A', role: 'admin' }],
+      vendors: [{ id: 'V', user_id: 'VU' }],
+      bookings: [{ id: 'B1', booking_ref: 'WC-T-1', renter_id: 'R', vendor_id: 'V', status: 'pending', payment_status: 'paid', payment_ref: 'ps_main', total_cost: 5000, security_deposit: 700, start_date: w.date, pickup_time: w.t12 }],
+      app_settings: [{ key: 'cancellation_full_refund_hours', value: 48 }, { key: 'cancellation_partial_refund_hours', value: 24 }, { key: 'cancellation_partial_refund_percentage', value: 0.5 }],
+      booking_modifications: [{ booking_id: 'B1', old_total_cost: 3000, old_security_deposit: 600, amount_charged: 2000, payment_ref: 'ps_mod', created_at: '2026-10-01' }],
+      notifications: [], booking_manual_payments: [], integration_alerts: [],
+    };
+    const { client } = makeDb(tables);
+    const fetchStub = async (url, opts) => {
+      if (String(url).includes('api.paystack.co/refund')) {
+        calls++;
+        // The first transaction refunds; the second (the paid modification) is refused.
+        if (calls === 1) return { ok: true, json: async () => ({ status: true }) };
+        return { ok: false, json: async () => ({ status: false, message: 'Transaction has been fully reversed' }) };
+      }
+      return { ok: true, json: async () => ({}) };
+    };
+    const deps = { createClient: (u, k, o) => client(o?.global ? 'R' : null), env: { SUPABASE_URL: 'u', SUPABASE_ANON_KEY: 'a', SUPABASE_SERVICE_ROLE_KEY: 's', PAYSTACK_SECRET_KEY: 'k' }, fetch: fetchStub };
+    const handler = loadFunction('cancel-booking/index.ts', deps);
+    const res = await handler(req({ bookingId: 'B1', reason: 't' }));
+    const body = await res.json();
+    const b = tables.bookings[0];
+    check('a part-refunded cancellation banks what went through (3000) and owes only the rest (2000)', body.refundedSoFar === 3000 && body.refundOwed === 2000 && Number(b.refund_amount) === 3000, JSON.stringify([body, b.refund_amount]));
+    check('...and the saved plan holds only the transaction still owing', b.refund_plan.length === 1 && b.refund_plan[0].ref === 'ps_mod' && b.refund_plan[0].cap === 2000, JSON.stringify(b.refund_plan));
+  }
 
   // ============================== modify-booking ==============================
   console.log('--- modify-booking ---');

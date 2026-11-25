@@ -29,6 +29,7 @@ const VERIFICATION_DOC_LABELS = [
   { type: 'license_front', label: "License - Front" },
   { type: 'license_back', label: "License - Back" },
   { type: 'proof_of_address', label: 'Proof of Address' },
+  { type: 'national_id', label: 'National ID' },
 ];
 
 function VerificationDocsSection({ renterId, styles, colors }) {

@@ -20,6 +20,7 @@ import { COLORS, FONTS } from '../constants/theme';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { logSignUp, logLogin, setUserProperties } from '../services/analytics';
+import { joinName, validateIdName } from '../utils/idName';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -28,7 +29,13 @@ export default function LoginScreen() {
   const { redirect, ...redirectParams } = useLocalSearchParams();
   const { login, register, loginWithSocial } = useAuth();
   const [mode, setMode] = useState('signin');
-  const [name, setName] = useState('');
+  // Collected as two fields rather than one "Full Name" box so that what we
+  // store lines up with the government ID these names are checked against at
+  // verification time, and with checkout (app/checkout/form.js), which has
+  // always asked for First/Last separately and wrote its answer back over
+  // full_name - the two forms used to disagree by design.
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -72,9 +79,12 @@ export default function LoginScreen() {
       setError('Please fill in your email and password.');
       return;
     }
-    if (isSignUp && !name) {
-      setError('Please enter your name.');
-      return;
+    if (isSignUp) {
+      const nameProblem = validateIdName(firstName, lastName);
+      if (nameProblem) {
+        setError(nameProblem);
+        return;
+      }
     }
     if (isSignUp && password !== confirmPassword) {
       setError('Passwords do not match.');
@@ -92,7 +102,14 @@ export default function LoginScreen() {
     try {
       if (isSignUp) {
         const newUser = await register({
-          name,
+          // full_name stays the single source of truth that emails,
+          // invoices and rental agreements already read; firstName/lastName
+          // go alongside it so users.first_name / users.last_name are
+          // finally populated at the point of signup rather than guessed by
+          // splitting a string later.
+          name: joinName(firstName, lastName),
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
           email,
           password,
           passwordConfirmation: confirmPassword,
@@ -187,17 +204,44 @@ export default function LoginScreen() {
             </View>
 
             {isSignUp && (
-              <View style={styles.field}>
-                <Text style={styles.label}>Full Name</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Kwame Mensah"
-                  placeholderTextColor={colors.textSubtle}
-                  value={name}
-                  onChangeText={setName}
-                  autoCapitalize="words"
-                />
-              </View>
+              <>
+                <View style={styles.nameRow}>
+                  <View style={[styles.field, styles.nameField]}>
+                    <Text style={styles.label}>First Name</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Kwame"
+                      placeholderTextColor={colors.textSubtle}
+                      value={firstName}
+                      onChangeText={setFirstName}
+                      autoCapitalize="words"
+                      autoComplete="given-name"
+                      textContentType="givenName"
+                    />
+                  </View>
+                  <View style={[styles.field, styles.nameField]}>
+                    <Text style={styles.label}>Last Name</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Mensah"
+                      placeholderTextColor={colors.textSubtle}
+                      value={lastName}
+                      onChangeText={setLastName}
+                      autoCapitalize="words"
+                      autoComplete="family-name"
+                      textContentType="familyName"
+                    />
+                  </View>
+                </View>
+                {/* Said once, here, rather than as a warning after the fact:
+                    the name is checked against their ID at verification, and
+                    the cheapest moment to get it right is before the account
+                    exists. */}
+                <Text style={styles.fieldHint}>
+                  Please use your name exactly as it appears on your Ghana Card, passport or
+                  driver&apos;s licence. This is what we check when verifying your ID.
+                </Text>
+              </>
             )}
 
             <View style={styles.field}>
@@ -448,6 +492,23 @@ function createStyles(colors) {
     color: colors.white,
   },
   field: {
+    marginBottom: 16,
+  },
+  // First/Last sit side by side so the signup card does not grow by a whole
+  // extra row against the background image.
+  nameRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  nameField: {
+    flex: 1,
+  },
+  fieldHint: {
+    fontFamily: FONTS.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textSubtle,
+    marginTop: -6,
     marginBottom: 16,
   },
   label: {

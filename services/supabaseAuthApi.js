@@ -92,6 +92,11 @@ function normalizeUser(profile) {
     nationalIdExpiry: profile.national_id_expiry ?? null,
     nationalIdStatus: profile.national_id_status ?? 'pending',
     nationalIdRejectionReason: profile.national_id_rejection_reason ?? null,
+    // Unlike the ID *number* above, the name on the document is deliberately
+    // NOT masked: the whole point is to show it next to the profile name so
+    // the renter can see for themselves whether the two agree.
+    idDocumentName: profile.id_document_name ?? '',
+    idNameConfirmedAt: profile.id_name_confirmed_at ?? null,
     preferredPickupLocation: profile.preferred_pickup_location ?? '',
     emergencyContactName: profile.emergency_contact_name ?? '',
     emergencyContactPhone: profile.emergency_contact_phone ?? '',
@@ -113,7 +118,7 @@ function normalizeUser(profile) {
  * full_name/phone/role straight out of the signup metadata below - nothing
  * here inserts or updates that row directly.
  */
-export async function register({ name, email, password, phone, role, termsAcceptedAt }) {
+export async function register({ name, firstName, lastName, email, password, phone, role, termsAcceptedAt }) {
   // Same getAuthRedirectUrl() pattern as requestPasswordReset()'s
   // reset-password-callback below - without an explicit emailRedirectTo,
   // Supabase falls back to the project's dashboard-configured Site URL
@@ -132,7 +137,15 @@ export async function register({ name, email, password, phone, role, termsAccept
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { full_name: name, phone, role, terms_accepted_at: termsAcceptedAt }, emailRedirectTo },
+    // first_name/last_name are read by handle_new_auth_user() (migration
+    // 0185) into public.users alongside full_name. They are optional on
+    // purpose: OAuth signups never reach this function, and the trigger
+    // falls back to splitting full_name so a Google/Apple account is not
+    // left with empty structured names.
+    options: {
+      data: { full_name: name, first_name: firstName, last_name: lastName, phone, role, terms_accepted_at: termsAcceptedAt },
+      emailRedirectTo,
+    },
   });
   if (error) throw error;
 

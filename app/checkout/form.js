@@ -17,6 +17,7 @@ import ConfirmModal from '../../components/ConfirmModal';
 import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
 import { logCheckoutStep } from '../../services/analytics';
 import { isUsablePhone } from '../../utils/phone';
+import { joinName, personNamesMatch } from '../../utils/idName';
 
 const UPLOAD_TILE_SIZE = 48;
 
@@ -72,6 +73,12 @@ export default function CheckoutFormScreen() {
 
   const [firstName, setFirstName] = useState(draft.form.firstName || initialName.firstName);
   const [lastName, setLastName] = useState(draft.form.lastName || initialName.lastName);
+  // Checkout is where existing renters are asked to vouch that their name
+  // matches their ID: they are about to hand over a licence and a proof of
+  // address anyway, so it is the one moment the question is not an
+  // interruption. Pre-ticked for anyone who has already confirmed, so it
+  // reads as settled rather than asking the same thing on every booking.
+  const [idNameConfirmed, setIdNameConfirmed] = useState(!!user?.idNameConfirmedAt);
   const [email, setEmail] = useState(draft.form.email || user?.email || '');
   const [phone, setPhone] = useState(draft.form.phone || user?.phone || '');
   const [address, setAddress] = useState(draft.form.address || user?.address || '');
@@ -128,6 +135,13 @@ export default function CheckoutFormScreen() {
     }
   };
 
+  // Only meaningful for the small number of renters who have already told us
+  // the name on their document; for everyone else there is nothing to compare
+  // and the plain hint is shown instead.
+  const idNameOnFile = (user?.idDocumentName ?? '').trim();
+  const idNameMismatch =
+    !!idNameOnFile && !personNamesMatch(joinName(firstName, lastName), idNameOnFile);
+
   const handleContinue = async () => {
     if (isSavingDetails) return;
     const missing = [];
@@ -161,7 +175,15 @@ export default function CheckoutFormScreen() {
     const profileUpdates = {};
     if (trimmedPhone !== (user?.phone ?? '').trim()) profileUpdates.phone = trimmedPhone;
     if (trimmedAddress !== (user?.address ?? '').trim()) profileUpdates.address = trimmedAddress;
-    if (fullName && fullName !== (user?.name ?? '').trim()) profileUpdates.full_name = fullName;
+    if (fullName && fullName !== (user?.name ?? '').trim()) {
+      profileUpdates.full_name = fullName;
+      // Keep the structured columns in step with full_name. This screen used
+      // to write only full_name, which is how users.first_name/last_name
+      // ended up populated for 14 rows out of 5,102 before migration 0185
+      // backfilled them.
+      profileUpdates.first_name = firstName.trim();
+      profileUpdates.last_name = lastName.trim();
+    }
 
     if (Object.keys(profileUpdates).length) {
       setIsSavingDetails(true);
@@ -172,6 +194,23 @@ export default function CheckoutFormScreen() {
         return;
       } finally {
         setIsSavingDetails(false);
+      }
+    }
+
+    // Deliberately a SEPARATE write, after the one above. The
+    // users_clear_id_name_confirmation trigger (migration 0185) fires on
+    // UPDATE OF full_name and nulls id_name_confirmed_at whenever the name
+    // really changed - so sending the confirmation in the same statement as
+    // a name change would have the database wipe the very thing we just set.
+    //
+    // Best-effort on purpose: this is a record that the renter said yes, not
+    // a precondition for booking. A failure here must not strand someone at
+    // checkout, so it is logged and swallowed rather than surfaced.
+    if (idNameConfirmed && !user?.idNameConfirmedAt) {
+      try {
+        await updateProfile({ id_name_confirmed_at: new Date().toISOString() });
+      } catch (e) {
+        console.warn('Could not record the ID name confirmation', e);
       }
     }
 
@@ -222,6 +261,37 @@ export default function CheckoutFormScreen() {
             <TextInput style={[styles.input, showFieldErrors && !lastName.trim() && styles.inputError]} value={lastName} onChangeText={setLastName} placeholder="Last name" placeholderTextColor={colors.textSubtle} />
           </View>
         </View>
+
+        {idNameMismatch ? (
+          <View style={styles.idNameWarning}>
+            <Ionicons name="alert-circle-outline" size={16} color={colors.warning} />
+            <Text style={styles.idNameWarningText}>
+              The ID on your account is in the name{' '}
+              <Text style={styles.idNameStrong}>{idNameOnFile}</Text>. If that&apos;s the document you&apos;re
+              renting with, use that name here — it&apos;s what we check at verification.
+            </Text>
+          </View>
+        ) : (
+          <Text style={styles.idNameHint}>
+            Use your name exactly as it appears on the ID you&apos;ll be renting with.
+          </Text>
+        )}
+
+        {/* An invitation, not a gate: untouched, the booking still goes
+            through. Ticking it is what records the confirmation that saves
+            an admin a manual check later. */}
+        <TouchableOpacity
+          style={styles.idNameConfirmRow}
+          onPress={() => setIdNameConfirmed((prev) => !prev)}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: idNameConfirmed }}
+          accessibilityLabel="This is my name as shown on my ID"
+        >
+          <View style={[styles.idNameCheckbox, idNameConfirmed && styles.idNameCheckboxChecked]}>
+            {idNameConfirmed ? <Ionicons name="checkmark" size={13} color={colors.white} /> : null}
+          </View>
+          <Text style={styles.idNameConfirmText}>This is my name as shown on my ID</Text>
+        </TouchableOpacity>
 
         <View style={styles.field}>
           <Text style={styles.label}>Email</Text>
@@ -319,6 +389,59 @@ function createStyles(colors) {
     inputError: {
       borderColor: colors.error,
       borderWidth: 1.5,
+    },
+    idNameHint: {
+      fontFamily: FONTS.regular,
+      fontSize: 12,
+      lineHeight: 17,
+      color: colors.textSubtle,
+      marginTop: -8,
+      marginBottom: 10,
+    },
+    idNameWarning: {
+      flexDirection: 'row',
+      gap: 8,
+      alignItems: 'flex-start',
+      backgroundColor: colors.warningBg,
+      borderRadius: 10,
+      padding: 12,
+      marginTop: -6,
+      marginBottom: 10,
+    },
+    idNameWarningText: {
+      flex: 1,
+      fontFamily: FONTS.regular,
+      fontSize: 12,
+      lineHeight: 17,
+      color: colors.textPrimary,
+    },
+    idNameStrong: {
+      fontFamily: FONTS.semiBold,
+    },
+    idNameConfirmRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 16,
+    },
+    idNameCheckbox: {
+      width: 20,
+      height: 20,
+      borderRadius: 5,
+      borderWidth: 1.5,
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    idNameCheckboxChecked: {
+      backgroundColor: colors.teal,
+      borderColor: colors.teal,
+    },
+    idNameConfirmText: {
+      flex: 1,
+      fontFamily: FONTS.regular,
+      fontSize: 13,
+      color: colors.textPrimary,
     },
     uploadTile: {
       flexDirection: 'row',

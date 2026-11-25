@@ -14,6 +14,7 @@ import { pickImage } from '../services/imagePicker';
 import OptionPickerModal from '../components/OptionPickerModal';
 import PhotoSourceSheet from '../components/PhotoSourceSheet';
 import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../utils/imageUrl';
+import { joinName, personNamesMatch } from '../utils/idName';
 
 const AVATAR_SIZE = 80;
 
@@ -83,7 +84,7 @@ const EMPTY_FORM = {
   firstName: '', lastName: '', nickname: '', email: '', phone: '', birthday: '',
   address: '', city: '', country: '',
   driverLicenseNumber: '', driverLicenseExpiry: '', driverLicenseCountry: '',
-  nationalIdType: '', nationalIdNumber: '', nationalIdExpiry: '',
+  nationalIdType: '', nationalIdNumber: '', nationalIdExpiry: '', idDocumentName: '',
   preferredPickupLocation: '', emergencyContactName: '', emergencyContactPhone: '',
 };
 
@@ -142,6 +143,10 @@ export default function AccountScreen() {
       driverLicenseCountry: user.driverLicenseCountry,
       nationalIdType: nationalIdTypeToLabel(user.nationalIdType), nationalIdNumber: '',
       nationalIdExpiry: user.nationalIdExpiry ?? '',
+      // Unlike the ID number (blanked above, since only a masked version ever
+      // comes back to the client) this round-trips: the renter needs to see
+      // and correct what they previously typed.
+      idDocumentName: user.idDocumentName ?? '',
       preferredPickupLocation: user.preferredPickupLocation,
       emergencyContactName: user.emergencyContactName,
       emergencyContactPhone: user.emergencyContactPhone,
@@ -176,6 +181,9 @@ export default function AccountScreen() {
     if (form.nationalIdType !== nationalIdTypeToLabel(user.nationalIdType)) payload.national_id_type = nationalIdLabelToType(form.nationalIdType) || null;
     if (form.nationalIdNumber.trim()) payload.national_id_number = form.nationalIdNumber;
     if (form.nationalIdExpiry !== (user.nationalIdExpiry ?? '')) payload.national_id_expiry = form.nationalIdExpiry || null;
+    if (form.idDocumentName.trim() !== (user.idDocumentName ?? '').trim()) {
+      payload.id_document_name = form.idDocumentName.trim() || null;
+    }
     if (form.preferredPickupLocation !== user.preferredPickupLocation) payload.preferred_pickup_location = form.preferredPickupLocation;
     if (form.emergencyContactName !== user.emergencyContactName) payload.emergency_contact_name = form.emergencyContactName;
     if (form.emergencyContactPhone !== user.emergencyContactPhone) payload.emergency_contact_phone = form.emergencyContactPhone;
@@ -275,6 +283,13 @@ export default function AccountScreen() {
   const verificationColors = getVerificationColors(colors);
   const verification = verificationColors[user.licenseVerificationStatus] ?? verificationColors.pending;
   const nationalIdVerification = verificationColors[user.nationalIdStatus] ?? verificationColors.pending;
+
+  // Compared against the name being edited in this form, not the one last
+  // saved, so the warning clears the moment the renter fixes either side
+  // rather than only after a round trip.
+  const profileName = joinName(form.firstName, form.lastName);
+  const idNameOnFile = form.idDocumentName.trim();
+  const idNameMismatch = !!idNameOnFile && !!profileName && !personNamesMatch(profileName, idNameOnFile);
 
   return (
     <View style={styles.container}>
@@ -413,6 +428,32 @@ export default function AccountScreen() {
               </Text>
             </TouchableOpacity>
           </View>
+          <Field
+            label="Name on the ID"
+            value={form.idDocumentName}
+            onChangeText={updateField('idDocumentName')}
+            placeholder="Exactly as printed on the document"
+            styles={styles}
+            colors={colors}
+          />
+          {idNameMismatch ? (
+            // Informational, never blocking. A mismatch here is often
+            // perfectly legitimate - a married name, a middle name that only
+            // appears on the document - so this explains the consequence and
+            // leaves the decision with the renter.
+            <View style={styles.idNameWarning}>
+              <Ionicons name="alert-circle-outline" size={16} color={colors.warning} />
+              <View style={styles.idNameWarningBody}>
+                <Text style={styles.idNameWarningTitle}>This doesn&apos;t match your profile name</Text>
+                <Text style={styles.idNameWarningText}>
+                  Your profile says <Text style={styles.idNameWarningStrong}>{profileName}</Text> but your ID says{' '}
+                  <Text style={styles.idNameWarningStrong}>{idNameOnFile}</Text>. You can still save, and we&apos;ll
+                  still review it — but verification is quicker when the two agree. If your profile name is the one
+                  that&apos;s wrong, update First and Last Name above.
+                </Text>
+              </View>
+            </View>
+          ) : null}
           {!!user.nationalIdNumberMasked && (
             <Text style={styles.hint}>On file: {user.nationalIdNumberMasked}</Text>
           )}
@@ -667,6 +708,34 @@ function createStyles(colors) {
     color: colors.textSubtle,
     marginTop: -6,
     marginBottom: 8,
+  },
+  idNameWarning: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'flex-start',
+    backgroundColor: colors.warningBg,
+    borderRadius: 10,
+    padding: 12,
+    marginTop: -2,
+    marginBottom: 12,
+  },
+  idNameWarningBody: {
+    flex: 1,
+  },
+  idNameWarningTitle: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 13,
+    color: colors.warning,
+    marginBottom: 2,
+  },
+  idNameWarningText: {
+    fontFamily: FONTS.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textPrimary,
+  },
+  idNameWarningStrong: {
+    fontFamily: FONTS.semiBold,
   },
   pickerValueText: {
     fontFamily: FONTS.regular,
