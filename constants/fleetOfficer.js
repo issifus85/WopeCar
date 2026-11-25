@@ -1,9 +1,7 @@
-import Constants from 'expo-constants';
-
-// Fleet Officer (drivers who deliver and collect cars) is being built and tested on PREPROD only. Production builds and production
-// OTA updates must never show it until the release gate in the Fleet Officer spec passes - the production database has none of its
-// tables yet. Same pattern as the WopeDriver gate.
-export const FLEET_OFFICER_ENABLED = Constants.expoConfig?.extra?.APP_ENV !== 'production';
+// Fleet Officer (drivers who deliver and collect cars). On for every build since the release gate passed: nothing shows for
+// renters, vendors or admins until an admin promotes someone to officer. To hide it again, set this to false and publish an OTA update.
+// (The live map itself also checks that the build has the native map module - see components/LiveMap.js.)
+export const FLEET_OFFICER_ENABLED = true;
 
 // Trip task statuses (migration 0188/0189) as the officer and admin screens show them.
 export const TRIP_STATUS_LABELS = {
