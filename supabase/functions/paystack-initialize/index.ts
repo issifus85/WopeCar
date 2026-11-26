@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'PAYSTACK_SECRET_KEY is not configured for this project.' }, 500);
     }
 
-    const { amount, callbackUrl, bookingIds, purpose, modification } = await req.json();
+    const { amount, callbackUrl, bookingIds, purpose, modification, consent } = await req.json();
     const numericAmount = Number(amount);
     if (!numericAmount || numericAmount <= 0) {
       return jsonResponse({ error: 'A positive amount is required.' }, 400);
@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
     // paystack-webhook can later check the payment against exactly these
     // bookings, and so the webhook can finish them if the client never does.
     // Older app builds don't send it and simply get no metadata.
-    let metadata: { booking_ids: string[]; user_id: string; purpose?: string } | undefined;
+    let metadata: { booking_ids: string[]; user_id: string; purpose?: string; consent?: 'accepted' | 'declined' } | undefined;
     if (Array.isArray(bookingIds) && bookingIds.length > 0) {
       const ids = Array.from(new Set(bookingIds.filter((id: unknown) => typeof id === 'string'))) as string[];
       const { data: owned } = await adminClient.from('bookings').select('id').in('id', ids).eq('renter_id', user.id);
@@ -79,6 +79,17 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: 'These bookings do not belong to this account.' }, 403);
       }
       metadata = { booking_ids: ids, user_id: user.id };
+
+      // Whether this buyer had accepted cookies when the payment started.
+      // Stamped into Paystack's own record of the transaction, not kept in
+      // the browser, because the server-side Meta Purchase
+      // (_shared/metaCapi.ts) can run from paystack-webhook long after the
+      // tab is gone - there is no cookie left to read at that point.
+      //
+      // Only the website sends this. The mobile app does not, so app
+      // bookings arrive as consent=unknown and report nothing: deliberate
+      // until the app actually asks anyone about tracking.
+      if (consent === 'accepted' || consent === 'declined') metadata.consent = consent;
 
       // Paying the BALANCE on a paid booking whose total staff raised (bookings.balance_due): exactly one booking, and the charge must be
       // the balance itself - confirm-balance-payment later only accepts transactions stamped this way.

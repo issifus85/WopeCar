@@ -16,6 +16,7 @@
 //      payment was started for, and belong to the payer.
 
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { sendMetaPurchase } from './metaCapi.ts';
 
 export type PaystackTransaction = {
   status: string;
@@ -26,7 +27,7 @@ export type PaystackTransaction = {
   bank: string | null;
   paidAt: string | null;
   customerEmail: string | null;
-  metadata: { booking_ids?: string[]; user_id?: string } | null;
+  metadata: { booking_ids?: string[]; user_id?: string; consent?: string } | null;
 };
 
 export type BookingOutcome = 'confirmed' | 'dates_conflict' | 'failed';
@@ -83,7 +84,10 @@ export async function confirmBookingsForReference(
 
   const { data: bookings, error } = await adminClient
     .from('bookings')
-    .select('id, renter_id, total_cost, payment_status, payment_ref')
+    // car_id/security_deposit/billable_days are here only for the Meta
+    // Purchase below, which has to describe the sale the same way the
+    // browser event does (see reportPurchaseToMeta).
+    .select('id, renter_id, total_cost, payment_status, payment_ref, car_id, security_deposit, billable_days')
     .in('id', bookingIds);
   if (error) throw new Error(error.message);
   if (!bookings || bookings.length !== bookingIds.length) throw new PaymentRejected('Booking not found.', 404);
@@ -99,7 +103,9 @@ export async function confirmBookingsForReference(
   // the signed-in user's own email, so the transaction's customer email must
   // match theirs. (This is what binds payments from older app builds, which
   // don't stamp booking ids into the metadata.)
-  const { data: payer } = await adminClient.from('users').select('email').eq('id', payerId).maybeSingle();
+  // `phone` is fetched here rather than in a second query because the Meta
+  // Purchase below needs it, and this row is already being read.
+  const { data: payer } = await adminClient.from('users').select('email, phone').eq('id', payerId).maybeSingle();
   const payerEmail = payer?.email?.toLowerCase() ?? null;
   if (tx.customerEmail && payerEmail && tx.customerEmail !== payerEmail) {
     throw new PaymentRejected('This payment was made by a different account.', 403);
@@ -149,5 +155,88 @@ export async function confirmBookingsForReference(
       outcomes[b.id] = 'failed';
     }
   }
+
+  // One Meta Purchase for the bookings THIS call turned paid. Filtering on
+  // the pre-update status is what keeps it to one: the client confirming what
+  // the webhook already did (or a Paystack webhook retry) finds them already
+  // paid and sends nothing. Deliberately after every write - measurement must
+  // never decide whether a payment lands.
+  const justPaid = bookings.filter((b) => b.payment_status !== 'paid' && outcomes[b.id] === 'confirmed');
+  if (justPaid.length > 0) {
+    await reportPurchaseToMeta({
+      reference,
+      consent: tx.metadata?.consent ?? null,
+      paidAt: tx.paidAt,
+      email: payer?.email ?? null,
+      phone: payer?.phone ?? null,
+      bookings: justPaid,
+    });
+  }
+
   return outcomes;
+}
+
+type PaidBookingRow = {
+  id: string;
+  car_id: string | null;
+  total_cost: number | string | null;
+  security_deposit: number | string | null;
+  billable_days: number | null;
+};
+
+/**
+ * Reports a confirmed sale to Meta, or declines to. Kept separate from the
+ * confirmation itself so the rule that matters reads in one line: no
+ * accepted-cookies stamp on the transaction, no event.
+ *
+ * Never throws. The payment is already applied by the time this runs, so a
+ * measurement failure must not surface to the caller as a payment failure.
+ */
+async function reportPurchaseToMeta(opts: {
+  reference: string;
+  consent: string | null;
+  paidAt: string | null;
+  email: string | null;
+  phone: string | null;
+  bookings: PaidBookingRow[];
+}): Promise<void> {
+  if (opts.consent !== 'accepted') {
+    console.log(`meta-capi purchase ref=${opts.reference}: skipped, consent=${opts.consent ?? 'unknown'}`);
+    return;
+  }
+  try {
+    const revenueOf = (b: PaidBookingRow) => Number(b.total_cost ?? 0) - Number(b.security_deposit ?? 0);
+    // The same line-item shape the browser event sends (per-day price x
+    // billable days), so the two copies of one purchase describe the sale
+    // identically and the dedup is comparing like with like.
+    const contents = opts.bookings.map((b) => {
+      const days = Number(b.billable_days ?? 0);
+      const revenue = revenueOf(b);
+      return {
+        id: b.car_id ?? b.id,
+        quantity: days > 0 ? days : 1,
+        item_price: Math.round((days > 0 ? revenue / days : revenue) * 100) / 100,
+      };
+    });
+    const value = Math.round(opts.bookings.reduce((sum, b) => sum + revenueOf(b), 0) * 100) / 100;
+    const paidAtSeconds = opts.paidAt ? Math.floor(new Date(opts.paidAt).getTime() / 1000) : NaN;
+
+    const result = await sendMetaPurchase({
+      eventId: opts.reference,
+      value,
+      currency: 'GHS',
+      contentIds: contents.map((c) => c.id),
+      contents,
+      email: opts.email,
+      phone: opts.phone,
+      eventTimeSeconds: Number.isFinite(paidAtSeconds) ? paidAtSeconds : Math.floor(Date.now() / 1000),
+      eventSourceUrl: 'https://wopecar.com/cart/checkout/callback',
+    });
+    console.log(
+      `meta-capi purchase ref=${opts.reference} value=${value} cars=${contents.length} ` +
+        (result.sent ? `sent (events_received=${result.eventsReceived})` : `not sent: ${result.reason}`)
+    );
+  } catch (e) {
+    console.error(`meta-capi purchase ref=${opts.reference} threw: ${e instanceof Error ? e.message : e}`);
+  }
 }
