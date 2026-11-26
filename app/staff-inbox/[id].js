@@ -8,6 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import * as conversationsApi from '../../services/conversationsApi';
 import { pickAndUploadChatImage, pickAndUploadChatDocument, getCurrentLocationForChat } from '../../services/chatAttachmentsApi';
 import MessageThread from '../../components/MessageThread';
+import { FLEET_OFFICER_ENABLED } from '../../constants/fleetOfficer';
 import InviteParticipantModal from '../../components/InviteParticipantModal';
 
 const MESSAGE_POLL_MS = 5000;
@@ -113,6 +114,18 @@ export default function StaffConversationScreen() {
     if (attachment) await handleSend('', attachment);
   };
 
+  // Fleet Officer: the officer's profile photo next to their messages (same as the renter's chat). Refreshed with the messages.
+  const [officerPhotos, setOfficerPhotos] = useState(null);
+  const messageCount = messages.length;
+  useEffect(() => {
+    if (!FLEET_OFFICER_ENABLED || !id) return undefined;
+    let cancelled = false;
+    conversationsApi.getConversationOfficerPhotos(id).then((photos) => {
+      if (!cancelled) setOfficerPhotos(Object.keys(photos).length ? photos : null);
+    });
+    return () => { cancelled = true; };
+  }, [id, messageCount]);
+
   const threadMessages = useMemo(() => messages.map((m) => ({
     id: m.id,
     conversationId: m.conversationId,
@@ -181,6 +194,7 @@ export default function StaffConversationScreen() {
         onAttach={handleAttach}
         pinnedSummary={conversation.pinnedSummary}
         emptyStateText="No messages yet."
+        senderAvatars={officerPhotos}
       />
 
       <InviteParticipantModal
