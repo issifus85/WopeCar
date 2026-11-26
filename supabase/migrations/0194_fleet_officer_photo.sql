@@ -3,7 +3,8 @@
 --
 -- Until now the photo was copied from the account once, when admin promoted the officer, so a photo added afterwards never showed.
 -- The renter-facing functions below now read the account photo live, falling back to the copy taken at promotion.
--- Same columns and rules as before (0189 / 0191); only the photo value changes. Plus one new read-only function for the chat.
+-- Same columns as before (0189 / 0191); the photo value changes, and WopeCar support/admin can now see the live trip too (for the
+-- Ride Support chat). Plus one new read-only function for the chat.
 -- Safe to re-run.
 
 -- ---- renter: who is coming (same as 0189 except the photo) -------------------------------------------------------------------
@@ -25,7 +26,7 @@ $$;
 revoke all on function public.renter_trip_officers(uuid) from public, anon;
 grant execute on function public.renter_trip_officers(uuid) to authenticated;
 
--- ---- renter: the live trip (same as 0191 except the photo) -------------------------------------------------------------------
+-- ---- renter (and support): the live trip (same as 0191 except the photo, and support can see it) -------------------------------------------------------------------
 create or replace function public.renter_trip_live(p_booking_id uuid default null, p_conversation_id uuid default null)
 returns table (
   task_id uuid, booking_id uuid, type text, status text, officer_name text, officer_photo text, vehicle_note text,
@@ -45,7 +46,8 @@ begin
   if v_booking is null and p_conversation_id is not null then
     select c.booking_id into v_booking from conversations c where c.id = p_conversation_id;
   end if;
-  if v_booking is null or not exists (select 1 from bookings where id = v_booking and renter_id = auth.uid()) then
+  -- The booking's renter, or WopeCar support/admin (Ride Support shows the same trip card and live map).
+  if v_booking is null or not (exists (select 1 from bookings where id = v_booking and renter_id = auth.uid()) or is_support()) then
     return;
   end if;
   return query

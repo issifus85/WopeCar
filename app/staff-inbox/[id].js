@@ -8,6 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import * as conversationsApi from '../../services/conversationsApi';
 import { pickAndUploadChatImage, pickAndUploadChatDocument, getCurrentLocationForChat } from '../../services/chatAttachmentsApi';
 import MessageThread from '../../components/MessageThread';
+import LiveTripCard from '../../components/LiveTripCard';
 import { FLEET_OFFICER_ENABLED } from '../../constants/fleetOfficer';
 import InviteParticipantModal from '../../components/InviteParticipantModal';
 
@@ -187,6 +188,9 @@ export default function StaffConversationScreen() {
           <Ionicons name="person-add-outline" size={20} color={colors.teal} />
         </TouchableOpacity>
       </View>
+
+      {/* Fleet Officer: the same "on the way" card the renter sees, with the live map. Shows nothing unless the booking has a live trip. */}
+      <LiveTripCard conversationId={id} />
 
       <MessageThread
         messages={threadMessages}
