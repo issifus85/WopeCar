@@ -108,6 +108,15 @@ export default function OfficerHomeScreen() {
               <Text style={styles.headerSubtitle}>
                 {officer?.display_name || user.name} · Fleet officer{officer?.vehicle_note ? ` · ${officer.vehicle_note}` : ''}
               </Text>
+              {!user.avatar && (
+                <TouchableOpacity style={styles.photoPrompt} onPress={() => router.push('/account')}>
+                  <Ionicons name="camera-outline" size={18} color={colors.teal} />
+                  <Text style={styles.photoPromptText}>
+                    Add a profile photo so renters can recognise you. It shows on their trip card, live map and chat.
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors.textSubtle} />
+                </TouchableOpacity>
+              )}
               <Text style={styles.privacyNote}>
                 Your location is shared with the renter and WopeCar only while a trip is On the way, from Start trip until you arrive, and
                 you can stop it at any time. Trip locations are deleted after 30 days. Renter contact details are only shown while the trip
@@ -179,6 +188,11 @@ function createStyles(colors) {
     header: { paddingTop: 20, paddingHorizontal: 16, paddingBottom: 12 },
     headerTitle: { fontFamily: FONTS.bold, fontSize: 20, color: colors.textPrimary },
     headerSubtitle: { fontFamily: FONTS.regular, fontSize: 12, color: colors.textSubtle, marginTop: 2 },
+    photoPrompt: {
+      flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, padding: 10, borderRadius: 10,
+      backgroundColor: colors.highlight,
+    },
+    photoPromptText: { flex: 1, fontFamily: FONTS.regular, fontSize: 12, color: colors.textPrimary, lineHeight: 17 },
     privacyNote: { fontFamily: FONTS.regular, fontSize: 11, color: colors.textSubtle, marginTop: 8, lineHeight: 16 },
     errorText: { fontFamily: FONTS.regular, fontSize: 13, color: colors.error, paddingHorizontal: 16, paddingVertical: 8 },
     loading: { marginTop: 40 },

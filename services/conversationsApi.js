@@ -169,3 +169,17 @@ export async function inviteParticipant(id, userId) {
   const { error } = await supabase.rpc('invite_conversation_participant', { p_conversation_id: id, p_user_id: userId });
   if (error) throw error;
 }
+
+/**
+ * Fleet Officer: photos of the officers taking part in a booking chat, as { [userId]: photoUrl }. Shown next to their messages.
+ * Empty when there are none, or on a database without this function (it's read-only and optional, so any error just means no photos).
+ */
+export async function getConversationOfficerPhotos(id) {
+  try {
+    const { data, error } = await supabase.rpc('conversation_officer_photos', { p_conversation_id: id });
+    if (error || !Array.isArray(data)) return {};
+    return Object.fromEntries(data.filter((r) => r.user_id && r.photo_url).map((r) => [r.user_id, r.photo_url]));
+  } catch {
+    return {};
+  }
+}
