@@ -646,15 +646,28 @@ export default function BookingDetailScreen() {
   // are Supabase-native now, so a booking's own id IS the real id a
   // conversation's booking_id refers to; there's no more local-vs-server
   // indirection to bridge.
-  const handleMessageParticipant = () => {
+  const handleMessageParticipant = async () => {
     const serverConversation = conversations.find(
       (c) => c.source === 'server' && c.bookingId === booking.id
     );
-    if (!serverConversation) {
+    let conversationId = serverConversation?.id ?? null;
+    if (!conversationId) {
+      // Not in the inbox list yet: the booking was made after the last list refresh, or the viewer is an admin who booked a car
+      // (an admin's inbox list leaves booking chats out). Look the chat up directly; the chat screen loads it by id.
+      const { data } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('booking_id', booking.id)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (data?.id) conversationId = `booking-${data.id}`;
+    }
+    if (!conversationId) {
       Alert.alert('Messaging unavailable', "Messaging isn't available for this booking yet.");
       return;
     }
-    router.push({ pathname: `/inbox/${serverConversation.id}`, params: { from: 'booking', bookingId: booking.id } });
+    router.push({ pathname: `/inbox/${conversationId}`, params: { from: 'booking', bookingId: booking.id } });
   };
 
   if (!booking) {

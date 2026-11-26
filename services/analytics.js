@@ -156,6 +156,26 @@ export async function logBookingCancelled({ bookingRef, carId, reason }) {
   });
 }
 
+// ─── FLEET OFFICER ────────────────────────────────────
+// Officer trip funnel (spec Phase 6): officer_assigned, trip_started, location_sharing_on, officer_arrived,
+// inspection_started_by_officer, trip_completed. Only ids and the trip type - never names, phones or locations.
+const FLEET_EVENTS = new Set([
+  'officer_assigned', 'trip_started', 'location_sharing_on', 'officer_arrived', 'inspection_started_by_officer', 'trip_completed',
+]);
+export async function logFleetEvent(name, { taskId, bookingRef, tripType, queued } = {}) {
+  if (!shouldLog || !FLEET_EVENTS.has(name)) return;
+  try {
+    await fbLogEvent(getAnalytics(), name, {
+      task_id: taskId ? String(taskId) : undefined,
+      booking_ref: bookingRef || undefined,
+      trip_type: tripType || undefined,
+      sent_offline: queued ? 1 : 0,
+    });
+  } catch {
+    // Analytics must never break a trip step.
+  }
+}
+
 // ─── WOPECARE ─────────────────────────────────────────
 export async function logWopecareSelected({ plan, dailyRate, totalCost, carId }) {
   if (!shouldLog) return;

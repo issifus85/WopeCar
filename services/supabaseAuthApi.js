@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { FLEET_OFFICER_ENABLED } from '../constants/fleetOfficer';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import * as AppleAuthentication from 'expo-apple-authentication';
@@ -426,7 +427,30 @@ export async function getCurrentUser() {
   if (error) throw error;
   if (!profile) return null;
 
-  return normalizeUser(profile);
+  const normalized = normalizeUser(profile);
+  normalized.officerProfile = await getOwnOfficerProfile(user.id);
+  normalized.isFleetOfficer = !!normalized.officerProfile?.is_active;
+  return normalized;
+}
+
+/**
+ * The signed-in user's own Fleet officer row (admin-managed, migration 0188), or null. Being an officer is separate from
+ * users.role, so an officer keeps their normal renter / vendor access. Never throws: a missing table (production, before the
+ * Fleet Officer release) or a network hiccup just means "not an officer" - it must never block sign-in.
+ */
+async function getOwnOfficerProfile(userId) {
+  if (!FLEET_OFFICER_ENABLED) return null;
+  try {
+    const { data, error } = await supabase
+      .from('officer_profiles')
+      .select('user_id, display_name, photo_url, masked_phone, vehicle_note, is_active')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error) return null;
+    return data ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**

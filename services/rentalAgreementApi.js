@@ -120,6 +120,18 @@ export async function startRentalAgreementForBooking(bookingId) {
 }
 
 /**
+ * The Fleet officer's "Start" (migration 0190): same prefilled draft as startRentalAgreementForBooking, but created on the server because an
+ * officer cannot read the bookings table. Only the officer on the booking's open delivery trip may start it; returns the existing agreement
+ * when there already is one.
+ */
+export async function startRentalAgreementAsOfficer(bookingId) {
+  const { data, error } = await supabase.rpc('officer_start_rental_agreement', { p_booking_id: bookingId });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return row?.id ? normalizeAgreement(row) : null;
+}
+
+/**
  * Generates the PDF copy + emails it to the renter and WopeCar once the agreement is submitted. Fire-and-forget: a failure here must never
  * block the confirmation the user already earned.
  */

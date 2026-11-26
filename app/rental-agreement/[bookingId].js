@@ -13,6 +13,7 @@ import {
   getRentalAgreement,
   saveRentalAgreementDraft,
   startRentalAgreementForBooking,
+  startRentalAgreementAsOfficer,
   uploadRentalAgreementSignatures,
   submitRentalAgreement,
   generateRentalAgreementReport,
@@ -75,10 +76,12 @@ function SignatureSlot({ label, value, mode, onModeChange, padRef, onOK, onEmpty
 }
 
 export default function RentalAgreementScreen() {
-  const { bookingId, localId, from } = useLocalSearchParams();
+  const { bookingId, localId, from, taskId } = useLocalSearchParams();
   // Started by an admin from the admin booking details: the draft is created and prefilled on the server up front (see
   // startRentalAgreementForBooking), so nothing below seeds from the signed-in user/bookings (those are the ADMIN's, not the renter's).
-  const isAdminMode = from === 'admin';
+  // A Fleet officer runs it from their trip exactly as an admin does (staff mode); only the start call and the way back differ.
+  const isOfficerMode = from === 'officer';
+  const isAdminMode = from === 'admin' || isOfficerMode;
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -144,7 +147,9 @@ export default function RentalAgreementScreen() {
 
       let remote = await getRentalAgreement(bookingId).catch(() => null);
       // An admin starting the agreement creates the draft now (prefilled from the booking) so it is saved before anything is typed.
-      if (!remote && isAdminMode) remote = await startRentalAgreementForBooking(bookingId).catch(() => null);
+      if (!remote && isAdminMode) {
+        remote = await (isOfficerMode ? startRentalAgreementAsOfficer : startRentalAgreementForBooking)(bookingId).catch(() => null);
+      }
       if (remote && !cancelled) {
         setLastSavedAt(remote.updatedAt ? new Date(remote.updatedAt) : null);
         setFields({
@@ -300,7 +305,7 @@ export default function RentalAgreementScreen() {
               // instance that launched this screen instead of stacking a
               // duplicate on top, which breaks back-navigation afterward
               // (same fix applied to the Inspection wizard's Done button).
-              router.dismissTo(isAdminMode ? `/admin/booking/${bookingId}` : `/booking/${localId}`);
+              router.dismissTo(isOfficerMode && taskId ? `/officer/task/${taskId}` : isAdminMode ? `/admin/booking/${bookingId}` : `/booking/${localId}`);
             },
           },
         ]

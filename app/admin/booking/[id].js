@@ -22,6 +22,8 @@ import { parseDateOnly } from '../../../constants/dateUtils';
 import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../../utils/imageUrl';
 import { getRentalAgreement, startRentalAgreementForBooking } from '../../../services/rentalAgreementApi';
 import { inspectionAvailability } from '../../../constants/inspectionAvailability';
+import FleetOfficerSection from '../../../components/admin/FleetOfficerSection';
+import { FLEET_OFFICER_ENABLED } from '../../../constants/fleetOfficer';
 
 const VERIFICATION_DOC_LABELS = [
   { type: 'license_front', label: "License - Front" },
@@ -479,6 +481,7 @@ export default function AdminBookingDetailScreen() {
             <InspectionReportsSection bookingId={booking.id} bookingStatus={booking.status} router={router} styles={styles} colors={colors} />
 
             <RentalAgreementSection bookingId={booking.id} bookingStatus={booking.status} router={router} styles={styles} colors={colors} />
+            {FLEET_OFFICER_ENABLED && <FleetOfficerSection bookingId={booking.id} bookingStatus={booking.status} />}
 
             <View style={styles.section}>
               <SectionHeading>Car</SectionHeading>

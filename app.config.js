@@ -37,10 +37,19 @@ module.exports = ({ config }) => ({
   android: {
     ...config.android,
     googleServicesFile: './google-services.json',
+    // Fleet Officer live map (react-native-maps, Google provider). Set per build profile as an EAS env var; without it the map
+    // shows a fallback message instead of crashing.
+    ...(process.env.GOOGLE_MAPS_ANDROID_API_KEY
+      ? { config: { ...(config.android?.config || {}), googleMaps: { apiKey: process.env.GOOGLE_MAPS_ANDROID_API_KEY } } }
+      : {}),
   },
   ios: {
     ...config.ios,
     googleServicesFile: './GoogleService-Info.plist',
+    // Optional: with a key the iOS live map uses Google Maps (same look as Android); without one it uses Apple Maps.
+    ...(process.env.GOOGLE_MAPS_IOS_API_KEY
+      ? { config: { ...(config.ios?.config || {}), googleMapsApiKey: process.env.GOOGLE_MAPS_IOS_API_KEY } }
+      : {}),
   },
   plugins: [
     ...(config.plugins || []),
@@ -68,5 +77,6 @@ module.exports = ({ config }) => ({
   extra: {
     ...config.extra,
     APP_ENV: process.env.APP_ENV || 'development',
+    HAS_IOS_GOOGLE_MAPS_KEY: !!process.env.GOOGLE_MAPS_IOS_API_KEY,
   },
 });
