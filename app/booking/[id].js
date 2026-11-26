@@ -1426,6 +1426,7 @@ export default function BookingDetailScreen() {
         // The booked pickup date stays selectable even once it is in the past (a trip already under way, maybe from last month), so
         // the renter can keep it and only move the return date. Every other past day stays blocked.
         allowedDates={booking?.startDate ? [parseDateOnly(booking.startDate)] : undefined}
+        preserveStartOnEdit
         onApply={(start, end) => {
           setEditStart(start);
           setEditEnd(end);

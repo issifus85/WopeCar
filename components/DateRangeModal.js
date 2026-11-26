@@ -49,8 +49,16 @@ export function formatDateShort(date) {
  * allowedDates: days that stay selectable even if they fall before minDate or on a Sunday - used by
  * Modify Booking so a trip that has already started (possibly in an earlier month) can keep its
  * ORIGINAL pickup date while the return date is moved, without opening up every other past day.
+ * preserveStartOnEdit: Modify Booking opens this already anchored to an existing, confirmed trip
+ * (both startDate/endDate set) - a tap there means "adjust this end of my trip", never "start a
+ * brand-new range". Without this, the plain fresh-pick state machine below treats "both dates
+ * already set" the same as "nothing set yet", so literally any tap (including one meant only to
+ * push the return date out) silently replaced the pickup date too - confirmed live on booking
+ * WC-2026-9880, where a renter trying to extend their return date ended up with their pickup date
+ * shifted forward by a day as well. A fresh pick (checkout, home search) has no existing trip to
+ * protect, so it keeps the old "two dates picked -> next tap starts over" behavior.
  */
-export default function DateRangeModal({ visible, onClose, startDate, endDate, onApply, minDate, allowedDates }) {
+export default function DateRangeModal({ visible, onClose, startDate, endDate, onApply, minDate, allowedDates, preserveStartOnEdit }) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const today = stripTime(new Date());
@@ -82,6 +90,17 @@ export default function DateRangeModal({ visible, onClose, startDate, endDate, o
 
   const handleDayPress = (day) => {
     if (isDayDisabled(day)) return;
+    if (preserveStartOnEdit && tempStart && tempEnd) {
+      // Editing an already-confirmed trip: adjust whichever end of the range the tap is nearer
+      // to extending/shrinking, instead of discarding the other date. "Clear" is still the way
+      // to abandon this range and pick an entirely new one.
+      if (day < tempStart) {
+        setTempStart(day);
+      } else {
+        setTempEnd(day);
+      }
+      return;
+    }
     if (!tempStart || (tempStart && tempEnd)) {
       setTempStart(day);
       setTempEnd(null);

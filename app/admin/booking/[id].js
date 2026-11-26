@@ -734,6 +734,7 @@ export default function AdminBookingDetailScreen() {
         // is already under way; anything before that stays blocked. The original pickup date is selectable even if it is a Sunday.
         minDate={originalStartDate && originalStartDate < new Date() ? originalStartDate : undefined}
         allowedDates={originalStartDate ? [originalStartDate] : undefined}
+        preserveStartOnEdit
         onApply={(s, e) => { setEditStart(s); setEditEnd(e); }}
       />
 
