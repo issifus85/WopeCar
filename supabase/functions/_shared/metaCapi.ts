@@ -10,12 +10,15 @@
 // third of real revenue was invisible to the ad platform.
 //
 // Deduplication is by `event_id` = the Paystack reference. The browser event
-// carries the same value (GTM maps the Meta tag's Event ID to
-// eventModel.transaction_id, which trackPurchase already sets to the
-// reference), so whichever of the two arrives second is dropped by Meta
-// instead of counted again. That is what makes it safe to send this
-// unconditionally alongside the browser event rather than trying to work out
-// whether the browser one went.
+// carries the same value: the Meta tag's Event ID in GTM is a variable that
+// returns eventModel.transaction_id (which trackPurchase sets to the
+// reference) on purchase ONLY, and falls back to the container's own
+// auto-generated per-event id for everything else - ViewContent, AddToCart,
+// InitiateCheckout and Lead keep the unique ids their CAPI Gateway copies
+// dedupe against. So whichever of the two purchase copies arrives second is
+// dropped by Meta instead of counted again. That is what makes it safe to
+// send this unconditionally alongside the browser event rather than trying to
+// work out whether the browser one went.
 //
 // Consent. This sends ONLY for a buyer who accepted cookies, and it learns
 // that from the Paystack transaction's own metadata (stamped at
