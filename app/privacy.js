@@ -134,7 +134,7 @@ We limit who can see location data with access controls, so each person sees onl
     body: `If you have any questions about this Privacy Policy, your personal information, or our data practices, please contact us at:
 
 Email: support@wopecar.com
-Address: Impact Hub, 1aap Otswe Street, Accra, Ghana
+Address: Spintex Manet, Kasa Global Villas, JVMG+MCF, Accra, Ghana
 Website: wopecar.com`,
   },
 ];
