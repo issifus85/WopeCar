@@ -126,17 +126,42 @@ export async function confirmBookingsForReference(
   }
 
   const outcomes: Record<string, BookingOutcome> = {};
+  // The bookings THIS call actually flipped from unpaid to paid - the Meta
+  // Purchase below is sent for exactly these.
+  const claimedHere = new Set<string>();
   for (const b of bookings) {
     if (b.payment_status === 'paid') {
       outcomes[b.id] = b.payment_ref === reference ? 'confirmed' : 'failed';
       continue;
     }
-    const { error: updateError } = await adminClient
+    const { data: claimed, error: updateError } = await adminClient
       .from('bookings')
       .update({ payment_status: 'paid', payment_ref: reference })
-      .eq('id', b.id);
+      .eq('id', b.id)
+      // The unpaid -> paid transition has to be atomic, not "we read unpaid a
+      // moment ago". confirm-booking-payment and paystack-webhook can be
+      // confirming the same reference concurrently (and the website's own
+      // callback has been observed firing twice, 33ms apart). Without this
+      // condition both callers pass the already-paid check above, both
+      // UPDATE, and both report the same sale to Meta. Letting Postgres
+      // decide which UPDATE matches means exactly one caller gets a row back.
+      .neq('payment_status', 'paid')
+      .select('id');
     if (!updateError) {
-      outcomes[b.id] = 'confirmed';
+      if (claimed && claimed.length > 0) {
+        outcomes[b.id] = 'confirmed';
+        claimedHere.add(b.id);
+      } else {
+        // Someone else won the race. That's still 'confirmed' - but only if
+        // what they recorded was this same payment, not a different one.
+        const { data: current } = await adminClient
+          .from('bookings')
+          .select('payment_status, payment_ref')
+          .eq('id', b.id)
+          .maybeSingle();
+        outcomes[b.id] =
+          current?.payment_status === 'paid' && current?.payment_ref === reference ? 'confirmed' : 'failed';
+      }
     } else if ((updateError as { code?: string }).code === '23P01') {
       // bookings_no_overlapping_paid_dates: another renter's booking for the
       // same car+dates was confirmed first. The charge already succeeded, so
@@ -156,12 +181,12 @@ export async function confirmBookingsForReference(
     }
   }
 
-  // One Meta Purchase for the bookings THIS call turned paid. Filtering on
-  // the pre-update status is what keeps it to one: the client confirming what
-  // the webhook already did (or a Paystack webhook retry) finds them already
-  // paid and sends nothing. Deliberately after every write - measurement must
+  // One Meta Purchase for the bookings THIS call turned paid. What keeps it
+  // to one is the conditional UPDATE above: whichever of the client callback,
+  // a duplicate of it, or paystack-webhook loses the race gets no row back,
+  // so it reports nothing. Deliberately after every write - measurement must
   // never decide whether a payment lands.
-  const justPaid = bookings.filter((b) => b.payment_status !== 'paid' && outcomes[b.id] === 'confirmed');
+  const justPaid = bookings.filter((b) => claimedHere.has(b.id));
   if (justPaid.length > 0) {
     await reportPurchaseToMeta({
       reference,
