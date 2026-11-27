@@ -86,7 +86,7 @@ The App provides a way to report an objectionable listing (from any car's detail
     body: `If you have any questions about this EULA please contact us:
 
 ACRE Logistics Ltd
-Impact Hub, 1aap Otswe Street
+Spintex Manet, Kasa Global Villas, JVMG+MCF
 Accra, Greater Accra, Ghana
 support@wopecar.com
 +233 551 478 540
