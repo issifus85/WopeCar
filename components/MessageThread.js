@@ -20,6 +20,7 @@ import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../utils/imageUrl';
 
 const ATTACHMENT_WIDTH = 200;
 const ATTACHMENT_HEIGHT = 150;
+const SENDER_AVATAR_SIZE = 22;
 
 function formatMessageTime(iso) {
   return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -123,7 +124,7 @@ function LocationAttachment({ meta, styles, colors }) {
   );
 }
 
-function MessageBubble({ message, styles, colors, onViewImage }) {
+function MessageBubble({ message, styles, colors, onViewImage, avatarUrl }) {
   const isMe = message.senderId === 'me';
   const hasText = !!message.text || !!message.body;
   const text = message.text || message.body;
@@ -131,7 +132,17 @@ function MessageBubble({ message, styles, colors, onViewImage }) {
   return (
     <View style={[styles.bubbleRow, isMe && styles.bubbleRowMe]}>
       {!isMe && !!message.senderName && (
-        <Text style={styles.bubbleSenderName}>{message.senderName}</Text>
+        <View style={styles.bubbleSenderRow}>
+          {!!avatarUrl && (
+            <Image
+              source={{ uri: resizeImageUrl(avatarUrl, { width: SENDER_AVATAR_SIZE * PixelRatio.get(), height: SENDER_AVATAR_SIZE * PixelRatio.get() }) }}
+              style={styles.bubbleSenderAvatar}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+            />
+          )}
+          <Text style={styles.bubbleSenderName}>{message.senderName}</Text>
+        </View>
       )}
       <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem, message.isSending && styles.bubbleSending]}>
         {message.attachmentType === 'image' && (
@@ -214,6 +225,7 @@ function ImageViewerModal({ url, onClose, styles }) {
 // send's own optimistic-then-swap flow already has in InboxContext.
 export default function MessageThread({
   messages, onSend, onAttach, pinnedSummary, emptyStateText = 'Say hello 👋', extraBottomInset = 0,
+  senderAvatars = null, // optional { [senderId]: photoUrl } - e.g. a Fleet officer's photo next to their messages
 }) {
   const { colors } = useAppTheme();
   const insets = useSafeAreaInsets();
@@ -371,7 +383,7 @@ export default function MessageThread({
           data={messages}
           keyExtractor={(item) => String(item.id)}
           renderItem={({ item }) => (
-            <MessageBubble message={item} styles={styles} colors={colors} onViewImage={setViewerImageUrl} />
+            <MessageBubble message={item} styles={styles} colors={colors} onViewImage={setViewerImageUrl} avatarUrl={senderAvatars?.[item.senderId]} />
           )}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
@@ -456,6 +468,18 @@ function createStyles(colors) {
     bubbleRowMe: {
       alignSelf: 'flex-end',
       alignItems: 'flex-end',
+    },
+    bubbleSenderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    bubbleSenderAvatar: {
+      width: SENDER_AVATAR_SIZE,
+      height: SENDER_AVATAR_SIZE,
+      borderRadius: SENDER_AVATAR_SIZE / 2,
+      marginRight: 4,
+      marginBottom: 2,
+      backgroundColor: colors.highlight,
     },
     bubbleSenderName: {
       fontFamily: FONTS.semiBold,

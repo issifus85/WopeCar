@@ -11,6 +11,8 @@ import LiveTripCard from '../../components/LiveTripCard';
 import { setActiveChatUrl } from '../../services/pushNotifications';
 import { pickAndUploadChatImage, pickAndUploadChatDocument, getCurrentLocationForChat } from '../../services/chatAttachmentsApi';
 import { resizeImageUrl, CAR_PHOTO_BLURHASH } from '../../utils/imageUrl';
+import { getConversationOfficerPhotos } from '../../services/conversationsApi';
+import { FLEET_OFFICER_ENABLED } from '../../constants/fleetOfficer';
 
 const ROLE_ICONS = { Partner: 'home-outline', Driver: 'car-outline', Support: 'headset-outline' };
 const AVATAR_SIZE = 36;
@@ -103,6 +105,19 @@ export default function ConversationScreen() {
     return () => clearInterval(interval);
   }, [id, isServerConversation, syncMessages, markConversationRead]);
 
+  // Fleet Officer: the officer's own profile photo next to their messages in a booking chat. Refreshed with the messages, so it
+  // appears as soon as an officer joins the chat.
+  const [officerPhotos, setOfficerPhotos] = useState(null);
+  const messageCount = messages?.length ?? 0;
+  useEffect(() => {
+    if (!FLEET_OFFICER_ENABLED || !isServerConversation) return undefined;
+    let cancelled = false;
+    getConversationOfficerPhotos(id.slice('booking-'.length)).then((photos) => {
+      if (!cancelled) setOfficerPhotos(Object.keys(photos).length ? photos : null);
+    });
+    return () => { cancelled = true; };
+  }, [id, isServerConversation, messageCount]);
+
   const handleAttach = async (kind) => {
     let attachment = null;
     if (kind === 'camera' || kind === 'library') {
@@ -158,6 +173,7 @@ export default function ConversationScreen() {
         onSend={(text) => sendMessage(id, text)}
         onAttach={handleAttach}
         pinnedSummary={conversation.pinnedSummary}
+        senderAvatars={officerPhotos}
       />
     </View>
   );
