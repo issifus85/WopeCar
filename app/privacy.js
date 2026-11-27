@@ -15,7 +15,7 @@ const SECTIONS = [
 • Vehicle Information (for Car Owners/Partners) — vehicle make, model, year, registration details, insurance information, maintenance records, and photos.
 • Transaction Information — details about rentals you book or provide, payment amounts, and dates.
 • Usage Data — how you access and use our Services, such as IP address, browser type, operating system, pages viewed, time spent on pages, and referring URLs.
-• Location Information — if you enable location services, we may collect precise location data to facilitate car finding and delivery.
+• Location Information — if you enable location services, we may collect precise location data to facilitate car finding and delivery. When a fleet officer delivers or collects a car, we collect the officer's location during the trip, as described in section 8.
 • Communications — records of your communications with us and with other users through our platform.`,
   },
   {
@@ -36,7 +36,7 @@ const SECTIONS = [
     heading: '3. Information Sharing and Disclosure',
     body: `We may share your information with third parties in the following situations:
 
-• With other users — limited information necessary to facilitate a rental (e.g. your name to the car owner, car details to the renter).
+• With other users — limited information necessary to facilitate a rental (e.g. your name to the car owner, car details to the renter). For deliveries and pickups, the assigned fleet officer sees the details needed for the trip, and the renter sees the officer's name, photo and live location, as described in section 8.
 • Service providers — third-party vendors, consultants, and other providers who perform services on our behalf (e.g. payment processing, identity verification, cloud hosting, marketing).
 • Legal compliance and safety — when required by law or in response to valid requests by public authorities, or to protect our rights, privacy, safety, or property, and that of our users or the public.
 • Business transfers — in connection with a merger, sale of company assets, financing, or acquisition of all or a portion of our business.
@@ -79,15 +79,62 @@ In no event will WopeCar be liable for any damages — including indirect or con
 To exercise any of these rights, please contact us using the information below.`,
   },
   {
-    heading: '8. Changes to This Privacy Policy',
-    body: `We may update our Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page and updating the "Effective Date" at the top. We encourage you to review this Privacy Policy periodically. Your continued use of the Services after any modification signifies your acceptance of those changes.`,
+    heading: '8. Fleet Officer Deliveries and Pickups',
+    body: `When you book a delivery or pickup, a WopeCar fleet officer may bring the car to you or collect it from you. This section explains the location and trip information we handle for these trips.
+
+8.1 Location Information We Collect
+
+When a WopeCar fleet officer delivers a car to you or collects a car from you, we collect the officer's real-time location through the WopeCar app. This includes GPS coordinates, direction of travel, speed, location accuracy and the time of each reading. We collect it only while the officer is on the way on an active delivery or pickup: from the moment they tap Start trip until they arrive, the trip ends, or they stop sharing. We do not collect an officer's location outside an active trip, during the rest of their shift, or when the WopeCar app is closed or running in the background.
+
+If you are a renter or vendor, we do not collect your precise location for this feature. We use the delivery or pickup address in your booking to calculate the route and estimated arrival time.
+
+We also keep a record of trip events, such as when a trip is assigned, started, running late or completed, and when location sharing starts and stops.
+
+8.2 How We Use Location Information
+
+We use fleet officer location information to:
+
+• Show you a live map and estimated arrival time for your delivery or pickup.
+• Let WopeCar support and administrators coordinate, assign and monitor trips, and help if a trip is delayed or there is a problem.
+• Calculate routes and arrival times.
+• Investigate incidents, disputes and safety concerns relating to a trip.
+• Improve the reliability and accuracy of our delivery and pickup service.
+
+We do not use fleet officer location information for advertising, and we do not sell it.
+
+8.3 Who Can See Location Information
+
+• Renters on the trip — you can see the assigned fleet officer's live location and estimated arrival time for your own booking only, and only while the trip is active. Your fleet officer's name and photo are also shown to you. Vendors do not see the officer's location.
+• WopeCar administrators and support — authorised staff can see active officers' locations and trip records to manage deliveries and pickups.
+• Service providers — we use trusted providers to run the app, store data and calculate routes and estimated arrival times, including Supabase (hosting and database), Google Maps Platform (maps, routes and arrival times), Apple Maps (maps on iPhone) and Expo (push notifications). They process the data only on our instructions.
+• Where required by law — we may disclose information to authorities where the law requires it or to protect safety.
+
+Fleet officers can see the booking information needed to complete their assigned trips, including the renter's and vendor's names and phone numbers, the car, the addresses and the schedule. Contact details are shown only while the trip is open. Fleet officers cannot see pricing, payment or payout information.
+
+8.4 How Long We Keep It
+
+We keep fleet officer location data for 30 days after it is recorded, then delete it. We may keep trip event records, and any location data needed for an open dispute, insurance claim, safety investigation or legal requirement, for as long as that matter requires.
+
+8.5 Your Choices and Rights
+
+• Fleet officers are told in the app when location sharing is on and can see when it stops. They can stop sharing at any time during a trip. Location is never collected outside active trips. Officers can contact support@wopecar.com about their data.
+• Renters and vendors can ask us for a copy of the trip information we hold about them, ask us to correct it, or raise a concern about how it is used.
+• Under Ghana's Data Protection Act, 2012 (Act 843), you may have rights to access, correct and object to the processing of your personal data. To use these rights, contact us at support@wopecar.com. You may also complain to the Data Protection Commission.
+
+8.6 Security and Changes
+
+We limit who can see location data with access controls, so each person sees only what their role needs, and we protect it with encryption in transit and at rest. We may update this section as we change how fleet officer location sharing works. When we make a material change, we will update the "Last updated" date at the top of this policy and notify users in the app or by email where appropriate.`,
   },
   {
-    heading: '9. Contact Us',
+    heading: '9. Changes to This Privacy Policy',
+    body: `We may update our Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page and updating the "Last updated" date at the top. We encourage you to review this Privacy Policy periodically. Your continued use of the Services after any modification signifies your acceptance of those changes.`,
+  },
+  {
+    heading: '10. Contact Us',
     body: `If you have any questions about this Privacy Policy, your personal information, or our data practices, please contact us at:
 
 Email: support@wopecar.com
-Address: Impact Hub, 1aap Otswe Street, Accra, Ghana
+Address: Spintex Manet, Kasa Global Villas, JVMG+MCF, Accra, Ghana
 Website: wopecar.com`,
   },
 ];
@@ -136,7 +183,7 @@ export default function PrivacyScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <Text style={styles.title}>Privacy Policy</Text>
-      <Text style={styles.effectiveDate}>Effective Date: June 7, 2025</Text>
+      <Text style={styles.effectiveDate}>Last updated: November 27, 2026. Effective: November 27, 2026.</Text>
       <Text style={styles.intro}>
         At WopeCar Ghana ("WopeCar," "we," "us," or "our"), we are committed to protecting your privacy and handling your personal information with transparency and care. This Privacy Policy describes how we collect, use, process, and share your information when you use our website, mobile applications, and services (collectively, the "Services"). By using our Services, you agree to the collection and use of information in accordance with this policy. Tap a heading to expand it.
       </Text>
