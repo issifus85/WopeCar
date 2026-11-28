@@ -17,10 +17,11 @@
 // Reuses the same RESEND_API_KEY secret as the other booking emails.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { isTrustedInternalCaller } from '../_shared/cronAuth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret',
 };
 
 function jsonResponse(body: unknown, status = 200) {
@@ -107,22 +108,39 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const resendApiKey = Deno.env.get('RESEND_API_KEY');
 
-    // Step 1: identify the caller - must be the renter who owns this booking.
-    const callerClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: getUserError } = await callerClient.auth.getUser();
-    if (getUserError || !user) {
-      return jsonResponse({ error: 'Invalid or expired session.' }, 401);
+    // Step 1: establish whose booking this is.
+    //
+    // Normally the renter themselves, identified from their own token. The exception is an internal
+    // caller (_shared/paystackApply.ts's notifyBookingPaid, via the cron secret): the app and
+    // website fire this right after checkout, so when a payment is only ever confirmed server-side -
+    // by paystack-webhook or paystack-reconcile - there is no session to carry and the renter is
+    // taken from the booking itself. Without that, a vendor would never hear about a booking whose
+    // payment the client never reported.
+    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+    const internal = await isTrustedInternalCaller(req);
+    let renterId: string;
+
+    if (internal) {
+      const { data: owner } = await adminClient.from('bookings').select('renter_id').eq('id', bookingId).maybeSingle();
+      if (!owner?.renter_id) return jsonResponse({ error: 'Booking not found.' }, 404);
+      renterId = owner.renter_id;
+    } else {
+      const callerClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user }, error: getUserError } = await callerClient.auth.getUser();
+      if (getUserError || !user) {
+        return jsonResponse({ error: 'Invalid or expired session.' }, 401);
+      }
+      renterId = user.id;
     }
 
-    // Step 2: service_role fetch, scoped to a booking this caller actually owns.
-    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+    // Step 2: service_role fetch, still scoped to the renter established above.
     const { data: booking, error: bookingError } = await adminClient
       .from('bookings')
       .select('*, cars(name), vendors(user_id)')
       .eq('id', bookingId)
-      .eq('renter_id', user.id)
+      .eq('renter_id', renterId)
       .single();
     if (bookingError || !booking) {
       return jsonResponse({ error: 'Booking not found.' }, 404);
@@ -132,16 +150,31 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Booking has no vendor to notify.' }, 404);
     }
 
+    // One per booking, whichever path fires it (migration 0173). Claimed before the send so two
+    // simultaneous callers can't both get through; handed back below if the email doesn't go out.
+    const { data: claimed } = await adminClient
+      .from('bookings')
+      .update({ vendor_notified_at: new Date().toISOString() })
+      .eq('id', bookingId)
+      .is('vendor_notified_at', null)
+      .select('id');
+    if (!claimed || claimed.length === 0) {
+      return jsonResponse({ success: true, skipped: true, reason: 'The vendor has already been notified about this booking.' });
+    }
+    const releaseClaim = () => adminClient.from('bookings').update({ vendor_notified_at: null }).eq('id', bookingId);
+
     const [{ data: renterProfile }, { data: vendorUser }] = await Promise.all([
-      adminClient.from('users').select('full_name').eq('id', user.id).maybeSingle(),
+      adminClient.from('users').select('full_name').eq('id', renterId).maybeSingle(),
       adminClient.from('users').select('email').eq('id', booking.vendors.user_id).maybeSingle(),
     ]);
 
     if (!vendorUser?.email) {
+      await releaseClaim();
       return jsonResponse({ error: 'Vendor has no email on file.' }, 404);
     }
 
     if (!resendApiKey) {
+      await releaseClaim();
       return jsonResponse({ error: 'RESEND_API_KEY is not configured for this project.' }, 500);
     }
 
@@ -164,6 +197,7 @@ Deno.serve(async (req) => {
 
     if (!resendRes.ok) {
       const errText = await resendRes.text();
+      await releaseClaim();
       return jsonResponse({ error: `Resend error: ${errText}` }, 502);
     }
 

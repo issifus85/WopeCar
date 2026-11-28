@@ -25,10 +25,11 @@
 // not wopecar.com.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { isTrustedInternalCaller } from '../_shared/cronAuth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret',
 };
 
 function jsonResponse(body: unknown, status = 200) {
@@ -193,11 +194,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return jsonResponse({ error: 'Missing Authorization header.' }, 401);
-    }
-
     const { bookingId } = await req.json();
     if (!bookingId) {
       return jsonResponse({ error: 'bookingId is required.' }, 400);
@@ -207,31 +203,70 @@ Deno.serve(async (req) => {
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const resendApiKey = Deno.env.get('RESEND_API_KEY');
+    const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    // Step 1: identify the caller from their own token, same as delete-account.
-    const callerClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: getUserError } = await callerClient.auth.getUser();
-    if (getUserError || !user) {
-      return jsonResponse({ error: 'Invalid or expired session.' }, 401);
+    // Step 1: establish whose booking this email is about.
+    //
+    // Normally the renter themselves: identified from their own token, same as delete-account, and
+    // the booking read below is scoped to them - bookingId alone never means "send this email".
+    //
+    // The exception is an internal caller (_shared/paystackApply.ts's notifyBookingPaid, via the
+    // cron secret): the app and website fire this call right after checkout, so when a payment is
+    // only ever confirmed server-side - by paystack-webhook or paystack-reconcile - there is no
+    // session to carry and the renter is taken from the booking itself.
+    const internal = await isTrustedInternalCaller(req);
+    let renterId: string;
+    let renterAuthEmail: string | null = null;
+
+    if (internal) {
+      const { data: owner } = await adminClient.from('bookings').select('renter_id').eq('id', bookingId).maybeSingle();
+      if (!owner?.renter_id) return jsonResponse({ error: 'Booking not found.' }, 404);
+      renterId = owner.renter_id;
+      const { data: authUser } = await adminClient.auth.admin.getUserById(renterId);
+      renterAuthEmail = authUser?.user?.email ?? null;
+    } else {
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader) {
+        return jsonResponse({ error: 'Missing Authorization header.' }, 401);
+      }
+      const callerClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user }, error: getUserError } = await callerClient.auth.getUser();
+      if (getUserError || !user) {
+        return jsonResponse({ error: 'Invalid or expired session.' }, 401);
+      }
+      renterId = user.id;
+      renterAuthEmail = user.email ?? null;
     }
 
-    // Step 2: service_role fetch, but still scoped to a booking this caller
-    // actually owns - never trust bookingId alone to mean "send this email".
-    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+    // Step 2: service_role fetch, still scoped to the renter established above.
     const { data: booking, error: bookingError } = await adminClient
       .from('bookings')
       .select('*, cars(name, images), vendors(business_name, user_id)')
       .eq('id', bookingId)
-      .eq('renter_id', user.id)
+      .eq('renter_id', renterId)
       .single();
     if (bookingError || !booking) {
       return jsonResponse({ error: 'Booking not found.' }, 404);
     }
 
+    // One per booking, however many paths fire it (the client AND a server-side recovery can both
+    // reach here for the same booking - see migration 0173). Claimed before the send so two
+    // simultaneous callers can't both get through; same idea as send-welcome-email's
+    // users.welcome_email_sent_at.
+    const { data: claimed } = await adminClient
+      .from('bookings')
+      .update({ confirmation_email_sent_at: new Date().toISOString() })
+      .eq('id', bookingId)
+      .is('confirmation_email_sent_at', null)
+      .select('id');
+    if (!claimed || claimed.length === 0) {
+      return jsonResponse({ success: true, skipped: true, reason: 'The confirmation email for this booking was already sent.' });
+    }
+
     const [{ data: renterProfile }, { data: supportSetting }, { data: vendorUser }] = await Promise.all([
-      adminClient.from('users').select('full_name, email, phone').eq('id', user.id).maybeSingle(),
+      adminClient.from('users').select('full_name, email, phone').eq('id', renterId).maybeSingle(),
       adminClient.from('app_settings').select('value').eq('key', 'support_email').maybeSingle(),
       booking.vendors?.user_id
         ? adminClient.from('users').select('email, phone').eq('id', booking.vendors.user_id).maybeSingle()
@@ -239,9 +274,19 @@ Deno.serve(async (req) => {
     ]);
 
     const supportEmail = typeof supportSetting?.value === 'string' ? supportSetting.value : null;
+    const renterEmail = renterProfile?.email ?? renterAuthEmail;
+
+    // Hand the claim back whenever the renter's email doesn't actually go out, so a later attempt
+    // (the client retrying, or the next paystack-reconcile run) can still send it.
+    const releaseClaim = () => adminClient.from('bookings').update({ confirmation_email_sent_at: null }).eq('id', bookingId);
 
     if (!resendApiKey) {
+      await releaseClaim();
       return jsonResponse({ error: 'RESEND_API_KEY is not configured for this project.' }, 500);
+    }
+    if (!renterEmail) {
+      await releaseClaim();
+      return jsonResponse({ error: 'No email on file for this renter.' }, 400);
     }
 
     const renterHtml = buildEmailHtml({
@@ -254,12 +299,17 @@ Deno.serve(async (req) => {
 
     // Renter confirmation is the primary purpose of this endpoint - a
     // failure here is a real error the caller should see.
-    await sendResendEmail(resendApiKey, {
-      from: 'WopeCar <bookings@wopecar.com>',
-      to: [user.email],
-      subject: `Booking Received - ${booking.cars?.name ?? 'Your Car'}`,
-      html: renterHtml,
-    });
+    try {
+      await sendResendEmail(resendApiKey, {
+        from: 'WopeCar <bookings@wopecar.com>',
+        to: [renterEmail],
+        subject: `Booking Received - ${booking.cars?.name ?? 'Your Car'}`,
+        html: renterHtml,
+      });
+    } catch (e) {
+      await releaseClaim();
+      throw e;
+    }
 
     // Admin notification is best-effort - support not getting a copy
     // shouldn't make the renter's own confirmation email look like it failed.
@@ -269,7 +319,7 @@ Deno.serve(async (req) => {
         booking,
         car: booking.cars,
         vendor: booking.vendors,
-        renter: { full_name: renterProfile?.full_name, email: renterProfile?.email ?? user.email, phone: renterProfile?.phone },
+        renter: { full_name: renterProfile?.full_name, email: renterEmail, phone: renterProfile?.phone },
         vendorUser,
       });
       try {
